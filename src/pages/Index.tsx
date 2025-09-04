@@ -285,23 +285,7 @@ const Index = () => {
 
       {/* Solar Car Project */}
       <section id="solar-car" className={`py-20 px-4 lg:px-8 section-enter ${visibleSections.has('solar-car') ? 'visible' : ''}`}>
-        <div className="max-w-6xl mx-auto" style={{position: 'relative'}}>
-          {/* Solar Panel Image - static position in section */}
-          <img
-            src="/solarpanel.png"
-            alt="Solar Panel"
-            style={{
-              position: 'absolute',
-              top: '70px', // static top
-              right: '80px', // static right
-              width: '120px', // adjust scale as needed
-              height: 'auto',
-              zIndex: 2,
-              pointerEvents: 'none',
-              opacity: 0.95,
-              transition: 'top 0.2s, right 0.2s, width 0.2s',
-            }}
-          />
+        <div className="max-w-6xl mx-auto">
           <div className="text-center mb-16">
             <div style={{ position: 'relative', display: 'inline-block', width: '100%' }}>
               <h2 className="text-4xl md:text-5xl font-bold mb-6 text-foreground" style={{ position: 'relative', zIndex: 1 }}>Solar Car Project</h2>
@@ -324,28 +308,12 @@ const Index = () => {
               />
             </div>
             <p className="text-xl text-muted-foreground max-w-3xl mx-auto leading-relaxed">
-              NC States Solar Car Team - Designing and building Fenrir, a solar-powered vehicle for the American Solar Challenge
+              NC States Solar Car Team, SolarPack - Designing and building Fenrir, a solar-powered vehicle for the American Solar Challenge
             </p>
           </div>
+          
           <Timeline items={solarCarTimeline} />
-          {/* Placeholder for 3D models and images */}
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 mt-16">
-            <div className="project-card p-8 rounded-lg text-center">
-              <div className="text-4xl mb-4">🔋</div>
-              <h3 className="text-lg font-semibold mb-2">Battery Systems</h3>
-              <p className="text-sm text-muted-foreground">Custom 800V battery pack with advanced BMS</p>
-            </div>
-            <div className="project-card p-8 rounded-lg text-center">
-              <div className="text-4xl mb-4">📊</div>
-              <h3 className="text-lg font-semibold mb-2">Telemetry</h3>
-              <p className="text-sm text-muted-foreground">Real-time performance monitoring system</p>
-            </div>
-            <div className="project-card p-8 rounded-lg text-center">
-              <div className="text-4xl mb-4">⚡</div>
-              <h3 className="text-lg font-semibold mb-2">Motor Control</h3>
-              <p className="text-sm text-muted-foreground">High-efficiency power delivery systems</p>
-            </div>
-          </div>
+
         </div>
       </section>
 

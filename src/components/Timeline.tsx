@@ -54,7 +54,7 @@ const Timeline = ({ items }: TimelineProps) => {
               visibleItems[index] ? 'visible' : ''
             }`}
             data-index={index}
-            style={{ transitionDelay: `${index * 0.2}s`, position: 'relative' }}
+            style={{ transitionDelay: `${index * 0.2}s` }}
           >
             {/* Timeline dot */}
             <div className="relative z-10 flex-shrink-0">
