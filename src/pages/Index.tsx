@@ -35,38 +35,44 @@ const Index = () => {
     {
       id: 'hv-lead',
       title: 'High Voltage Systems Lead',
-      description: 'Leading the high voltage team, overseeing battery systems, motor control, and safety protocols.',
-      period: '2024 - Present',
+      description: 'Led the reconfiguration and maintenance of the high-voltage system powering Fenrir, focusing on battery pack compliance, BMS optimization, and safe operation.',
+      period: '2025 - Present',
       details: [
-        'Managing 800V battery pack design and safety systems',
-        'Implementing ISO 26262 functional safety standards',
-        'Leading team of 12 engineers across multiple disciplines',
-        'Optimizing power delivery systems for maximum efficiency',
-        'Coordinating with manufacturing partners for production readiness'
+        'Led a team of 5 undergraduate electical engineering students',
+        'Reconfigured custom lithium-ion battery pack from 20kWh to 15kWh to meet new race regulations (100S9P), including spot welding new nickel/copper strips and cell rearrangement',
+        'Refined battery management system (BMS) parameters for accurate state-of-charge, thermal, and current protection',
+        'Managed motor controller and charging infrastructure for safe, reliable operation',
+        'Coordinated system-level architecture, isolation, and fault protection strategies',
+        'Implemented charge/discharge logic via high-voltage control board',
+        'Integrated solar charging system to enable battery charging from solar array',
       ]
     },
     {
       id: 'electronics',
       title: 'Electronics Integration',
-      description: 'Transitioned to electronics systems, integrating sensors, telemetry, and control systems.',
-      period: '2023 - 2024',
+      description: 'Developed full-stack telemetry and control systems, including mobile app, backend server, and CAN bus integration.',
+      period: '2024 - 2025',
       details: [
-        'Developed telemetry system for real-time performance monitoring',
-        'Integrated motor controllers and battery management systems',
-        'Implemented CAN bus communication protocols',
-        'Designed custom PCBs for sensor integration'
+        'Built mobile app for live telemetry, control, and dashboard gauges (Bluetooth & cellular)',
+        'Implemented backend server to store and serve car data, supporting remote access',
+        'Designed frontend dashboard for real-time stats, motor/BMS/charging/low voltage monitoring, and testing',
+        'Integrated CAN bus communication for all vehicle modules',
+        'Added map/lap tracking, backup camera, and notification system for alerts',
+        'Enabled Spotify/music integration and remote server connectivity for multiple devices'
       ]
     },
     {
       id: 'dynamics',
       title: 'Vehicle Dynamics Engineer',
-      description: 'Started with aerodynamics and chassis design, focusing on performance optimization and structural integrity.',
-      period: '2022 - 2023',
+      description: 'Focused on suspension, drivetrain, steering, and chassis fabrication for optimal performance and reliability.',
+      period: '2022 - 2024',
       details: [
-        'Designed aerodynamic components using CFD analysis',
-        'Optimized chassis weight distribution for better handling',
-        'Implemented suspension tuning for various track conditions',
-        'Collaborated with composite materials team for carbon fiber integration'
+        'Designed and implemented double wishbone suspension with steering rack and power braking',
+        'Engineered chain drive system and motor mounts',
+        'Fabricated mounts for brake pedal, steering shaft, and normal pedal',
+        'Selected and sourced tires for various track conditions',
+        'Chassis fabrication including welding, grinding, and steel work',
+        'Collaborated on drivetrain and steering system integration'
       ]
     }
   ];
@@ -247,7 +253,7 @@ const Index = () => {
           <div className="text-center mb-16">
             <h2 className="text-4xl md:text-5xl font-bold mb-6 text-foreground">Solar Car Project</h2>
             <p className="text-xl text-muted-foreground max-w-3xl mx-auto leading-relaxed">
-              Journey from Vehicle Dynamics to High Voltage Systems Lead - pioneering sustainable transportation technology
+              NC States Solar Car Team - Designing and building Fenrir, a solar-powered vehicle for the American Solar Challenge
             </p>
           </div>
           
