@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { Github, Linkedin, Heart } from 'lucide-react';
 import WheelNavigation from '../components/WheelNavigation';
-import InteractiveHeadshot from '../components/InteractiveHeadshot';
+
 import Timeline from '../components/Timeline';
 import ProjectCard from '../components/ProjectCard';
 import BrandCarousel from '../components/BrandCarousel';
@@ -100,44 +100,53 @@ const Index = () => {
   return (
     <div className="min-h-screen bg-black text-foreground">
       <WheelNavigation />
-      
+
       {/* About Section */}
       <section id="about" className={`min-h-screen flex items-center justify-center px-4 lg:px-8 pt-16 lg:pt-0 section-enter ${visibleSections.has('about') ? 'visible' : ''}`}>
         <div className="max-w-4xl mx-auto text-center">
-          <InteractiveHeadshot />
-          
+          <div className="flex justify-center mb-8">
+            <img
+              src="/Headshot%20small.png"
+              alt="Nathan Hambleton headshot"
+              className="w-40 h-40 rounded-full border-4 border-white shadow-lg object-cover"
+              style={{ background: '#fff' }}
+            />
+          </div>
+
           <h1 className="text-4xl md:text-6xl lg:text-7xl font-bold mb-6 text-foreground">
-            John Developer
+            Nathan Hambleton
           </h1>
-          
+
           <p className="text-xl md:text-2xl text-muted-foreground mb-8 font-light leading-relaxed">
-            High Voltage Systems Engineer & Creative Technologist
+            Electrical Engineer | Product Development | Video Creator
           </p>
-          
+
           <p className="text-lg text-foreground/80 max-w-2xl mx-auto mb-12 leading-relaxed">
-            Passionate about pushing the boundaries of technology through innovative engineering solutions. 
-            Currently leading high voltage systems development for solar racing while creating engaging tech content.
+            Electrical engineer passionate about embedded systems, hardware, software, and creative tech. I love building things—from solar cars and IoT robots to mobile apps and VFX content.
           </p>
-          
+
           {/* Social Links */}
           <div className="flex items-center justify-center gap-6">
             <a 
-              href="#" 
+              href="https://www.linkedin.com/in/nathanhambleton/" 
               className="flex items-center gap-2 px-6 py-3 bg-card/50 backdrop-blur-sm border border-minimal-border rounded-lg hover:border-minimal-accent transition-all duration-300 minimal-hover group"
-            >
-              <Github className="w-5 h-5 group-hover:text-minimal-accent transition-colors" />
-              <span>GitHub</span>
-            </a>
-            <a 
-              href="#" 
-              className="flex items-center gap-2 px-6 py-3 bg-card/50 backdrop-blur-sm border border-minimal-border rounded-lg hover:border-minimal-accent transition-all duration-300 minimal-hover group"
+              target="_blank" rel="noopener noreferrer"
             >
               <Linkedin className="w-5 h-5 group-hover:text-minimal-accent transition-colors" />
               <span>LinkedIn</span>
             </a>
             <a 
-              href="#" 
+              href="https://github.com/nathanhambleton1" 
               className="flex items-center gap-2 px-6 py-3 bg-card/50 backdrop-blur-sm border border-minimal-border rounded-lg hover:border-minimal-accent transition-all duration-300 minimal-hover group"
+              target="_blank" rel="noopener noreferrer"
+            >
+              <Github className="w-5 h-5 group-hover:text-minimal-accent transition-colors" />
+              <span>GitHub</span>
+            </a>
+            <a 
+              href="https://www.tiktok.com/@nathan_ham" 
+              className="flex items-center gap-2 px-6 py-3 bg-card/50 backdrop-blur-sm border border-minimal-border rounded-lg hover:border-minimal-accent transition-all duration-300 minimal-hover group"
+              target="_blank" rel="noopener noreferrer"
             >
               <Heart className="w-5 h-5 group-hover:text-minimal-accent transition-colors" />
               <span>TikTok</span>
@@ -146,25 +155,31 @@ const Index = () => {
         </div>
       </section>
 
-      {/* College Section */}
+      {/* Education Section */}
       <section id="college" className={`py-20 px-4 lg:px-8 section-enter ${visibleSections.has('college') ? 'visible' : ''}`}>
         <div className="max-w-6xl mx-auto">
           <div className="text-center mb-16">
-            <h2 className="text-4xl md:text-5xl font-bold mb-6 text-foreground">NC State University</h2>
-            <p className="text-xl text-muted-foreground">Electrical & Computer Engineering</p>
+            <h2 className="text-4xl md:text-5xl font-bold mb-6 text-foreground">
+              <a href="https://www.ncsu.edu/" target="_blank" rel="noopener noreferrer" className="hover:text-minimal-accent transition-colors">
+                North Carolina State University
+              </a>
+            </h2>
+            <p className="text-xl text-muted-foreground">B.S. Electrical and Electronics Engineering (2022–2026)</p>
+            <p className="text-lg text-muted-foreground mt-2">Focus: Embedded Systems, Circuit Design, Power Electronics</p>
           </div>
-          
           <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
             <div className="project-card">
-              <h3 className="text-2xl font-semibold mb-4 text-foreground">Coursework</h3>
+              <h3 className="text-2xl font-semibold mb-4 text-foreground">Coursework & Activities</h3>
               <div className="space-y-3">
                 {[
-                  'Advanced Digital Signal Processing',
-                  'Power Electronics & Motor Drives',
-                  'Embedded Systems Design', 
-                  'Control Systems Theory',
-                  'Renewable Energy Systems',
-                  'High Voltage Engineering'
+                  'Embedded Systems Programming',
+                  'Analog & Digital Circuit Design',
+                  'Amplifier Theory',
+                  'Motor Drivers',
+                  'Signal Processing',
+                  'Mechatronics',
+                  'SolarPack: High Voltage Team Lead, Vehicle Dynamics Engineer',
+                  'Intramural Soccer (Semifinalist)'
                 ].map((course, index) => (
                   <div key={index} className="flex items-center gap-3">
                     <div className="w-2 h-2 bg-minimal-accent rounded-full" />
@@ -173,7 +188,6 @@ const Index = () => {
                 ))}
               </div>
             </div>
-            
             <div className="project-card">
               <h3 className="text-2xl font-semibold mb-4 text-foreground">Achievements</h3>
               <div className="space-y-4">
@@ -182,15 +196,104 @@ const Index = () => {
                   <div className="text-sm text-muted-foreground">Fall 2022, Spring 2023, Fall 2023</div>
                 </div>
                 <div>
-                  <div className="text-lg font-medium">IEEE Outstanding Student Award</div>
-                  <div className="text-sm text-muted-foreground">Recognition for technical excellence</div>
-                </div>
-                <div>
                   <div className="text-lg font-medium">Solar Car Team Leadership</div>
-                  <div className="text-sm text-muted-foreground">High Voltage Systems Lead</div>
+                  <div className="text-sm text-muted-foreground">High Voltage Team Lead</div>
                 </div>
               </div>
             </div>
+          </div>
+        </div>
+      </section>
+      {/* Experience Section */}
+      <section id="experience" className={`py-20 px-4 lg:px-8 section-enter ${visibleSections.has('experience') ? 'visible' : ''}`}>
+        <div className="max-w-6xl mx-auto">
+          <div className="text-center mb-16">
+            <h2 className="text-4xl md:text-5xl font-bold mb-6 text-foreground">Experience</h2>
+          </div>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+            <div className="project-card">
+              <h3 className="text-2xl font-semibold mb-2 text-foreground">SolarPack @ NC State</h3>
+              <div className="text-lg font-medium">High Voltage Team Lead</div>
+              <div className="text-sm text-muted-foreground mb-2">Jul 2025 – Present</div>
+              <ul className="list-disc list-inside text-left text-muted-foreground mb-4">
+                <li>Responsible for custom lithium-ion battery system, motor controller integration, and power electronics</li>
+                <li>Led reduction of 100s13p pack to 100s9p for race regulations, including cell removal, BMS rewiring, and new tab welds</li>
+                <li>Managed motor controller systems, HV-to-LV buck converter setup, and AC-to-DC charger integration</li>
+                <li>Focus on performance, safety, and system reliability</li>
+              </ul>
+              <div className="text-lg font-medium">Vehicle Dynamics Engineer</div>
+              <div className="text-sm text-muted-foreground mb-2">Aug 2022 – Jul 2025</div>
+              <ul className="list-disc list-inside text-left text-muted-foreground">
+                <li>Worked on chassis, suspension, and mechanical systems for solar car</li>
+                <li>Fabricated and installed strut mounts, brake pedal mounts, steering shafts, and other structural components</li>
+                <li>Installed steering system, subframes, differentials, struts, brake lines, wheels, and brakes</li>
+                <li>Assisted with motor installation and alignment for chain drive to differential</li>
+                <li>Performed welding and custom mounts for electrical components</li>
+              </ul>
+            </div>
+            <div className="project-card">
+              <h3 className="text-2xl font-semibold mb-2 text-foreground">Viral Nation</h3>
+              <div className="text-lg font-medium">Content Creator</div>
+              <div className="text-sm text-muted-foreground mb-2">Jan 2021 – Present</div>
+              <ul className="list-disc list-inside text-left text-muted-foreground mb-4">
+                <li>Independent content creator and VFX artist signed with Viral Nation</li>
+                <li>Specializing in cinematic, story-driven video editing for social media</li>
+                <li>Built a following of 800,000+ with 150M+ total views and 16% engagement rate</li>
+                <li>Collaborated with brands: Google, Prime Video, Best Buy, Audible, Kia, Apex Legends, Niantic, Autodesk, Asus, and more</li>
+                <li>Managed full creative production pipeline, marketing strategies, and client relations</li>
+              </ul>
+              <h3 className="text-2xl font-semibold mb-2 text-foreground">Ford Motor Company</h3>
+              <div className="text-lg font-medium">Aftermarket Vehicle Personalization Intern</div>
+              <div className="text-sm text-muted-foreground mb-2">May 2024 – Aug 2024</div>
+              <ul className="list-disc list-inside text-left text-muted-foreground mb-4">
+                <li>Supported Ford Performance aftermarket products through marketing and sales operations</li>
+                <li>Developed automated notification system for SIPOC process stages</li>
+                <li>Contributed to vehicle wrap customization platform and new aftermarket package program</li>
+                <li>Developed pricing model for social media influencer partnerships</li>
+                <li>Gained experience in cross-functional communication and strategic planning</li>
+              </ul>
+              <h3 className="text-2xl font-semibold mb-2 text-foreground">Wynfield Forest Swim Team</h3>
+              <div className="text-lg font-medium">Assistant Head Coach</div>
+              <div className="text-sm text-muted-foreground mb-2">Jul 2021 – Jun 2023</div>
+              <ul className="list-disc list-inside text-left text-muted-foreground">
+                <li>Team leadership and management for youth swim team</li>
+              </ul>
+            </div>
+          </div>
+        </div>
+      </section>
+      {/* Skills Section */}
+      <section id="skills" className={`py-20 px-4 lg:px-8 section-enter ${visibleSections.has('skills') ? 'visible' : ''}`}>
+        <div className="max-w-6xl mx-auto">
+          <div className="text-center mb-16">
+            <h2 className="text-4xl md:text-5xl font-bold mb-6 text-foreground">Skills</h2>
+            <p className="text-xl text-muted-foreground">Embedded Systems • Mobile App Development • Power Electronics • Mechatronics • Product Development</p>
+          </div>
+          <div className="flex flex-wrap justify-center gap-4">
+            {[
+              'Embedded Systems',
+              'Mobile App Development',
+              'Power Electronics',
+              'Mechatronics',
+              'Product Development',
+              'PCB Design',
+              'VFX & Content Creation',
+              'Team Leadership',
+              'Mechanical Assembly',
+              'Signal Processing',
+              'C/C++',
+              'Python',
+              'React Native',
+              'CAN Bus',
+              'Battery Management Systems',
+              '3D Printing',
+              'Robotics',
+              'Project Management'
+            ].map((skill, idx) => (
+              <span key={idx} className="px-4 py-2 bg-card/50 border border-minimal-border rounded-lg text-foreground text-sm font-mono">
+                {skill}
+              </span>
+            ))}
           </div>
         </div>
       </section>
@@ -297,7 +400,7 @@ const Index = () => {
       <footer className="py-12 px-4 lg:px-8 border-t border-minimal-border">
         <div className="max-w-6xl mx-auto text-center">
           <p className="text-muted-foreground font-mono">
-            Built with React & ❤️ • © 2024 John Developer
+            Built with React & ❤️ • © 2025 Nathan Hambleton
           </p>
         </div>
       </footer>

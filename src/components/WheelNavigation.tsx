@@ -1,137 +1,166 @@
-import { useState, useEffect } from 'react';
-import { Menu, X } from 'lucide-react';
+import React, { useEffect, useMemo, useState } from "react";
 
-const WheelNavigation = () => {
-  const [activeSection, setActiveSection] = useState('about');
-  const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
-  const [wheelRotation, setWheelRotation] = useState(0);
+/**
+ * ArcRailNavigation v2
+ * - Right edge locked (perfect alignment regardless of label length)
+ * - Stronger taper (power curve)
+ * - Far items shrink + darken smoothly
+ */
 
-  const navItems = [
-    { id: 'about', label: 'About' },
-    { id: 'college', label: 'College' },
-    { id: 'solar-car', label: 'Solar Car' },
-    { id: 'liquorbot', label: 'LiquorBot' },
-    { id: 'brands', label: 'Brands' },
-    { id: 'projects', label: 'Projects' },
-  ];
-
-  useEffect(() => {
-    const handleScroll = () => {
-      const sections = navItems.map(item => document.getElementById(item.id));
-      const scrollPosition = window.scrollY + 100;
-
-      // Update wheel rotation based on scroll
-      const scrollPercent = scrollPosition / (document.body.scrollHeight - window.innerHeight);
-      setWheelRotation(scrollPercent * 360);
-
-      // Find active section
-      for (let i = sections.length - 1; i >= 0; i--) {
-        const section = sections[i];
-        if (section && section.offsetTop <= scrollPosition) {
-          setActiveSection(navItems[i].id);
-          break;
-        }
-      }
-    };
-
-    window.addEventListener('scroll', handleScroll);
-    return () => window.removeEventListener('scroll', handleScroll);
-  }, []);
-
-  const scrollToSection = (sectionId: string) => {
-    const element = document.getElementById(sectionId);
-    if (element) {
-      element.scrollIntoView({ behavior: 'smooth', block: 'start' });
-      setIsMobileMenuOpen(false);
-    }
-  };
-
-  const getItemPosition = (index: number, total: number) => {
-    const angle = (index / total) * 2 * Math.PI - Math.PI / 2; // Start from top
-    const radius = 80;
-    const x = Math.cos(angle) * radius + 100;
-    const y = Math.sin(angle) * radius + 100;
-    return { x, y, angle: angle * (180 / Math.PI) };
-  };
-
-  return (
-    <>
-      {/* Desktop Wheel Navigation */}
-      <div className="hidden lg:block">
-        <div 
-          className="nav-wheel"
-          style={{ transform: `translateY(-50%) rotate(${wheelRotation}deg)` }}
-        >
-          {/* Central dot */}
-          <div className="absolute top-1/2 left-1/2 w-2 h-2 bg-minimal-accent rounded-full transform -translate-x-1/2 -translate-y-1/2" />
-          
-          {/* Orbital ring - subtle */}
-          <div className="absolute inset-0 border border-minimal-accent/20 rounded-full" />
-          
-          {/* Navigation items positioned around the wheel */}
-          {navItems.map((item, index) => {
-            const position = getItemPosition(index, navItems.length);
-            const isActive = activeSection === item.id;
-            
-            return (
-              <div
-                key={item.id}
-                className={`nav-item ${isActive ? 'active' : ''}`}
-                style={{
-                  left: position.x,
-                  top: position.y,
-                  transform: `translate(-50%, -50%) rotate(${-wheelRotation}deg)`, // Counter-rotate text
-                }}
-                onClick={() => scrollToSection(item.id)}
-              >
-                <span className={isActive ? 'text-foreground font-medium' : 'text-foreground/60'}>
-                  {item.label}
-                </span>
-                {isActive && (
-                  <div className="absolute -left-2 top-1/2 w-1 h-1 bg-foreground rounded-full transform -translate-y-1/2" />
-                )}
-              </div>
-            );
-          })}
-        </div>
-      </div>
-
-      {/* Mobile Navigation - Top Header */}
-      <nav className="lg:hidden fixed top-0 left-0 right-0 z-50 bg-black/95 backdrop-blur-sm border-b border-minimal-border">
-        <div className="flex items-center justify-between p-4">
-          <div className="text-lg font-semibold">Portfolio</div>
-          
-          <button
-            onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)}
-            className="text-foreground hover:text-minimal-accent transition-colors"
-          >
-            {isMobileMenuOpen ? <X size={24} /> : <Menu size={24} />}
-          </button>
-        </div>
-
-        {/* Mobile Menu Dropdown */}
-        {isMobileMenuOpen && (
-          <div className="absolute top-full left-0 right-0 bg-black/95 backdrop-blur-sm border-b border-minimal-border">
-            <div className="flex flex-col p-4 gap-4">
-              {navItems.map((item) => (
-                <button
-                  key={item.id}
-                  onClick={() => scrollToSection(item.id)}
-                  className={`text-left text-sm font-mono tracking-wide transition-all duration-300 ${
-                    activeSection === item.id 
-                      ? 'text-foreground font-medium' 
-                      : 'text-foreground/60 hover:text-foreground'
-                  }`}
-                >
-                  {item.label}
-                </button>
-              ))}
-            </div>
-          </div>
-        )}
-      </nav>
-    </>
-  );
+const CONFIG = {
+  itemGap: 38,         // vertical spacing
+  curve: 220,          // max leftward offset (px) for far items (reduced from 600)
+  maxNeighbors: 8,     // items above/below to render
+  taperPower: 1.5,     // >1 = steeper taper (reduced from 2.1)
+  scaleMin: 0.1,      // min scale for far items
+  labelMinOpacity: 0.1, // min label opacity (rgba)
+  railWidth: 180,  // 18rem
 };
 
-export default WheelNavigation;
+const NAV_ITEMS = [
+  { id: "about", label: "About" },
+  { id: "college", label: "College" },
+  { id: "solar-car", label: "Solar Car" },
+  { id: "liquorbot", label: "LiquorBot" },
+  { id: "brands", label: "Brands" },
+  { id: "projects", label: "Projects" },
+];
+
+export default function ArcRailNavigation() {
+  const [activeId, setActiveId] = useState<string>(NAV_ITEMS[0].id);
+
+  const activeIndex = useMemo(() => {
+    const idx = NAV_ITEMS.findIndex((n) => n.id === activeId);
+    return idx < 0 ? 0 : idx;
+  }, [activeId]);
+
+  // Active item = section nearest viewport center
+  useEffect(() => {
+    let ticking = false;
+    const update = () => {
+      const vpCenter = window.innerHeight / 2;
+      let bestId = activeId, best = Infinity;
+      for (const it of NAV_ITEMS) {
+        const el = document.getElementById(it.id);
+        if (!el) continue;
+        const r = el.getBoundingClientRect();
+        const d = Math.abs((r.top + r.height / 2) - vpCenter);
+        if (d < best) { best = d; bestId = it.id; }
+      }
+      if (bestId !== activeId) setActiveId(bestId);
+    };
+    const onScroll = () => {
+      if (ticking) return;
+      ticking = true;
+      requestAnimationFrame(() => { update(); ticking = false; });
+    };
+    update();
+    window.addEventListener("scroll", onScroll, { passive: true });
+    window.addEventListener("resize", onScroll, { passive: true });
+    return () => {
+      window.removeEventListener("scroll", onScroll);
+      window.removeEventListener("resize", onScroll);
+    };
+  }, [activeId]);
+
+  const scrollToSection = (id: string) => {
+    const el = document.getElementById(id);
+    if (!el) return;
+    const sectionCenter = el.offsetTop + el.offsetHeight / 2;
+    const target = Math.max(
+      0,
+      Math.min(
+        sectionCenter - window.innerHeight / 2,
+        document.documentElement.scrollHeight - window.innerHeight
+      )
+    );
+    window.scrollTo({ top: target, behavior: "smooth" });
+  };
+
+  // 0..1 distance factor
+  const u = (absDist: number) =>
+    Math.min(1, absDist / CONFIG.maxNeighbors);
+
+  // Stronger taper using a power curve
+  const leftOffset = (absDist: number) =>
+    -CONFIG.curve * Math.pow(u(absDist), CONFIG.taperPower);
+
+  // Scale: 1 at center → scaleMin at far
+  const scaleAt = (absDist: number) =>
+    1 - (1 - CONFIG.scaleMin) * u(absDist);
+
+  // Label opacity only (container opacity stays 1 for crisp transform)
+  const labelOpacityAt = (absDist: number) =>
+    1 - (1 - CONFIG.labelMinOpacity) * u(absDist);
+
+  return (
+    <nav
+      aria-label="Section navigation"
+      className="pointer-events-auto fixed left-6 top-1/2 -translate-y-1/2 z-40 select-none"
+      style={{ width: `${CONFIG.railWidth}px` }}
+      role="navigation"
+    >
+      <div className="relative h-[60vh] w-full">
+        {(() => {
+          // Center the active item in the container
+          const containerHeight = 0.6 * window.innerHeight; // 60vh
+          const centerY = containerHeight / 2;
+          return NAV_ITEMS.map((item, i) => {
+            const d = i - activeIndex;
+            const abs = Math.abs(d);
+            if (abs > CONFIG.maxNeighbors) return null;
+
+            const x = leftOffset(abs);
+            // Center the active item vertically in the container
+            const y = centerY + d * CONFIG.itemGap;
+            const s = scaleAt(abs);
+            const lblOpacity = labelOpacityAt(abs);
+            const isActive = i === activeIndex;
+
+            return (
+              <button
+                key={item.id}
+                onClick={() => scrollToSection(item.id)}
+                aria-current={isActive ? "true" : undefined}
+                className="absolute right-0 outline-none"
+                style={{
+                  transformOrigin: "100% 50%", // lock to right edge
+                  transform: `translate3d(${x}px, ${y - 20}px, 0) scale(${s})`, // -20 to roughly center vertically (button height compensation)
+                  transition:
+                    "transform 320ms cubic-bezier(.2,.8,.2,1), color 180ms ease",
+                  willChange: "transform",
+                  zIndex: 1000 - abs,
+                }}
+              >
+                <div className="flex items-center gap-3">
+                  {/* dot (kept fairly consistent; subtle size change via scale) */}
+                  <span
+                    className={
+                      "block rounded-full transition-all duration-300 " +
+                      (isActive ? "h-2 w-2 bg-white" : "h-1.5 w-1.5 bg-white/60")
+                    }
+                  />
+                  {/* label: right-aligned, no-wrap, darkens with distance */}
+                  <span
+                    className={
+                      "font-mono tracking-wide whitespace-nowrap text-right " +
+                      (isActive ? "text-white font-semibold" : "font-normal")
+                    }
+                    style={{
+                      // darker as it fades off
+                      color: `rgba(255,255,255,${lblOpacity.toFixed(3)})`,
+                      // small base-size bump on active; scale does the rest
+                      fontSize: isActive ? "1.125rem" : "1rem",
+                    }}
+                  >
+                    {item.label}
+                  </span>
+                </div>
+              </button>
+            );
+          });
+        })()}
+      </div>
+    </nav>
+  );
+}
