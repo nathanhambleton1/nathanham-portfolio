@@ -59,6 +59,10 @@ const Index = () => {
         'Integrated CAN bus communication for all vehicle modules',
         'Added map/lap tracking, backup camera, and notification system for alerts',
         'Enabled Spotify/music integration and remote server connectivity for multiple devices'
+      ],
+      links: [
+        { label: 'SolarPack iOS App', url: 'https://apps.apple.com/us/app/solarpack/id6748289347' },
+        { label: 'SolarPack Server', url: 'https://solarpack-app-server-alyv.onrender.com/#' }
       ]
     },
     {

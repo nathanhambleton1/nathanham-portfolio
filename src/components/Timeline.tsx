@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { ExternalLink, Apple } from 'lucide-react';
 
 interface TimelineItem {
   id: string;
@@ -6,6 +7,7 @@ interface TimelineItem {
   description: string;
   period: string;
   details: string[];
+  links?: Array<{ label: string; url: string }>;
 }
 
 interface TimelineProps {
@@ -82,14 +84,43 @@ const Timeline = ({ items }: TimelineProps) => {
               <p className="text-foreground/90 mb-4 leading-relaxed">{item.description}</p>
               
               {activeIndex === index && (
-                <div className="space-y-2 animate-fade-in">
-                  {item.details.map((detail, i) => (
-                    <div key={i} className="flex items-start gap-2">
-                      <div className="w-2 h-2 bg-tech-glow-secondary rounded-full mt-2 flex-shrink-0" />
-                      <span className="text-sm text-foreground/80">{detail}</span>
+                <>
+                  <div className="space-y-2 animate-fade-in">
+                    {item.details.map((detail, i) => (
+                      <div key={i} className="flex items-start gap-2">
+                        <div className="w-2 h-2 bg-tech-glow-secondary rounded-full mt-2 flex-shrink-0" />
+                        <span className="text-sm text-foreground/80">{detail}</span>
+                      </div>
+                    ))}
+                  </div>
+                  {/* Custom links/buttons for expanded box */}
+                  {item.links && item.links.length > 0 && (
+                    <div className="flex gap-4 mt-6 justify-end">
+                      {item.links.map((link, idx) => {
+                        // Pick icon based on link label or url
+                        let Icon = ExternalLink;
+                        if (link.label.toLowerCase().includes('ios') || link.url.includes('apple.com')) {
+                          Icon = Apple;
+                        }
+                        if (link.label.toLowerCase().includes('server')) {
+                          Icon = ExternalLink;
+                        }
+                        return (
+                          <a
+                            key={idx}
+                            href={link.url}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="px-4 py-2 bg-minimal-accent/20 backdrop-blur-sm rounded-full hover:bg-minimal-accent/40 transition-colors flex items-center gap-2"
+                          >
+                            <Icon className="w-5 h-5 text-minimal-accent" />
+                            <span className="font-mono text-sm text-minimal-accent">{link.label}</span>
+                          </a>
+                        );
+                      })}
                     </div>
-                  ))}
-                </div>
+                  )}
+                </>
               )}
             </div>
           </div>
