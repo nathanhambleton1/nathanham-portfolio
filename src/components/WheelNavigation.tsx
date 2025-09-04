@@ -9,20 +9,21 @@ import React, { useEffect, useMemo, useState } from "react";
 
 const CONFIG = {
   itemGap: 38,         // vertical spacing
-  curve: 220,          // max leftward offset (px) for far items (reduced from 600)
+  curve: 200,          // max leftward offset (px) for far items (reduced from 600)
   maxNeighbors: 8,     // items above/below to render
-  taperPower: 1.5,     // >1 = steeper taper (reduced from 2.1)
-  scaleMin: 0.1,      // min scale for far items
-  labelMinOpacity: 0.1, // min label opacity (rgba)
-  railWidth: 180,  // 18rem
+  taperPower: 2.1,     // >1 = steeper taper (reduced from 2.1)
+  scaleMin: 0,      // min scale for far items
+  labelMinOpacity: 0, // min label opacity (rgba)
+  railWidth: 90,  // 18rem
 };
 
 const NAV_ITEMS = [
   { id: "about", label: "About" },
   { id: "college", label: "College" },
+  { id: "skills", label: "Skills" },
   { id: "solar-car", label: "Solar Car" },
   { id: "liquorbot", label: "LiquorBot" },
-  { id: "brands", label: "Brands" },
+  { id: "marketing", label: "Marketing" },
   { id: "projects", label: "Projects" },
 ];
 
@@ -150,7 +151,7 @@ export default function ArcRailNavigation() {
                       // darker as it fades off
                       color: `rgba(255,255,255,${lblOpacity.toFixed(3)})`,
                       // small base-size bump on active; scale does the rest
-                      fontSize: isActive ? "1.125rem" : "1rem",
+                      fontSize: isActive ? "0.85rem" : "0.7rem",
                     }}
                   >
                     {item.label}

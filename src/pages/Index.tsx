@@ -33,15 +33,16 @@ const Index = () => {
   // Solar Car Timeline Data
   const solarCarTimeline = [
     {
-      id: 'dynamics',
-      title: 'Vehicle Dynamics Engineer',
-      description: 'Started with aerodynamics and chassis design, focusing on performance optimization and structural integrity.',
-      period: '2022 - 2023',
+      id: 'hv-lead',
+      title: 'High Voltage Systems Lead',
+      description: 'Leading the high voltage team, overseeing battery systems, motor control, and safety protocols.',
+      period: '2024 - Present',
       details: [
-        'Designed aerodynamic components using CFD analysis',
-        'Optimized chassis weight distribution for better handling',
-        'Implemented suspension tuning for various track conditions',
-        'Collaborated with composite materials team for carbon fiber integration'
+        'Managing 800V battery pack design and safety systems',
+        'Implementing ISO 26262 functional safety standards',
+        'Leading team of 12 engineers across multiple disciplines',
+        'Optimizing power delivery systems for maximum efficiency',
+        'Coordinating with manufacturing partners for production readiness'
       ]
     },
     {
@@ -57,16 +58,15 @@ const Index = () => {
       ]
     },
     {
-      id: 'hv-lead',
-      title: 'High Voltage Systems Lead',
-      description: 'Leading the high voltage team, overseeing battery systems, motor control, and safety protocols.',
-      period: '2024 - Present',
+      id: 'dynamics',
+      title: 'Vehicle Dynamics Engineer',
+      description: 'Started with aerodynamics and chassis design, focusing on performance optimization and structural integrity.',
+      period: '2022 - 2023',
       details: [
-        'Managing 800V battery pack design and safety systems',
-        'Implementing ISO 26262 functional safety standards',
-        'Leading team of 12 engineers across multiple disciplines',
-        'Optimizing power delivery systems for maximum efficiency',
-        'Coordinating with manufacturing partners for production readiness'
+        'Designed aerodynamic components using CFD analysis',
+        'Optimized chassis weight distribution for better handling',
+        'Implemented suspension tuning for various track conditions',
+        'Collaborated with composite materials team for carbon fiber integration'
       ]
     }
   ];
@@ -219,64 +219,6 @@ const Index = () => {
           </div>
         </div>
       </section>
-      {/* Experience Section */}
-      <section id="experience" className={`py-20 px-4 lg:px-8 section-enter ${visibleSections.has('experience') ? 'visible' : ''}`}>
-        <div className="max-w-6xl mx-auto">
-          <div className="text-center mb-16">
-            <h2 className="text-4xl md:text-5xl font-bold mb-6 text-foreground">Experience</h2>
-          </div>
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
-            <div className="project-card">
-              <h3 className="text-2xl font-semibold mb-2 text-foreground">SolarPack @ NC State</h3>
-              <div className="text-lg font-medium">High Voltage Team Lead</div>
-              <div className="text-sm text-muted-foreground mb-2">Jul 2025 – Present</div>
-              <ul className="list-disc list-inside text-left text-muted-foreground mb-4">
-                <li>Responsible for custom lithium-ion battery system, motor controller integration, and power electronics</li>
-                <li>Led reduction of 100s13p pack to 100s9p for race regulations, including cell removal, BMS rewiring, and new tab welds</li>
-                <li>Managed motor controller systems, HV-to-LV buck converter setup, and AC-to-DC charger integration</li>
-                <li>Focus on performance, safety, and system reliability</li>
-              </ul>
-              <div className="text-lg font-medium">Vehicle Dynamics Engineer</div>
-              <div className="text-sm text-muted-foreground mb-2">Aug 2022 – Jul 2025</div>
-              <ul className="list-disc list-inside text-left text-muted-foreground">
-                <li>Worked on chassis, suspension, and mechanical systems for solar car</li>
-                <li>Fabricated and installed strut mounts, brake pedal mounts, steering shafts, and other structural components</li>
-                <li>Installed steering system, subframes, differentials, struts, brake lines, wheels, and brakes</li>
-                <li>Assisted with motor installation and alignment for chain drive to differential</li>
-                <li>Performed welding and custom mounts for electrical components</li>
-              </ul>
-            </div>
-            <div className="project-card">
-              <h3 className="text-2xl font-semibold mb-2 text-foreground">Viral Nation</h3>
-              <div className="text-lg font-medium">Content Creator</div>
-              <div className="text-sm text-muted-foreground mb-2">Jan 2021 – Present</div>
-              <ul className="list-disc list-inside text-left text-muted-foreground mb-4">
-                <li>Independent content creator and VFX artist signed with Viral Nation</li>
-                <li>Specializing in cinematic, story-driven video editing for social media</li>
-                <li>Built a following of 800,000+ with 150M+ total views and 16% engagement rate</li>
-                <li>Collaborated with brands: Google, Prime Video, Best Buy, Audible, Kia, Apex Legends, Niantic, Autodesk, Asus, and more</li>
-                <li>Managed full creative production pipeline, marketing strategies, and client relations</li>
-              </ul>
-              <h3 className="text-2xl font-semibold mb-2 text-foreground">Ford Motor Company</h3>
-              <div className="text-lg font-medium">Aftermarket Vehicle Personalization Intern</div>
-              <div className="text-sm text-muted-foreground mb-2">May 2024 – Aug 2024</div>
-              <ul className="list-disc list-inside text-left text-muted-foreground mb-4">
-                <li>Supported Ford Performance aftermarket products through marketing and sales operations</li>
-                <li>Developed automated notification system for SIPOC process stages</li>
-                <li>Contributed to vehicle wrap customization platform and new aftermarket package program</li>
-                <li>Developed pricing model for social media influencer partnerships</li>
-                <li>Gained experience in cross-functional communication and strategic planning</li>
-              </ul>
-              <h3 className="text-2xl font-semibold mb-2 text-foreground">Wynfield Forest Swim Team</h3>
-              <div className="text-lg font-medium">Assistant Head Coach</div>
-              <div className="text-sm text-muted-foreground mb-2">Jul 2021 – Jun 2023</div>
-              <ul className="list-disc list-inside text-left text-muted-foreground">
-                <li>Team leadership and management for youth swim team</li>
-              </ul>
-            </div>
-          </div>
-        </div>
-      </section>
       {/* Skills Section */}
       <section id="skills" className={`py-20 px-4 lg:px-8 section-enter ${visibleSections.has('skills') ? 'visible' : ''}`}> 
         <div className="max-w-6xl mx-auto"> 
@@ -369,8 +311,8 @@ const Index = () => {
         </div>
       </section>
 
-      {/* TikTok & Brands */}
-      <section id="brands" className={`py-20 px-4 lg:px-8 section-enter ${visibleSections.has('brands') ? 'visible' : ''}`}>
+      {/* TikTok & Marketing */}
+      <section id="marketing" className={`py-20 px-4 lg:px-8 section-enter ${visibleSections.has('marketing') ? 'visible' : ''}`}>
         <div className="max-w-6xl mx-auto">
           <div className="text-center mb-16">
             <h2 className="text-4xl md:text-5xl font-bold mb-6 text-foreground">Content & Partnerships</h2>
@@ -398,11 +340,20 @@ const Index = () => {
       </section>
 
       {/* Footer */}
-      <footer className="py-12 px-4 lg:px-8 border-t border-minimal-border">
-        <div className="max-w-6xl mx-auto text-center">
-          <p className="text-muted-foreground font-mono">
-            Built with React & ❤️ • © 2025 Nathan Hambleton
-          </p>
+      <footer className="py-12 px-4 lg:px-8 border-t border-minimal-border bg-gradient-to-r from-black via-minimal-accent/10 to-black">
+        <div className="max-w-6xl mx-auto text-center flex flex-col items-center gap-4">
+          <div className="flex gap-4 justify-center mt-2">
+            <a href="https://github.com/nathanhambleton1" target="_blank" rel="noopener noreferrer" className="hover:text-minimal-accent transition-colors">
+              GitHub
+            </a>
+            <a href="https://www.linkedin.com/in/nathanhambleton/" target="_blank" rel="noopener noreferrer" className="hover:text-minimal-accent transition-colors">
+              LinkedIn
+            </a>
+            <a href="https://www.tiktok.com/@nathan_ham" target="_blank" rel="noopener noreferrer" className="hover:text-minimal-accent transition-colors">
+              TikTok
+            </a>
+          </div>
+          <p className="text-xs text-muted-foreground mt-4 font-mono">© {new Date().getFullYear()} Nathan Hambleton. All rights reserved.</p>
         </div>
       </footer>
     {selectedSkill && (
