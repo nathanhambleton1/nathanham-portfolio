@@ -1,4 +1,6 @@
 import { useEffect, useState } from 'react';
+import SkillDetailModal from '../components/SkillDetailModal';
+import skillsData from '../lib/skills';
 import { Github, Linkedin, Heart } from 'lucide-react';
 import WheelNavigation from '../components/WheelNavigation';
 
@@ -96,6 +98,19 @@ const Index = () => {
       featured: false
     }
   ];
+
+  const [selectedSkill, setSelectedSkill] = useState(null);
+  // Prevent background scroll when modal is open
+  useEffect(() => {
+    if (selectedSkill) {
+      document.body.style.overflow = 'hidden';
+    } else {
+      document.body.style.overflow = '';
+    }
+    return () => {
+      document.body.style.overflow = '';
+    };
+  }, [selectedSkill]);
 
   return (
     <div className="min-h-screen bg-black text-foreground">
@@ -263,39 +278,25 @@ const Index = () => {
         </div>
       </section>
       {/* Skills Section */}
-      <section id="skills" className={`py-20 px-4 lg:px-8 section-enter ${visibleSections.has('skills') ? 'visible' : ''}`}>
-        <div className="max-w-6xl mx-auto">
-          <div className="text-center mb-16">
-            <h2 className="text-4xl md:text-5xl font-bold mb-6 text-foreground">Skills</h2>
-            <p className="text-xl text-muted-foreground">Embedded Systems • Mobile App Development • Power Electronics • Mechatronics • Product Development</p>
-          </div>
-          <div className="flex flex-wrap justify-center gap-4">
-            {[
-              'Embedded Systems',
-              'Mobile App Development',
-              'Power Electronics',
-              'Mechatronics',
-              'Product Development',
-              'PCB Design',
-              'VFX & Content Creation',
-              'Team Leadership',
-              'Mechanical Assembly',
-              'Signal Processing',
-              'C/C++',
-              'Python',
-              'React Native',
-              'CAN Bus',
-              'Battery Management Systems',
-              '3D Printing',
-              'Robotics',
-              'Project Management'
-            ].map((skill, idx) => (
-              <span key={idx} className="px-4 py-2 bg-card/50 border border-minimal-border rounded-lg text-foreground text-sm font-mono">
-                {skill}
-              </span>
-            ))}
-          </div>
-        </div>
+      <section id="skills" className={`py-20 px-4 lg:px-8 section-enter ${visibleSections.has('skills') ? 'visible' : ''}`}> 
+        <div className="max-w-6xl mx-auto"> 
+          <div className="text-center mb-16"> 
+            <h2 className="text-4xl md:text-5xl font-bold mb-6 text-foreground">Skills</h2> 
+            <p className="text-xl text-muted-foreground">Embedded Systems • Mobile App Development • Power Electronics • Mechatronics • Product Development</p> 
+          </div> 
+          <div className="flex flex-wrap justify-center gap-4"> 
+            {skillsData.map((skill, idx) => ( 
+              <button 
+                key={idx} 
+                className="px-4 py-2 bg-card/50 border border-minimal-border rounded-lg text-foreground text-sm font-mono hover:bg-minimal-accent/20 transition-colors focus:outline-none" 
+                onClick={() => setSelectedSkill(skill)} 
+                type="button"
+              > 
+                {skill.name} 
+              </button> 
+            ))} 
+          </div> 
+        </div> 
       </section>
 
       {/* Solar Car Project */}
@@ -404,6 +405,14 @@ const Index = () => {
           </p>
         </div>
       </footer>
+    {selectedSkill && (
+      <div className="fixed inset-0 z-50 flex items-center justify-center">
+  <div className="absolute inset-0 bg-black/0 backdrop-blur-sm" />
+        <div className="relative flex items-center justify-center w-full h-full">
+          <SkillDetailModal skill={selectedSkill} onClose={() => setSelectedSkill(null)} />
+        </div>
+      </div>
+    )}
     </div>
   );
 };
