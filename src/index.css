@@ -6,55 +6,52 @@
 
 @layer base {
   :root {
-    /* Core Colors - Black theme with tech accents */
+    /* Minimalistic Black & White Theme */
     --background: 0 0% 0%;
     --foreground: 0 0% 98%;
 
-    --card: 0 0% 5%;
+    --card: 0 0% 3%;
     --card-foreground: 0 0% 98%;
 
-    --popover: 0 0% 3%;
+    --popover: 0 0% 2%;
     --popover-foreground: 0 0% 98%;
 
-    --primary: 120 100% 50%;
+    --primary: 0 0% 98%;
     --primary-foreground: 0 0% 0%;
 
-    --secondary: 0 0% 10%;
+    --secondary: 0 0% 8%;
     --secondary-foreground: 0 0% 90%;
 
-    --muted: 0 0% 8%;
-    --muted-foreground: 0 0% 60%;
+    --muted: 0 0% 6%;
+    --muted-foreground: 0 0% 50%;
 
-    --accent: 200 100% 60%;
-    --accent-foreground: 0 0% 0%;
+    --accent: 0 0% 15%;
+    --accent-foreground: 0 0% 98%;
 
     --destructive: 0 84% 60%;
     --destructive-foreground: 0 0% 98%;
 
-    --border: 0 0% 15%;
-    --input: 0 0% 15%;
-    --ring: 120 100% 50%;
+    --border: 0 0% 10%;
+    --input: 0 0% 10%;
+    --ring: 0 0% 98%;
 
-    --radius: 0.75rem;
+    --radius: 0.5rem;
 
-    /* Tech-specific colors */
-    --tech-glow: 120 100% 50%;
-    --tech-glow-secondary: 200 100% 60%;
-    --tech-accent: 280 100% 70%;
-    --tech-border: 0 0% 20%;
+    /* Minimal accent - single subtle highlight */
+    --minimal-accent: 0 0% 40%;
+    --minimal-border: 0 0% 15%;
     
-    /* Gradients */
-    --gradient-tech: linear-gradient(135deg, hsl(var(--tech-glow) / 0.1), hsl(var(--tech-glow-secondary) / 0.1));
-    --gradient-glow: linear-gradient(90deg, transparent, hsl(var(--tech-glow) / 0.3), transparent);
+    /* Minimal gradients */
+    --gradient-subtle: linear-gradient(135deg, hsl(var(--card)), hsl(var(--muted)));
+    --gradient-border: linear-gradient(90deg, transparent, hsl(var(--minimal-accent) / 0.3), transparent);
     
-    /* Shadows & Effects */
-    --shadow-glow: 0 0 20px hsl(var(--tech-glow) / 0.3);
-    --shadow-glow-lg: 0 0 40px hsl(var(--tech-glow) / 0.2);
-    --shadow-tech: 0 4px 20px hsl(0 0% 0% / 0.5);
+    /* Subtle shadows */
+    --shadow-minimal: 0 2px 10px hsl(0 0% 0% / 0.3);
+    --shadow-hover: 0 4px 20px hsl(0 0% 0% / 0.4);
     
-    /* Animations */
+    /* Smooth transitions */
     --transition-smooth: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
-    --transition-glow: box-shadow 0.3s ease, transform 0.3s ease;
+    --transition-wheel: transform 0.6s cubic-bezier(0.4, 0, 0.2, 1);
   }
 
   .dark {
@@ -105,45 +102,52 @@
   }
 
   ::-webkit-scrollbar-thumb {
-    background: hsl(var(--tech-glow) / 0.5);
+    background: hsl(var(--minimal-accent) / 0.5);
     border-radius: 4px;
   }
 
   ::-webkit-scrollbar-thumb:hover {
-    background: hsl(var(--tech-glow));
+    background: hsl(var(--minimal-accent));
   }
 }
 
 @layer components {
-  /* Tech Glow Effects */
-  .tech-glow {
-    box-shadow: var(--shadow-glow);
-    transition: var(--transition-glow);
+  /* Minimal hover effects */
+  .minimal-hover {
+    box-shadow: var(--shadow-minimal);
+    transition: var(--transition-smooth);
   }
 
-  .tech-glow:hover {
-    box-shadow: var(--shadow-glow-lg);
-    transform: translateY(-2px);
+  .minimal-hover:hover {
+    box-shadow: var(--shadow-hover);
+    transform: translateY(-1px);
   }
 
-  /* Navigation Styles */
-  .nav-link {
-    @apply relative text-foreground/80 hover:text-foreground transition-all duration-300;
-    font-weight: 400;
+  /* Wheel Navigation Styles */
+  .nav-wheel {
+    position: fixed;
+    left: 2rem;
+    top: 50%;
+    transform: translateY(-50%);
+    width: 200px;
+    height: 200px;
   }
 
-  .nav-link::after {
-    content: '';
-    @apply absolute -bottom-1 left-0 w-0 h-px bg-gradient-to-r from-transparent via-tech-glow to-transparent transition-all duration-300;
+  .nav-item {
+    position: absolute;
+    transform-origin: 100px 100px;
+    transition: var(--transition-wheel);
+    cursor: pointer;
   }
 
-  .nav-link:hover::after,
-  .nav-link.active::after {
-    @apply w-full;
+  .nav-item span {
+    @apply text-sm font-mono text-foreground/60 hover:text-foreground transition-colors duration-300;
+    white-space: nowrap;
+    transform: translateX(-50%);
   }
 
-  .nav-link.active {
-    @apply text-tech-glow;
+  .nav-item.active span {
+    @apply text-foreground font-medium;
   }
 
   /* Section Animations */
@@ -160,28 +164,27 @@
 
   /* Timeline Effects */
   .timeline-dot {
-    @apply w-4 h-4 rounded-full border-2 border-tech-glow bg-background relative;
-    box-shadow: 0 0 10px hsl(var(--tech-glow) / 0.5);
+    @apply w-3 h-3 rounded-full border border-minimal-accent bg-background relative;
+    transition: var(--transition-smooth);
   }
 
   .timeline-dot.active {
-    @apply bg-tech-glow;
-    animation: pulse-glow 2s infinite;
+    @apply bg-foreground border-foreground;
   }
 
   .timeline-line {
-    @apply w-px bg-gradient-to-b from-tech-glow via-tech-glow/50 to-transparent;
+    @apply w-px bg-gradient-to-b from-minimal-accent/50 via-minimal-accent/20 to-transparent;
   }
 
   /* Card Hover Effects */
   .project-card {
-    @apply bg-card border border-tech-border rounded-lg p-6 transition-all duration-300;
-    background: linear-gradient(135deg, hsl(var(--card)), hsl(var(--muted)));
+    @apply bg-card border border-minimal-border rounded-lg p-6 transition-all duration-300;
+    background: var(--gradient-subtle);
   }
 
   .project-card:hover {
-    @apply border-tech-glow/50 transform -translate-y-2;
-    box-shadow: var(--shadow-glow);
+    @apply border-minimal-accent/50 transform -translate-y-1;
+    box-shadow: var(--shadow-hover);
   }
 
   /* Carousel Animation */
@@ -196,12 +199,12 @@
 
 @layer utilities {
   /* Custom Animations */
-  @keyframes pulse-glow {
-    0%, 100% {
-      box-shadow: 0 0 10px hsl(var(--tech-glow) / 0.5);
+  @keyframes wheel-rotate {
+    from {
+      transform: rotate(0deg);
     }
-    50% {
-      box-shadow: 0 0 20px hsl(var(--tech-glow)), 0 0 30px hsl(var(--tech-glow) / 0.3);
+    to {
+      transform: rotate(360deg);
     }
   }
 
@@ -227,8 +230,8 @@
     animation: float 3s ease-in-out infinite;
   }
 
-  .animate-pulse-glow {
-    animation: pulse-glow 2s infinite;
+  .animate-wheel-rotate {
+    animation: wheel-rotate 20s linear infinite;
   }
 
   .animate-scroll-brands {

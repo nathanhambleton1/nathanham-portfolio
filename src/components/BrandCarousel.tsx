@@ -28,9 +28,9 @@ const BrandCarousel = () => {
   const duplicatedBrands = [...brands, ...brands];
 
   return (
-    <div className="w-full overflow-hidden bg-card/30 backdrop-blur-sm border border-tech-border rounded-lg p-6">
+    <div className="w-full overflow-hidden bg-card/30 backdrop-blur-sm border border-minimal-border rounded-lg p-6">
       <div className="mb-6 text-center">
-        <h3 className="text-2xl font-semibold text-tech-glow mb-2">Collaborated Brands</h3>
+        <h3 className="text-2xl font-semibold text-foreground mb-2">Collaborated Brands</h3>
         <p className="text-muted-foreground">Companies I've worked with across various projects</p>
       </div>
 
@@ -51,13 +51,13 @@ const BrandCarousel = () => {
           {duplicatedBrands.map((brand, index) => (
             <div
               key={`${brand.name}-${index}`}
-              className="flex-shrink-0 w-20 h-20 flex items-center justify-center bg-muted/50 backdrop-blur-sm rounded-lg border border-tech-border/50 hover:border-tech-glow/50 transition-all duration-300 group cursor-pointer"
+              className="flex-shrink-0 w-20 h-20 flex items-center justify-center bg-muted/50 backdrop-blur-sm rounded-lg border border-minimal-border/50 hover:border-minimal-accent/50 transition-all duration-300 group cursor-pointer"
             >
               <div className="text-center">
                 <div className="text-2xl mb-1 group-hover:scale-110 transition-transform duration-300">
                   {brand.logo}
                 </div>
-                <div className="text-xs text-muted-foreground group-hover:text-tech-glow transition-colors font-mono">
+                <div className="text-xs text-muted-foreground group-hover:text-minimal-accent transition-colors font-mono">
                   {brand.name}
                 </div>
               </div>
@@ -69,12 +69,12 @@ const BrandCarousel = () => {
       {/* Stats */}
       <div className="mt-6 flex justify-center items-center gap-8 text-center">
         <div>
-          <div className="text-2xl font-bold text-tech-glow">800K+</div>
+          <div className="text-2xl font-bold text-foreground">800K+</div>
           <div className="text-sm text-muted-foreground">TikTok Followers</div>
         </div>
-        <div className="w-px h-8 bg-tech-border" />
+        <div className="w-px h-8 bg-minimal-border" />
         <div>
-          <div className="text-2xl font-bold text-tech-glow">{brands.length}+</div>
+          <div className="text-2xl font-bold text-foreground">{brands.length}+</div>
           <div className="text-sm text-muted-foreground">Brand Partners</div>
         </div>
       </div>

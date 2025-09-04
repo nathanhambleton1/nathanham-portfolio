@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { Github, Linkedin, Heart } from 'lucide-react';
-import Navigation from '../components/Navigation';
+import WheelNavigation from '../components/WheelNavigation';
 import InteractiveHeadshot from '../components/InteractiveHeadshot';
 import Timeline from '../components/Timeline';
 import ProjectCard from '../components/ProjectCard';
@@ -72,6 +72,12 @@ const Index = () => {
   // Projects Data
   const otherProjects = [
     {
+      title: 'Portfolio Website on Raspberry Pi',
+      description: 'This very website! Self-hosted on a Raspberry Pi 4 with custom domain, SSL certificates, and automated deployments. Features Docker containerization and GitHub Actions CI/CD pipeline.',
+      tags: ['Raspberry Pi', 'Docker', 'CI/CD', 'Self-Hosting', 'SSL'],
+      featured: true
+    },
+    {
       title: 'Electric Skateboard v3',
       description: 'Custom-built electric skateboard with regenerative braking, smartphone app control, and 25-mile range. Features custom battery management system and machined aluminum trucks.',
       tags: ['Hardware', 'Mobile App', 'BMS', '3D Printing'],
@@ -93,14 +99,14 @@ const Index = () => {
 
   return (
     <div className="min-h-screen bg-black text-foreground">
-      <Navigation />
+      <WheelNavigation />
       
       {/* About Section */}
       <section id="about" className={`min-h-screen flex items-center justify-center px-4 lg:px-8 pt-16 lg:pt-0 section-enter ${visibleSections.has('about') ? 'visible' : ''}`}>
         <div className="max-w-4xl mx-auto text-center">
           <InteractiveHeadshot />
           
-          <h1 className="text-4xl md:text-6xl lg:text-7xl font-bold mb-6 bg-gradient-to-r from-tech-glow via-tech-glow-secondary to-tech-accent bg-clip-text text-transparent">
+          <h1 className="text-4xl md:text-6xl lg:text-7xl font-bold mb-6 text-foreground">
             John Developer
           </h1>
           
@@ -117,58 +123,25 @@ const Index = () => {
           <div className="flex items-center justify-center gap-6">
             <a 
               href="#" 
-              className="flex items-center gap-2 px-6 py-3 bg-card/50 backdrop-blur-sm border border-tech-border rounded-lg hover:border-tech-glow/50 transition-all duration-300 tech-glow group"
+              className="flex items-center gap-2 px-6 py-3 bg-card/50 backdrop-blur-sm border border-minimal-border rounded-lg hover:border-minimal-accent transition-all duration-300 minimal-hover group"
             >
-              <Github className="w-5 h-5 group-hover:text-tech-glow transition-colors" />
+              <Github className="w-5 h-5 group-hover:text-minimal-accent transition-colors" />
               <span>GitHub</span>
             </a>
             <a 
               href="#" 
-              className="flex items-center gap-2 px-6 py-3 bg-card/50 backdrop-blur-sm border border-tech-border rounded-lg hover:border-tech-glow/50 transition-all duration-300 tech-glow group"
+              className="flex items-center gap-2 px-6 py-3 bg-card/50 backdrop-blur-sm border border-minimal-border rounded-lg hover:border-minimal-accent transition-all duration-300 minimal-hover group"
             >
-              <Linkedin className="w-5 h-5 group-hover:text-tech-glow transition-colors" />
+              <Linkedin className="w-5 h-5 group-hover:text-minimal-accent transition-colors" />
               <span>LinkedIn</span>
             </a>
             <a 
               href="#" 
-              className="flex items-center gap-2 px-6 py-3 bg-card/50 backdrop-blur-sm border border-tech-border rounded-lg hover:border-tech-glow/50 transition-all duration-300 tech-glow group"
+              className="flex items-center gap-2 px-6 py-3 bg-card/50 backdrop-blur-sm border border-minimal-border rounded-lg hover:border-minimal-accent transition-all duration-300 minimal-hover group"
             >
-              <Heart className="w-5 h-5 group-hover:text-tech-glow transition-colors" />
+              <Heart className="w-5 h-5 group-hover:text-minimal-accent transition-colors" />
               <span>TikTok</span>
             </a>
-          </div>
-        </div>
-      </section>
-
-      {/* Solar Car Project */}
-      <section id="solar-car" className={`py-20 px-4 lg:px-8 section-enter ${visibleSections.has('solar-car') ? 'visible' : ''}`}>
-        <div className="max-w-6xl mx-auto">
-          <div className="text-center mb-16">
-            <h2 className="text-4xl md:text-5xl font-bold mb-6 text-tech-glow">Solar Car Project</h2>
-            <p className="text-xl text-muted-foreground max-w-3xl mx-auto leading-relaxed">
-              Journey from Vehicle Dynamics to High Voltage Systems Lead - pioneering sustainable transportation technology
-            </p>
-          </div>
-          
-          <Timeline items={solarCarTimeline} />
-          
-          {/* Placeholder for 3D models and images */}
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 mt-16">
-            <div className="project-card bg-gradient-to-br from-muted to-muted/50 p-8 rounded-lg text-center">
-              <div className="text-4xl mb-4">🔋</div>
-              <h3 className="text-lg font-semibold mb-2">Battery Systems</h3>
-              <p className="text-sm text-muted-foreground">Custom 800V battery pack with advanced BMS</p>
-            </div>
-            <div className="project-card bg-gradient-to-br from-muted to-muted/50 p-8 rounded-lg text-center">
-              <div className="text-4xl mb-4">📊</div>
-              <h3 className="text-lg font-semibold mb-2">Telemetry</h3>
-              <p className="text-sm text-muted-foreground">Real-time performance monitoring system</p>
-            </div>
-            <div className="project-card bg-gradient-to-br from-muted to-muted/50 p-8 rounded-lg text-center">
-              <div className="text-4xl mb-4">⚡</div>
-              <h3 className="text-lg font-semibold mb-2">Motor Control</h3>
-              <p className="text-sm text-muted-foreground">High-efficiency power delivery systems</p>
-            </div>
           </div>
         </div>
       </section>
@@ -177,13 +150,13 @@ const Index = () => {
       <section id="college" className={`py-20 px-4 lg:px-8 section-enter ${visibleSections.has('college') ? 'visible' : ''}`}>
         <div className="max-w-6xl mx-auto">
           <div className="text-center mb-16">
-            <h2 className="text-4xl md:text-5xl font-bold mb-6 text-tech-glow">NC State University</h2>
+            <h2 className="text-4xl md:text-5xl font-bold mb-6 text-foreground">NC State University</h2>
             <p className="text-xl text-muted-foreground">Electrical & Computer Engineering</p>
           </div>
           
           <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
             <div className="project-card">
-              <h3 className="text-2xl font-semibold mb-4 text-tech-glow-secondary">Coursework</h3>
+              <h3 className="text-2xl font-semibold mb-4 text-foreground">Coursework</h3>
               <div className="space-y-3">
                 {[
                   'Advanced Digital Signal Processing',
@@ -194,7 +167,7 @@ const Index = () => {
                   'High Voltage Engineering'
                 ].map((course, index) => (
                   <div key={index} className="flex items-center gap-3">
-                    <div className="w-2 h-2 bg-tech-glow rounded-full" />
+                    <div className="w-2 h-2 bg-minimal-accent rounded-full" />
                     <span className="font-mono text-sm">{course}</span>
                   </div>
                 ))}
@@ -202,7 +175,7 @@ const Index = () => {
             </div>
             
             <div className="project-card">
-              <h3 className="text-2xl font-semibold mb-4 text-tech-glow-secondary">Achievements</h3>
+              <h3 className="text-2xl font-semibold mb-4 text-foreground">Achievements</h3>
               <div className="space-y-4">
                 <div>
                   <div className="text-lg font-medium">Dean's List</div>
@@ -222,11 +195,44 @@ const Index = () => {
         </div>
       </section>
 
+      {/* Solar Car Project */}
+      <section id="solar-car" className={`py-20 px-4 lg:px-8 section-enter ${visibleSections.has('solar-car') ? 'visible' : ''}`}>
+        <div className="max-w-6xl mx-auto">
+          <div className="text-center mb-16">
+            <h2 className="text-4xl md:text-5xl font-bold mb-6 text-foreground">Solar Car Project</h2>
+            <p className="text-xl text-muted-foreground max-w-3xl mx-auto leading-relaxed">
+              Journey from Vehicle Dynamics to High Voltage Systems Lead - pioneering sustainable transportation technology
+            </p>
+          </div>
+          
+          <Timeline items={solarCarTimeline} />
+          
+          {/* Placeholder for 3D models and images */}
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 mt-16">
+            <div className="project-card p-8 rounded-lg text-center">
+              <div className="text-4xl mb-4">🔋</div>
+              <h3 className="text-lg font-semibold mb-2">Battery Systems</h3>
+              <p className="text-sm text-muted-foreground">Custom 800V battery pack with advanced BMS</p>
+            </div>
+            <div className="project-card p-8 rounded-lg text-center">
+              <div className="text-4xl mb-4">📊</div>
+              <h3 className="text-lg font-semibold mb-2">Telemetry</h3>
+              <p className="text-sm text-muted-foreground">Real-time performance monitoring system</p>
+            </div>
+            <div className="project-card p-8 rounded-lg text-center">
+              <div className="text-4xl mb-4">⚡</div>
+              <h3 className="text-lg font-semibold mb-2">Motor Control</h3>
+              <p className="text-sm text-muted-foreground">High-efficiency power delivery systems</p>
+            </div>
+          </div>
+        </div>
+      </section>
+
       {/* LiquorBot Project */}
       <section id="liquorbot" className={`py-20 px-4 lg:px-8 section-enter ${visibleSections.has('liquorbot') ? 'visible' : ''}`}>
         <div className="max-w-6xl mx-auto">
           <div className="text-center mb-16">
-            <h2 className="text-4xl md:text-5xl font-bold mb-6 text-tech-glow">LiquorBot</h2>
+            <h2 className="text-4xl md:text-5xl font-bold mb-6 text-foreground">LiquorBot</h2>
             <p className="text-xl text-muted-foreground max-w-3xl mx-auto leading-relaxed">
               Automated bartending robot with mobile app integration and precision dispensing system
             </p>
@@ -259,27 +265,11 @@ const Index = () => {
         </div>
       </section>
 
-      {/* Other Projects */}
-      <section id="projects" className={`py-20 px-4 lg:px-8 section-enter ${visibleSections.has('projects') ? 'visible' : ''}`}>
-        <div className="max-w-6xl mx-auto">
-          <div className="text-center mb-16">
-            <h2 className="text-4xl md:text-5xl font-bold mb-6 text-tech-glow">Other Projects</h2>
-            <p className="text-xl text-muted-foreground">Personal engineering projects and creative builds</p>
-          </div>
-          
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
-            {otherProjects.map((project, index) => (
-              <ProjectCard key={index} {...project} />
-            ))}
-          </div>
-        </div>
-      </section>
-
       {/* TikTok & Brands */}
       <section id="brands" className={`py-20 px-4 lg:px-8 section-enter ${visibleSections.has('brands') ? 'visible' : ''}`}>
         <div className="max-w-6xl mx-auto">
           <div className="text-center mb-16">
-            <h2 className="text-4xl md:text-5xl font-bold mb-6 text-tech-glow">Content & Partnerships</h2>
+            <h2 className="text-4xl md:text-5xl font-bold mb-6 text-foreground">Content & Partnerships</h2>
             <p className="text-xl text-muted-foreground">Building tech community through engaging content</p>
           </div>
           
@@ -287,8 +277,24 @@ const Index = () => {
         </div>
       </section>
 
+      {/* Projects Section */}
+      <section id="projects" className={`py-20 px-4 lg:px-8 section-enter ${visibleSections.has('projects') ? 'visible' : ''}`}>
+        <div className="max-w-6xl mx-auto">
+          <div className="text-center mb-16">
+            <h2 className="text-4xl md:text-5xl font-bold mb-6 text-foreground">Projects</h2>
+            <p className="text-xl text-muted-foreground">Personal engineering projects and creative builds</p>
+          </div>
+          
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-2 gap-8">
+            {otherProjects.map((project, index) => (
+              <ProjectCard key={index} {...project} />
+            ))}
+          </div>
+        </div>
+      </section>
+
       {/* Footer */}
-      <footer className="py-12 px-4 lg:px-8 border-t border-tech-border">
+      <footer className="py-12 px-4 lg:px-8 border-t border-minimal-border">
         <div className="max-w-6xl mx-auto text-center">
           <p className="text-muted-foreground font-mono">
             Built with React & ❤️ • © 2024 John Developer

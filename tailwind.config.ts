@@ -55,10 +55,8 @@ export default {
 					DEFAULT: 'hsl(var(--card))',
 					foreground: 'hsl(var(--card-foreground))'
 				},
-				'tech-glow': 'hsl(var(--tech-glow))',
-				'tech-glow-secondary': 'hsl(var(--tech-glow-secondary))',
-				'tech-accent': 'hsl(var(--tech-accent))',
-				'tech-border': 'hsl(var(--tech-border))',
+				'minimal-accent': 'hsl(var(--minimal-accent))',
+				'minimal-border': 'hsl(var(--minimal-border))',
 			},
 			borderRadius: {
 				lg: 'var(--radius)',
@@ -93,7 +91,7 @@ export default {
 				'slide-in-right': 'slide-in-right 0.3s ease-out',
 				'slide-out-right': 'slide-out-right 0.3s ease-out',
 				'float': 'float 3s ease-in-out infinite',
-				'pulse-glow': 'pulse-glow 2s infinite',
+				'wheel-rotate': 'wheel-rotate 20s linear infinite',
 				'scroll-brands': 'scroll-brands 30s linear infinite',
 			}
 		}

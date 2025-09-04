@@ -36,8 +36,8 @@ const InteractiveHeadshot = () => {
       className="relative w-48 h-48 mx-auto mb-8 group cursor-pointer"
     >
       {/* Main headshot container */}
-      <div className="w-full h-full rounded-full bg-gradient-to-br from-tech-glow/20 to-tech-accent/20 p-1 tech-glow">
-        <div className="w-full h-full rounded-full bg-muted overflow-hidden relative">
+      <div className="w-full h-full rounded-full bg-gradient-to-br from-muted/30 to-card/50 p-1 minimal-hover">
+        <div className="w-full h-full rounded-full bg-muted overflow-hidden relative border border-minimal-border">
           {/* Placeholder for actual photo */}
           <div className="w-full h-full bg-gradient-to-br from-gray-700 to-gray-900 flex items-center justify-center">
             <div className="text-4xl text-gray-400">📸</div>
@@ -48,14 +48,14 @@ const InteractiveHeadshot = () => {
             <div className="relative">
               {/* Left Eye */}
               <div 
-                className="absolute w-3 h-3 bg-tech-glow rounded-full transition-all duration-100 ease-out"
+                className="absolute w-3 h-3 bg-foreground rounded-full transition-all duration-100 ease-out"
                 style={{
                   transform: `translate(${-20 + eyePosition.x}px, ${-5 + eyePosition.y}px)`,
                 }}
               />
               {/* Right Eye */}
               <div 
-                className="absolute w-3 h-3 bg-tech-glow rounded-full transition-all duration-100 ease-out"
+                className="absolute w-3 h-3 bg-foreground rounded-full transition-all duration-100 ease-out"
                 style={{
                   transform: `translate(${20 + eyePosition.x}px, ${-5 + eyePosition.y}px)`,
                 }}
@@ -70,7 +70,7 @@ const InteractiveHeadshot = () => {
         {[...Array(6)].map((_, i) => (
           <div
             key={i}
-            className="absolute w-1 h-1 bg-tech-glow/60 rounded-full animate-float"
+            className="absolute w-1 h-1 bg-minimal-accent/40 rounded-full animate-float"
             style={{
               left: `${Math.random() * 100}%`,
               top: `${Math.random() * 100}%`,

@@ -32,9 +32,9 @@ const ProjectCard = ({
     >
       {/* Featured badge */}
       {featured && (
-        <div className="absolute top-4 right-4 z-10 flex items-center gap-1 bg-tech-glow/20 backdrop-blur-sm px-3 py-1 rounded-full">
-          <Zap className="w-4 h-4 text-tech-glow" />
-          <span className="text-xs font-medium text-tech-glow">Featured</span>
+        <div className="absolute top-4 right-4 z-10 flex items-center gap-1 bg-minimal-accent/20 backdrop-blur-sm px-3 py-1 rounded-full">
+          <Zap className="w-4 h-4 text-minimal-accent" />
+          <span className="text-xs font-medium text-minimal-accent">Featured</span>
         </div>
       )}
 
@@ -61,9 +61,9 @@ const ProjectCard = ({
               href={githubUrl}
               target="_blank"
               rel="noopener noreferrer"
-              className="p-2 bg-tech-glow/20 backdrop-blur-sm rounded-full hover:bg-tech-glow/40 transition-colors"
+              className="p-2 bg-minimal-accent/20 backdrop-blur-sm rounded-full hover:bg-minimal-accent/40 transition-colors"
             >
-              <Github className="w-5 h-5 text-tech-glow" />
+              <Github className="w-5 h-5 text-minimal-accent" />
             </a>
           )}
           {liveUrl && (
@@ -71,9 +71,9 @@ const ProjectCard = ({
               href={liveUrl}
               target="_blank"
               rel="noopener noreferrer"
-              className="p-2 bg-tech-glow/20 backdrop-blur-sm rounded-full hover:bg-tech-glow/40 transition-colors"
+              className="p-2 bg-minimal-accent/20 backdrop-blur-sm rounded-full hover:bg-minimal-accent/40 transition-colors"
             >
-              <ExternalLink className="w-5 h-5 text-tech-glow" />
+              <ExternalLink className="w-5 h-5 text-minimal-accent" />
             </a>
           )}
         </div>
@@ -81,7 +81,7 @@ const ProjectCard = ({
 
       {/* Content */}
       <div className="space-y-4">
-        <h3 className="text-xl font-semibold text-foreground group-hover:text-tech-glow transition-colors">
+        <h3 className="text-xl font-semibold text-foreground group-hover:text-minimal-accent transition-colors">
           {title}
         </h3>
         
@@ -94,7 +94,7 @@ const ProjectCard = ({
           {tags.map((tag, index) => (
             <span
               key={index}
-              className="px-2 py-1 bg-tech-glow/10 text-tech-glow text-xs font-mono rounded border border-tech-glow/20"
+              className="px-2 py-1 bg-minimal-accent/10 text-minimal-accent text-xs font-mono rounded border border-minimal-accent/20"
             >
               {tag}
             </span>
@@ -104,7 +104,7 @@ const ProjectCard = ({
 
       {/* Animated border effect */}
       <div className={`absolute inset-0 border-2 border-transparent rounded-lg transition-all duration-300 ${
-        isHovered ? 'border-tech-glow/50' : ''
+        isHovered ? 'border-minimal-accent/50' : ''
       }`} />
     </div>
   );

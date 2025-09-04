@@ -63,19 +63,19 @@ const Timeline = ({ items }: TimelineProps) => {
                 onClick={() => setActiveIndex(index)}
               />
               {index === activeIndex && (
-                <div className="absolute -inset-2 border border-tech-glow/30 rounded-full animate-pulse" />
+                <div className="absolute -inset-2 border border-minimal-accent/30 rounded-full animate-pulse" />
               )}
             </div>
 
             {/* Content */}
             <div 
               className={`flex-1 project-card cursor-pointer transition-all duration-300 ${
-                activeIndex === index ? 'tech-glow' : ''
+                activeIndex === index ? 'minimal-hover' : ''
               }`}
               onClick={() => setActiveIndex(index)}
             >
               <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between mb-4">
-                <h3 className="text-xl font-semibold text-tech-glow">{item.title}</h3>
+                <h3 className="text-xl font-semibold text-foreground">{item.title}</h3>
                 <span className="text-sm text-muted-foreground font-mono">{item.period}</span>
               </div>
               
