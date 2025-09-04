@@ -5,11 +5,43 @@ import { Github, Linkedin, Heart } from 'lucide-react';
 import WheelNavigation from '../components/WheelNavigation';
 
 import Timeline from '../components/Timeline';
+import { useRef } from 'react';
 import ProjectCard from '../components/ProjectCard';
 import BrandCarousel from '../components/BrandCarousel';
 
 const Index = () => {
   const [visibleSections, setVisibleSections] = useState<Set<string>>(new Set());
+  const [sunScale, setSunScale] = useState(1);
+  const sunRef = useRef<HTMLImageElement>(null);
+
+  useEffect(() => {
+    let frameId: number | null = null;
+    const handleMouseMove = (e: MouseEvent) => {
+      if (frameId) return;
+      frameId = requestAnimationFrame(() => {
+        const sun = sunRef.current;
+        if (!sun) return;
+        const rect = sun.getBoundingClientRect();
+        const sunX = rect.left + rect.width / 2;
+        const sunY = rect.top + rect.height / 2;
+        const dx = e.clientX - sunX;
+        const dy = e.clientY - sunY;
+        const distance = Math.sqrt(dx * dx + dy * dy);
+        // Clamp scale between 0.7 and 1.5 based on distance (closer = bigger)
+        const minScale = 0.25;
+        const maxScale = 1.5;
+        const maxDistance = 1500;
+        const scale = Math.max(minScale, maxScale - (distance / maxDistance) * (maxScale - minScale));
+        setSunScale(scale);
+        frameId = null;
+      });
+    };
+    window.addEventListener('mousemove', handleMouseMove);
+    return () => {
+      window.removeEventListener('mousemove', handleMouseMove);
+      if (frameId) cancelAnimationFrame(frameId);
+    };
+  }, []);
 
   useEffect(() => {
     const observer = new IntersectionObserver(
@@ -257,7 +289,23 @@ const Index = () => {
           <div className="text-center mb-16">
             <div style={{ position: 'relative', display: 'inline-block', width: '100%' }}>
               <h2 className="text-4xl md:text-5xl font-bold mb-6 text-foreground" style={{ position: 'relative', zIndex: 1 }}>Solar Car Project</h2>
-              <img src="/sun.png" alt="Sun" style={{ position: 'absolute', top: '-100px', right: '200px', width: '200px', height: '200px', zIndex: 2 }} />
+              <img
+                src="/sun.png"
+                alt="Sun"
+                ref={sunRef}
+                style={{
+                  position: 'absolute',
+                  top: '-100px',
+                  right: '200px',
+                  width: '200px',
+                  height: '200px',
+                  zIndex: 2,
+                  pointerEvents: 'none',
+                  transform: `scale(${sunScale})`,
+                  transformOrigin: 'center',
+                  transition: 'transform 0.1s',
+                }}
+              />
             </div>
             <p className="text-xl text-muted-foreground max-w-3xl mx-auto leading-relaxed">
               NC States Solar Car Team - Designing and building Fenrir, a solar-powered vehicle for the American Solar Challenge
