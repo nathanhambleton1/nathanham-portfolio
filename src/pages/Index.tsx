@@ -255,7 +255,10 @@ const Index = () => {
       <section id="solar-car" className={`py-20 px-4 lg:px-8 section-enter ${visibleSections.has('solar-car') ? 'visible' : ''}`}>
         <div className="max-w-6xl mx-auto">
           <div className="text-center mb-16">
-            <h2 className="text-4xl md:text-5xl font-bold mb-6 text-foreground">Solar Car Project</h2>
+            <div style={{ position: 'relative', display: 'inline-block', width: '100%' }}>
+              <h2 className="text-4xl md:text-5xl font-bold mb-6 text-foreground" style={{ position: 'relative', zIndex: 1 }}>Solar Car Project</h2>
+              <img src="/sun.png" alt="Sun" style={{ position: 'absolute', top: '-100px', right: '200px', width: '200px', height: '200px', zIndex: 2 }} />
+            </div>
             <p className="text-xl text-muted-foreground max-w-3xl mx-auto leading-relaxed">
               NC States Solar Car Team - Designing and building Fenrir, a solar-powered vehicle for the American Solar Challenge
             </p>
