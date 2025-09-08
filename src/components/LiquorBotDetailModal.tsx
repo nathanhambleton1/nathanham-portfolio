@@ -1,76 +1,4 @@
-import React from 'react';
-import { FaTiktok, FaInstagram, FaYoutube } from 'react-icons/fa6';
-
-
-interface LiquorBotDetailModalProps {
-  onClose: () => void;
-  detailType: 'mobile' | 'hardware' | 'firmware' | null;
-}
-
-
-const getDetailContent = (type: 'mobile' | 'hardware' | 'firmware' | null) => {
-  switch (type) {
-    case 'mobile':
-      return {
-        title: 'Mobile App',
-        sections: [
-          {
-            heading: 'Overview',
-            content: 'The LiquorBot mobile app is your all-in-one control center for your robotic bartender, built with React Native and powered by AWS cloud integration.'
-          },
-          {
-            heading: 'AWS Integration & Secure Authentication',
-            content: 'Sign in securely with AWS Amplify. All your custom drinks, device settings, and event data are stored in the cloud and tied to your authenticated profile.'
-          },
-          {
-            heading: 'Custom Drinks & Recipes',
-            content: 'Create, save, and manage your own drink recipes. Personalize your cocktail experience and access your favorites from any device.'
-          },
-          {
-            heading: 'Device Management',
-            content: 'Monitor and control your LiquorBot hardware remotely. Manage priorities, settings, and communication with your physical device, all from the app.'
-          },
-          {
-            heading: 'Events & Menus',
-            content: 'Create new events, customize drink menus for each event, and tailor the experience for parties, weddings, or gatherings.'
-          },
-          {
-            heading: 'Explore Page',
-            content: 'Discover new recipes, browse pre-populated drinks, and see what’s possible with your available ingredients. All recipes are stored and synced via the cloud.'
-          },
-          {
-            heading: 'Live Monitoring & Pouring',
-            content: 'Track the status of your device, monitor pours in real time, and ensure every drink is perfect.'
-          },
-          {
-            heading: 'Profiles & Customization',
-            content: 'Add user profiles, upload pictures, and personalize your experience. Manage multiple users and preferences.'
-          },
-          {
-            heading: 'Help & Support',
-            content: 'Access the built-in help center for setup, troubleshooting, and tips directly from the app.'
-          }
-        ]
-      };
-    case 'hardware':
-      return {
-        title: 'Hardware',
-        description: 'Custom PCBs with stepper motor control systems. Precision dispensing, ingredient recognition, and robust mechanical design.'
-      };
-    case 'firmware':
-      return {
-        title: 'Firmware',
-        description: 'ESP32 firmware for solenoid control, IoT Core connectivity, and app integration. Handles communication between hardware and mobile app.'
-      };
-    default:
-      return {
-        title: 'LiquorBot Details',
-        description: '(Details about LiquorBot will go here.)'
-      };
-  }
-};
-
-// 3D Rotating Image Component (copied 1-for-1 from HomePage.tsx)
+// 3D Rotating Image Component (for mobile app preview)
 const RotatingImage: React.FC = () => {
   const containerRef = React.useRef<HTMLDivElement>(null);
   const targetRotation = React.useRef({ x: 0, y: 0 });
@@ -189,15 +117,233 @@ const RotatingImage: React.FC = () => {
     </div>
   );
 };
+import React from 'react';
+import { FaTiktok, FaInstagram, FaYoutube } from 'react-icons/fa6';
+
+
+interface LiquorBotDetailModalProps {
+  onClose: () => void;
+  detailType: 'mobile' | 'hardware' | 'firmware' | null;
+}
+
+
+const getDetailContent = (type: 'mobile' | 'hardware' | 'firmware' | null) => {
+  switch (type) {
+    case 'mobile':
+      return {
+        title: 'Mobile App',
+        sections: [
+          {
+            heading: 'Overview',
+            content: 'The LiquorBot mobile app is your all-in-one control center for your robotic bartender, built with React Native and powered by AWS cloud integration.'
+          },
+          {
+            heading: 'AWS Integration & Secure Authentication',
+            content: 'Sign in securely with AWS Amplify. All your custom drinks, device settings, and event data are stored in the cloud and tied to your authenticated profile.'
+          },
+          {
+            heading: 'Custom Drinks & Recipes',
+            content: 'Create, save, and manage your own drink recipes. Personalize your cocktail experience and access your favorites from any device.'
+          },
+          {
+            heading: 'Device Management',
+            content: 'Monitor and control your LiquorBot hardware remotely. Manage priorities, settings, and communication with your physical device, all from the app.'
+          },
+          {
+            heading: 'Events & Menus',
+            content: 'Create new events, customize drink menus for each event, and tailor the experience for parties, weddings, or gatherings.'
+          },
+          {
+            heading: 'Explore Page',
+            content: 'Discover new recipes, browse pre-populated drinks, and see what’s possible with your available ingredients. All recipes are stored and synced via the cloud.'
+          },
+          {
+            heading: 'Live Monitoring & Pouring',
+            content: 'Track the status of your device, monitor pours in real time, and ensure every drink is perfect.'
+          },
+          {
+            heading: 'Profiles & Customization',
+            content: 'Add user profiles, upload pictures, and personalize your experience. Manage multiple users and preferences.'
+          },
+          {
+            heading: 'Help & Support',
+            content: 'Access the built-in help center for setup, troubleshooting, and tips directly from the app.'
+          }
+        ]
+      };
+    case 'hardware':
+      return {
+        title: 'Hardware',
+        sections: [
+          {
+            heading: 'Solenoid & Pump Control',
+            content: 'LiquorBot uses motor control chips to drive solenoids and diaphragm pumps. PWM is used specifically for the diaphragm pump to control flow rate and dispensing precision. An SPI protocol manages communication with up to 18 solenoids, enabling ingredients to be turned on/off and pumps to be activated as needed.'
+          },
+          {
+            heading: 'Pressure Sensor & Coaster',
+            content: 'A pressure sensor is integrated at the top with a coaster to detect when a glass is placed or pressed down. This enables accurate pour detection and automates drink serving.'
+          },
+          {
+            heading: 'LED Ring Visual Feedback',
+            content: 'An LED ring provides real-time visual feedback, indicating system status, pour progress, and alerts for users. It enhances the interactive experience and makes the process intuitive.'
+          },
+          {
+            heading: 'Custom PCB Design',
+            content: 'The hardware is built around custom PCBs featuring an ESP32 microcontroller. The system is split into three boards: the main PCB (top solenoids, output solenoids, pumps, microcontroller), and two tray PCBs for modular expansion.'
+          },
+          {
+            heading: 'Optimized Wiring & Protocol',
+            content: 'A custom protocol dramatically reduces wire count by allowing trays to communicate over SPI, eliminating the need for separate positive/negative wires for each solenoid. This results in a cleaner, more reliable design.'
+          },
+          {
+            heading: 'Mini Fridge Enclosure & Connectivity',
+            content: 'All hardware is housed inside a mini fridge for compactness and cooling. The ESP32 features an external antenna for WiFi and Bluetooth connectivity. Initial setup is done via Bluetooth, where the app provides WiFi credentials. Once connected, the device communicates with the app over WiFi for remote control and monitoring.'
+          },
+          {
+            heading: 'Custom Woodworking',
+            content: 'All wood tops and drawers are custom made, featuring hand-crafted woodworking for a premium look and feel. This adds a unique, personal touch to the LiquorBot hardware.'
+          }
+        ],
+        description: 'Custom PCBs, pressure sensor, LED ring, and hand-crafted woodwork, all housed in a mini fridge. Precision dispensing, ingredient recognition, and robust mechanical design.'
+      };
+    case 'firmware':
+      return {
+        title: 'Firmware',
+        description: 'ESP32 firmware for solenoid control, IoT Core connectivity, and app integration. Handles communication between hardware and mobile app.'
+      };
+    default:
+      return {
+        title: 'LiquorBot Details',
+        description: '(Details about LiquorBot will go here.)'
+      };
+  }
+};
+
+
+// 3D Rotating PCB Images Component for Hardware Section
+const RotatingPCBImages: React.FC = () => {
+  const containerRef = React.useRef<HTMLDivElement>(null);
+  const targetRotation = React.useRef({ x: 0, y: 0 });
+  const currentRotation = React.useRef({ x: 0, y: 0 });
+  const animationFrame = React.useRef<number | null>(null);
+
+  React.useEffect(() => {
+    const container = containerRef.current;
+    if (!container) return;
+
+    const maxRotation = 20;
+    const lerp = (a: number, b: number, t: number) => a + (b - a) * t;
+
+    const animate = () => {
+      currentRotation.current.x = lerp(currentRotation.current.x, targetRotation.current.x, 0.12);
+      currentRotation.current.y = lerp(currentRotation.current.y, targetRotation.current.y, 0.12);
+      container.style.transform = `perspective(1000px) rotateX(${currentRotation.current.x}deg) rotateY(${currentRotation.current.y}deg)`;
+      animationFrame.current = requestAnimationFrame(animate);
+    };
+
+    const handleMouseMove = (e: MouseEvent) => {
+      const rect = container.getBoundingClientRect();
+      const centerX = rect.left + rect.width / 2;
+      const centerY = rect.top + rect.height / 2;
+      let rotateX = -((e.clientY - centerY) / rect.height) * maxRotation;
+      let rotateY = -((centerX - e.clientX) / rect.width) * maxRotation;
+      rotateX = Math.max(-maxRotation, Math.min(maxRotation, rotateX));
+      rotateY = Math.max(-maxRotation, Math.min(maxRotation, rotateY));
+      targetRotation.current = { x: rotateX, y: rotateY };
+    };
+
+    const handleMouseLeave = () => {
+      targetRotation.current = { x: 0, y: 0 };
+    };
+
+    window.addEventListener('mousemove', handleMouseMove);
+    window.addEventListener('mouseleave', handleMouseLeave);
+    animate();
+
+    return () => {
+      window.removeEventListener('mousemove', handleMouseMove);
+      window.removeEventListener('mouseleave', handleMouseLeave);
+      if (animationFrame.current) cancelAnimationFrame(animationFrame.current);
+    };
+  }, []);
+
+  // All images are layered at the same position, but with different translateZ for depth
+  return (
+    <div
+      ref={containerRef}
+      className="rotating-pcb-images"
+      style={{
+        perspective: '1000px',
+        transition: 'transform 0.1s cubic-bezier(0.22, 1, 0.36, 1)',
+        transformStyle: 'preserve-3d',
+        position: 'relative',
+        width: 340,
+        height: 340,
+        marginLeft: 0,
+      }}
+    >
+      {/* BCU - back layer */}
+      <img
+        src="/bcu.png"
+        alt="BCU PCB"
+        style={{
+          position: 'absolute',
+          top: 0,
+          left: 0,
+          width: 340,
+          height: 340,
+          objectFit: 'contain',
+          transform: 'translateZ(-40px)',
+          zIndex: 1,
+          pointerEvents: 'none',
+        }}
+      />
+      {/* FCU - middle layer */}
+      <img
+        src="/fcu.png"
+        alt="FCU PCB"
+        style={{
+          position: 'absolute',
+          top: 0,
+          left: 0,
+          width: 340,
+          height: 340,
+          objectFit: 'contain',
+          transform: 'translateZ(0px)',
+          zIndex: 2,
+          pointerEvents: 'none',
+        }}
+      />
+      {/* Silkscreen - front layer */}
+      <img
+        src="/silkscreen.png"
+        alt="Silkscreen"
+        style={{
+          position: 'absolute',
+          top: 0,
+          left: 0,
+          width: 340,
+          height: 340,
+          objectFit: 'contain',
+          transform: 'translateZ(40px)',
+          zIndex: 3,
+          pointerEvents: 'none',
+        }}
+      />
+    </div>
+  );
+};
+
 
 
 const LiquorBotDetailModal: React.FC<LiquorBotDetailModalProps> = ({ onClose, detailType }) => {
   const mobileContent = getDetailContent('mobile');
   const [slideIdx, setSlideIdx] = React.useState(0);
-  const { title, sections } = detailType === 'mobile' ? mobileContent : getDetailContent(detailType);
+  const { title, sections, description } = detailType === 'mobile' ? mobileContent : getDetailContent(detailType);
+  const [hardwareSlideIdx, setHardwareSlideIdx] = React.useState(0);
   const maxSlide = detailType === 'mobile' ? sections.length - 1 : 0;
+  const maxHardwareSlide = detailType === 'hardware' && sections ? sections.length - 1 : 0;
 
-  // Prevent background scroll when modal is open
   React.useEffect(() => {
     document.body.style.overflow = 'hidden';
     return () => {
@@ -216,15 +362,26 @@ const LiquorBotDetailModal: React.FC<LiquorBotDetailModalProps> = ({ onClose, de
         >
           ×
         </button>
+        {/* Mobile Section: App Preview 3D Image */}
         {detailType === 'mobile' && (
           <div className="flex-shrink-0" style={{ minWidth: 340, maxWidth: 380, marginRight: 0 }}>
             <div style={{ transform: 'scale(0.85)', transformOrigin: 'left center', width: '100%' }}>
+              {/* ...existing code... */}
               <RotatingImage />
+            </div>
+          </div>
+        )}
+        {/* Hardware Section: PCB 3D Layered Images */}
+        {detailType === 'hardware' && (
+          <div className="flex-shrink-0" style={{ minWidth: 340, maxWidth: 380, marginRight: 0 }}>
+            <div style={{ transform: 'scale(0.85)', transformOrigin: 'left center', width: '100%' }}>
+              <RotatingPCBImages />
             </div>
           </div>
         )}
         <div className="flex flex-col items-start justify-center w-full" style={{ minWidth: 260 }}>
           <h2 className="text-2xl font-bold mb-4 text-foreground">{title}</h2>
+          {/* Mobile Section Details */}
           {detailType === 'mobile' ? (
             <div className="w-full flex flex-col items-start justify-center mb-6" style={{ minHeight: 140 }}>
               <h3 className="text-lg font-semibold mb-2 text-foreground">{sections[slideIdx].heading}</h3>
@@ -280,9 +437,53 @@ const LiquorBotDetailModal: React.FC<LiquorBotDetailModalProps> = ({ onClose, de
                 </a>
               </div>
             </div>
-          ) : (
-            <div className="text-muted-foreground mb-6 w-full">{sections ? sections[0].content : ''}</div>
-          )}
+          ) : null}
+          {/* Hardware Section Details - Slideshow */}
+          {detailType === 'hardware' ? (
+            <div className="w-full flex flex-col items-start justify-center mb-6" style={{ minHeight: 140 }}>
+              <h3 className="text-lg font-semibold mb-2 text-foreground">{sections[hardwareSlideIdx].heading}</h3>
+              <p className="text-muted-foreground mb-4">{sections[hardwareSlideIdx].content}</p>
+              <div className="flex items-center justify-between w-full mt-2">
+                <button
+                  className="px-3 py-1 rounded-full bg-minimal-accent/10 text-minimal-accent hover:bg-minimal-accent/30 transition-colors"
+                  onClick={() => setHardwareSlideIdx(idx => Math.max(0, idx - 1))}
+                  disabled={hardwareSlideIdx === 0}
+                  aria-label="Previous"
+                  style={{ opacity: hardwareSlideIdx === 0 ? 0.5 : 1 }}
+                >
+                  &#8592;
+                </button>
+                <div className="flex gap-2 items-center mt-2">
+                  {sections.map((_, i) => (
+                    <span
+                      key={i}
+                      className={`inline-block rounded-full transition-all duration-200 ${i === hardwareSlideIdx ? 'bg-white' : 'bg-zinc-400'}`}
+                      style={{
+                        width: i === hardwareSlideIdx ? 10 : 6,
+                        height: i === hardwareSlideIdx ? 10 : 6,
+                        opacity: i === hardwareSlideIdx ? 1 : 0.85,
+                        boxShadow: i === hardwareSlideIdx ? '0 0 6px #fff' : 'none',
+                        border: 'none',
+                      }}
+                    />
+                  ))}
+                </div>
+                <button
+                  className="px-3 py-1 rounded-full bg-minimal-accent/10 text-minimal-accent hover:bg-minimal-accent/30 transition-colors"
+                  onClick={() => setHardwareSlideIdx(idx => Math.min(maxHardwareSlide, idx + 1))}
+                  disabled={hardwareSlideIdx === maxHardwareSlide}
+                  aria-label="Next"
+                  style={{ opacity: hardwareSlideIdx === maxHardwareSlide ? 0.5 : 1 }}
+                >
+                  &#8594;
+                </button>
+              </div>
+            </div>
+          ) : null}
+          {/* Firmware Section Details (unchanged) */}
+          {detailType === 'firmware' ? (
+            <div className="text-muted-foreground mb-6 w-full">{description}</div>
+          ) : null}
         </div>
       </div>
     </div>
