@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import React, { Suspense } from 'react';
 import SkillDetailModal from '../components/SkillDetailModal';
 import LiquorBotDetailModal from '../components/LiquorBotDetailModal';
 import skillsData from '../lib/skills';
@@ -17,6 +18,7 @@ const Index = () => {
   const [liquorBotModalOpen, setLiquorBotModalOpen] = useState(false);
   const [liquorBotDetailType, setLiquorBotDetailType] = useState<'mobile' | 'hardware' | 'firmware' | null>(null);
   const [visibleSections, setVisibleSections] = useState<Set<string>>(new Set());
+  const [liquorBotInView, setLiquorBotInView] = useState(false);
   const [sunScale, setSunScale] = useState(1);
   const sunRef = useRef<HTMLImageElement>(null);
 
@@ -56,6 +58,7 @@ const Index = () => {
           if (entry.isIntersecting) {
             const sectionId = entry.target.id;
             setVisibleSections(prev => new Set([...prev, sectionId]));
+            if (sectionId === 'liquorbot') setLiquorBotInView(true);
           }
         });
       },
@@ -173,6 +176,7 @@ const Index = () => {
               alt="Nathan Hambleton headshot"
               className="w-40 h-40 rounded-full border-4 border-white shadow-lg object-cover"
               style={{ background: '#fff' }}
+              loading="lazy"
             />
           </div>
 
@@ -314,6 +318,7 @@ const Index = () => {
                   transformOrigin: 'center',
                   transition: 'transform 0.1s',
                 }}
+                loading="lazy"
               />
             </div>
             <p className="text-xl text-muted-foreground max-w-3xl mx-auto leading-relaxed">
@@ -327,7 +332,7 @@ const Index = () => {
       </section>
 
       {/* LiquorBot Project */}
-      <section id="liquorbot" className={`py-20 px-4 lg:px-8 section-enter ${visibleSections.has('liquorbot') ? 'visible' : ''}`}>
+      <section id="liquorbot" className={`py-20 px-4 lg:px-8 section-enter ${visibleSections.has('liquorbot') ? 'visible' : ''}`}> 
         <div className="max-w-6xl mx-auto">
           <div className="text-center mb-16">
             <h2 className="text-4xl md:text-5xl font-bold mb-6 text-foreground">LiquorBot</h2>
@@ -358,7 +363,7 @@ const Index = () => {
             tags={["Robotics", "Mobile App", "PCB Design", "Microcontroller", "IoT"]}
             featured={true}
             layout="horizontal"
-            media={<LiquorBotModelCanvas className="w-full h-full" />}
+            media={liquorBotInView ? <Suspense fallback={<div className="w-full h-full bg-gray-900 animate-pulse" />}>{<LiquorBotModelCanvas className="w-full h-full" />}</Suspense> : <div className="w-full h-full bg-gray-900 animate-pulse" />}
             className="min-h-[420px] md:min-h-[460px]"
             mediaNoFrame
             mediaContainerClassName="md:min-w-[460px] md:w-[520px] h-[360px] md:h-full"
