@@ -13,7 +13,44 @@ const getDetailContent = (type: 'mobile' | 'hardware' | 'firmware' | null) => {
     case 'mobile':
       return {
         title: 'Mobile App',
-        description: 'React Native app for recipe selection and customization. Control the robot, select recipes, and monitor status from your phone.'
+        sections: [
+          {
+            heading: 'Overview',
+            content: 'The LiquorBot mobile app is your all-in-one control center for your robotic bartender, built with React Native and powered by AWS cloud integration.'
+          },
+          {
+            heading: 'AWS Integration & Secure Authentication',
+            content: 'Sign in securely with AWS Amplify. All your custom drinks, device settings, and event data are stored in the cloud and tied to your authenticated profile.'
+          },
+          {
+            heading: 'Custom Drinks & Recipes',
+            content: 'Create, save, and manage your own drink recipes. Personalize your cocktail experience and access your favorites from any device.'
+          },
+          {
+            heading: 'Device Management',
+            content: 'Monitor and control your LiquorBot hardware remotely. Manage priorities, settings, and communication with your physical device, all from the app.'
+          },
+          {
+            heading: 'Events & Menus',
+            content: 'Create new events, customize drink menus for each event, and tailor the experience for parties, weddings, or gatherings.'
+          },
+          {
+            heading: 'Explore Page',
+            content: 'Discover new recipes, browse pre-populated drinks, and see what’s possible with your available ingredients. All recipes are stored and synced via the cloud.'
+          },
+          {
+            heading: 'Live Monitoring & Pouring',
+            content: 'Track the status of your device, monitor pours in real time, and ensure every drink is perfect.'
+          },
+          {
+            heading: 'Profiles & Customization',
+            content: 'Add user profiles, upload pictures, and personalize your experience. Manage multiple users and preferences.'
+          },
+          {
+            heading: 'Help & Support',
+            content: 'Access the built-in help center for setup, troubleshooting, and tips directly from the app.'
+          }
+        ]
       };
     case 'hardware':
       return {
@@ -114,19 +151,19 @@ const RotatingImage: React.FC = () => {
       </div>
       <div
         className="floating-image"
-        style={{ bottom: '12%', left: '-5%', transform: 'translateZ(40px) scale(1)', zIndex: 2, position: 'absolute' }}
+        style={{ bottom: '12%', left: '-6%', transform: 'translateZ(40px) scale(1)', zIndex: 2, position: 'absolute' }}
       >
         <img src="/events_overlay.png" alt="Events Overlay" style={{ width: 250, height: 250 }} />
       </div>
       <div
         className="floating-image"
-        style={{ bottom: '15.5%', right: '-4%', transform: 'translateZ(40px) scale(1)', zIndex: 2, position: 'absolute' }}
+        style={{ bottom: '15.5%', right: '-5%', transform: 'translateZ(40px) scale(1)', zIndex: 2, position: 'absolute' }}
       >
         <img src="/drinkmenu_overlay.png" alt="Drink Menu Overlay" style={{ width: 250, height: 250 }} />
       </div>
       <div
         className="floating-image"
-        style={{ bottom: '5.5%', right: '-5%', transform: 'translateZ(40px) scale(1)', zIndex: 2, position: 'absolute' }}
+        style={{ bottom: '5.5%', right: '-6%', transform: 'translateZ(40px) scale(1)', zIndex: 2, position: 'absolute' }}
       >
         <img src="/newevent_overlay.png" alt="New Event Overlay" style={{ width: 250, height: 250 }} />
       </div>
@@ -153,12 +190,32 @@ const RotatingImage: React.FC = () => {
   );
 };
 
+
 const LiquorBotDetailModal: React.FC<LiquorBotDetailModalProps> = ({ onClose, detailType }) => {
-  const { title, description } = getDetailContent(detailType);
+  const mobileContent = getDetailContent('mobile');
+  const [slideIdx, setSlideIdx] = React.useState(0);
+  const { title, sections } = detailType === 'mobile' ? mobileContent : getDetailContent(detailType);
+  const maxSlide = detailType === 'mobile' ? sections.length - 1 : 0;
+
+  // Prevent background scroll when modal is open
+  React.useEffect(() => {
+    document.body.style.overflow = 'hidden';
+    return () => {
+      document.body.style.overflow = '';
+    };
+  }, []);
+
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center">
-      <div className="absolute inset-0 bg-black/40 backdrop-blur-sm" onClick={onClose} />
-      <div className="relative bg-card rounded-xl shadow-2xl p-8 max-w-4xl w-full z-10 flex flex-row items-center justify-center gap-8" style={{ minHeight: 420 }}>
+      <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={onClose} />
+      <div className="relative bg-card p-8 rounded-lg shadow-lg max-w-4xl w-full z-10 border border-minimal-border flex flex-row items-center justify-center gap-8" style={{ minHeight: 420 }}>
+        <button
+          className="absolute top-4 right-4 text-2xl text-muted-foreground hover:text-foreground focus:outline-none"
+          onClick={onClose}
+          aria-label="Close"
+        >
+          ×
+        </button>
         {detailType === 'mobile' && (
           <div className="flex-shrink-0" style={{ minWidth: 340, maxWidth: 380, marginRight: 0 }}>
             <div style={{ transform: 'scale(0.85)', transformOrigin: 'left center', width: '100%' }}>
@@ -168,13 +225,49 @@ const LiquorBotDetailModal: React.FC<LiquorBotDetailModalProps> = ({ onClose, de
         )}
         <div className="flex flex-col items-start justify-center w-full" style={{ minWidth: 260 }}>
           <h2 className="text-2xl font-bold mb-4 text-foreground">{title}</h2>
-          <p className="text-muted-foreground mb-6">{description}</p>
-          <button
-            className="mt-4 px-4 py-2 bg-minimal-accent text-white rounded-lg hover:bg-minimal-accent/80 transition-colors"
-            onClick={onClose}
-          >
-            Close
-          </button>
+          {detailType === 'mobile' ? (
+            <div className="w-full flex flex-col items-start justify-center mb-6" style={{ minHeight: 140 }}>
+              <h3 className="text-lg font-semibold mb-2 text-foreground">{sections[slideIdx].heading}</h3>
+              <p className="text-muted-foreground mb-4">{sections[slideIdx].content}</p>
+              <div className="flex items-center justify-between w-full mt-2">
+                <button
+                  className="px-3 py-1 rounded-full bg-minimal-accent/10 text-minimal-accent hover:bg-minimal-accent/30 transition-colors"
+                  onClick={() => setSlideIdx(idx => Math.max(0, idx - 1))}
+                  disabled={slideIdx === 0}
+                  aria-label="Previous"
+                  style={{ opacity: slideIdx === 0 ? 0.5 : 1 }}
+                >
+                  &#8592;
+                </button>
+                <div className="flex gap-2 items-center mt-2">
+                  {sections.map((_, i) => (
+                    <span
+                      key={i}
+                      className={`inline-block rounded-full transition-all duration-200 ${i === slideIdx ? 'bg-white' : 'bg-zinc-400'}`}
+                      style={{
+                        width: i === slideIdx ? 10 : 6,
+                        height: i === slideIdx ? 10 : 6,
+                        opacity: i === slideIdx ? 1 : 0.85,
+                        boxShadow: i === slideIdx ? '0 0 6px #fff' : 'none',
+                        border: 'none',
+                      }}
+                    />
+                  ))}
+                </div>
+                <button
+                  className="px-3 py-1 rounded-full bg-minimal-accent/10 text-minimal-accent hover:bg-minimal-accent/30 transition-colors"
+                  onClick={() => setSlideIdx(idx => Math.min(maxSlide, idx + 1))}
+                  disabled={slideIdx === maxSlide}
+                  aria-label="Next"
+                  style={{ opacity: slideIdx === maxSlide ? 0.5 : 1 }}
+                >
+                  &#8594;
+                </button>
+              </div>
+            </div>
+          ) : (
+            <div className="text-muted-foreground mb-6 w-full">{sections ? sections[0].content : ''}</div>
+          )}
         </div>
       </div>
     </div>
