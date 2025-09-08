@@ -158,20 +158,24 @@ const LiquorBotDetailModal: React.FC<LiquorBotDetailModalProps> = ({ onClose, de
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center">
       <div className="absolute inset-0 bg-black/40 backdrop-blur-sm" onClick={onClose} />
-      <div className="relative bg-card rounded-xl shadow-2xl p-8 max-w-lg w-full z-10 flex flex-col items-center">
-        <h2 className="text-2xl font-bold mb-4 text-foreground">{title}</h2>
-        <p className="text-muted-foreground mb-6">{description}</p>
+      <div className="relative bg-card rounded-xl shadow-2xl p-8 max-w-4xl w-full z-10 flex flex-row items-center justify-center gap-8" style={{ minHeight: 420 }}>
         {detailType === 'mobile' && (
-          <div className="w-full mb-6">
-            <RotatingImage />
+          <div className="flex-shrink-0" style={{ minWidth: 340, maxWidth: 380, marginRight: 0 }}>
+            <div style={{ transform: 'scale(0.85)', transformOrigin: 'left center', width: '100%' }}>
+              <RotatingImage />
+            </div>
           </div>
         )}
-        <button
-          className="mt-4 px-4 py-2 bg-minimal-accent text-white rounded-lg hover:bg-minimal-accent/80 transition-colors"
-          onClick={onClose}
-        >
-          Close
-        </button>
+        <div className="flex flex-col items-start justify-center w-full" style={{ minWidth: 260 }}>
+          <h2 className="text-2xl font-bold mb-4 text-foreground">{title}</h2>
+          <p className="text-muted-foreground mb-6">{description}</p>
+          <button
+            className="mt-4 px-4 py-2 bg-minimal-accent text-white rounded-lg hover:bg-minimal-accent/80 transition-colors"
+            onClick={onClose}
+          >
+            Close
+          </button>
+        </div>
       </div>
     </div>
   );
