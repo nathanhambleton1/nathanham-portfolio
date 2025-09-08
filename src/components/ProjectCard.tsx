@@ -1,9 +1,9 @@
-import { useState } from 'react';
+import { useState, type ReactNode } from 'react';
 import { ExternalLink, Github, Zap } from 'lucide-react';
 
 interface ProjectCardProps {
   title: string;
-  description: string;
+  description: ReactNode;
   tags: string[];
   imageUrl?: string;
   githubUrl?: string;
@@ -60,7 +60,7 @@ const ProjectCard = ({
             <h3 className="text-xl font-semibold text-foreground group-hover:text-minimal-accent transition-colors">
               {title}
             </h3>
-            <p className="text-foreground/80 text-sm leading-relaxed">{description}</p>
+            <div className="text-foreground/80 text-sm leading-relaxed">{description}</div>
             <div className="flex flex-wrap gap-2">
               {tags.map((tag, index) => (
                 <span key={index} className="px-2 py-1 bg-minimal-accent/10 text-minimal-accent text-xs font-mono rounded border border-minimal-accent/20">
@@ -150,7 +150,7 @@ const ProjectCard = ({
           </div>
           <div className="space-y-4">
             <h3 className="text-xl font-semibold text-foreground group-hover:text-minimal-accent transition-colors">{title}</h3>
-            <p className="text-foreground/80 text-sm leading-relaxed">{description}</p>
+            <div className="text-foreground/80 text-sm leading-relaxed">{description}</div>
             <div className="flex flex-wrap gap-2">
               {tags.map((tag, index) => (
                 <span key={index} className="px-2 py-1 bg-minimal-accent/10 text-minimal-accent text-xs font-mono rounded border border-minimal-accent/20">

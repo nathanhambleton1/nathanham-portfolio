@@ -41,7 +41,8 @@ const LiquorBot: React.FC<LiquorBotProps> = ({
   }, [cloned]);
 
   const { size } = useThree();
-  const base = 5.2;
+  // Increased base scale to make the model fill more of its container
+  const base = 6.8;
   const responsiveFactor = Math.min(size.width / 800, 1.1);
   const scale = base * responsiveFactor;
 

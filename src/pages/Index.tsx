@@ -336,8 +336,25 @@ const Index = () => {
           </div>
           <ProjectCard
             title="LiquorBot - Automated Bartending System"
-            description="A fully automated bartending robot capable of mixing precise cocktails through smartphone app control. Features custom PCB design, stepper motor control systems, and computer vision for ingredient recognition. Built with React Native app, Python backend, and Arduino-based hardware control."
-            tags={["Robotics", "Mobile App", "PCB Design", "Computer Vision", "IoT"]}
+            description={
+              <div className="space-y-3">
+                <p>
+                  A fully automated bartending robot capable of mixing precise cocktails through smartphone app control.
+                </p>
+                <ul className="list-disc pl-5 space-y-1 text-sm">
+                  <li>
+                    <strong>Mobile App (React Native):</strong> recipe library and customization, strength/size sliders, queueing, BLE/Wi‑Fi control, live progress + ETA, cleaning/flush routines.
+                  </li>
+                  <li>
+                    <strong>Hardware & Electronics:</strong> custom PCBs, diaphragm pumps with check valves, per‑line calibration, food‑safe tubing and reservoirs, LED status indicators, modular bottle manifold.
+                  </li>
+                  <li>
+                    <strong>Firmware (ESP32, Arduino framework):</strong> precise pump/solenoid orchestration, per‑ingredient flow profiles, calibration storage, OTA updates, IoT Core/MQTT connectivity, app integration.
+                  </li>
+                </ul>
+              </div>
+            }
+            tags={["Robotics", "Mobile App", "PCB Design", "Microcontroller", "IoT"]}
             featured={true}
             layout="horizontal"
             media={<LiquorBotModelCanvas className="w-full h-full" />}
@@ -364,7 +381,7 @@ const Index = () => {
             >
               <div className="text-4xl mb-4">🔧</div>
               <h3 className="text-lg font-semibold mb-2">Hardware</h3>
-              <p className="text-sm text-muted-foreground">Custom PCBs with stepper motor control systems</p>
+              <p className="text-sm text-muted-foreground">Custom PCBs with diaphragm pump control systems</p>
             </div>
             <div
               className="project-card text-center cursor-pointer hover:bg-minimal-accent/10 transition-colors"
