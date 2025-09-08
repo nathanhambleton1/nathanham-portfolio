@@ -61,7 +61,8 @@ const LiquorBot: React.FC<LiquorBotProps> = ({
     const base = baseRot.current;
 
     const targetYaw = base.y + mouse.current.x * yawAmplitude;
-    const targetPitch = base.x - mouse.current.y * pitchAmplitude;
+  // Inverted vertical response: moving mouse down (y positive) now tilts model forward
+  const targetPitch = base.x + mouse.current.y * pitchAmplitude;
     const targetRoll = base.z; // keep roll fixed (or add mouse.current.x * someFactor)
 
     group.current.rotation.y = THREE.MathUtils.lerp(group.current.rotation.y, targetYaw, lerpFactor);
