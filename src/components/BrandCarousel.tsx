@@ -1,28 +1,33 @@
-import { useEffect, useState } from 'react';
 
-interface Brand {
-  name: string;
-  logo: string; // Will be emoji/text for now, can be replaced with actual logos later
-}
+import { useState } from 'react';
 
 const BrandCarousel = () => {
   const [isPaused, setIsPaused] = useState(false);
 
-  // Placeholder brands - these will be replaced with actual company logos
-  const brands: Brand[] = [
-    { name: 'Tesla', logo: '⚡' },
-    { name: 'SpaceX', logo: '🚀' },
-    { name: 'Apple', logo: '🍎' },
-    { name: 'Google', logo: '🔍' },
-    { name: 'Microsoft', logo: '📊' },
-    { name: 'Meta', logo: '👁️' },
-    { name: 'Netflix', logo: '📺' },
-    { name: 'Amazon', logo: '📦' },
-    { name: 'Intel', logo: '💾' },
-    { name: 'NVIDIA', logo: '🎮' },
-    { name: 'Samsung', logo: '📱' },
-    { name: 'Sony', logo: '🎵' },
+
+  // List of logo files in public/brands
+  const logoFiles = [
+    '64badf4f419c2759ae088b55_Filmora_edited.jpg',
+    'apex.webp',
+    'Asus-Logo_00000.png',
+    'audible logo_00000.png',
+    'best-buy-01-logo-black-and-white.png',
+    'directv_hz_rgb_wht.png',
+    'feature-black_edited.jpg',
+    'google-white-logo-1.png',
+    'Kia logo_00000.png',
+    'logo-org-ncdot-white.png',
+    'Niantic_logo_white_on_black.png',
+    'Prime_Video_Logo.png',
+    'soundcore_ffe05b87-8952-4492-8049-315712b26180.webp',
+    'star field.png',
   ];
+
+  // Create brand objects with name and logo path
+  const brands = logoFiles.map((file, idx) => ({
+    name: `Brand ${idx + 1}`,
+    logo: `/brands/${file}`,
+  }));
 
   // Duplicate the brands array to create seamless infinite scroll
   const duplicatedBrands = [...brands, ...brands];
@@ -51,16 +56,14 @@ const BrandCarousel = () => {
           {duplicatedBrands.map((brand, index) => (
             <div
               key={`${brand.name}-${index}`}
-              className="flex-shrink-0 w-20 h-20 flex items-center justify-center bg-muted/50 backdrop-blur-sm rounded-lg border border-minimal-border/50 hover:border-minimal-accent/50 transition-all duration-300 group cursor-pointer"
+              className="flex-shrink-0 flex items-center justify-center"
             >
-              <div className="text-center">
-                <div className="text-2xl mb-1 group-hover:scale-110 transition-transform duration-300">
-                  {brand.logo}
-                </div>
-                <div className="text-xs text-muted-foreground group-hover:text-minimal-accent transition-colors font-mono">
-                  {brand.name}
-                </div>
-              </div>
+              <img
+                src={brand.logo}
+                alt={brand.name}
+                className="w-32 h-32 object-contain group-hover:scale-110 transition-transform duration-300"
+                loading="lazy"
+              />
             </div>
           ))}
         </div>
@@ -69,13 +72,18 @@ const BrandCarousel = () => {
       {/* Stats */}
       <div className="mt-6 flex justify-center items-center gap-8 text-center">
         <div>
-          <div className="text-2xl font-bold text-foreground">800K+</div>
-          <div className="text-sm text-muted-foreground">TikTok Followers</div>
+          <div className="text-2xl font-bold text-foreground">150,000,000+</div>
+          <div className="text-sm text-muted-foreground">Views</div>
         </div>
         <div className="w-px h-8 bg-minimal-border" />
         <div>
-          <div className="text-2xl font-bold text-foreground">{brands.length}+</div>
-          <div className="text-sm text-muted-foreground">Brand Partners</div>
+          <div className="text-2xl font-bold text-foreground">20,000,000+</div>
+          <div className="text-sm text-muted-foreground">Likes</div>
+        </div>
+        <div className="w-px h-8 bg-minimal-border" />
+        <div>
+          <div className="text-2xl font-bold text-foreground">800,000+</div>
+          <div className="text-sm text-muted-foreground">Followers</div>
         </div>
       </div>
     </div>
