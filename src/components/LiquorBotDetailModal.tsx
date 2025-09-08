@@ -118,6 +118,7 @@ const RotatingImage: React.FC = () => {
   );
 };
 import React from 'react';
+import { createPortal } from 'react-dom';
 import { FaTiktok, FaInstagram, FaYoutube } from 'react-icons/fa6';
 
 
@@ -483,10 +484,13 @@ const LiquorBotDetailModal: React.FC<LiquorBotDetailModalProps> = ({ onClose, de
     };
   }, []);
 
-  return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center">
+  // Ensure we only attempt portal client-side
+  if (typeof document === 'undefined') return null;
+
+  return createPortal(
+    <div className="fixed inset-0 z-50 flex items-center justify-center px-4" role="dialog" aria-modal="true">
       <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={onClose} />
-      <div className="relative bg-card p-8 rounded-lg shadow-lg max-w-4xl w-full z-10 border border-minimal-border flex flex-row items-center justify-center gap-8" style={{ minHeight: 420 }}>
+      <div className="relative bg-card p-8 rounded-lg shadow-lg max-w-4xl w-full z-10 border border-minimal-border flex flex-row items-center justify-center gap-8 overflow-hidden" style={{ minHeight: 420, maxHeight: '90vh' }}>
         <button
           className="absolute top-4 right-4 text-2xl text-muted-foreground hover:text-foreground focus:outline-none"
           onClick={onClose}
@@ -663,7 +667,8 @@ const LiquorBotDetailModal: React.FC<LiquorBotDetailModalProps> = ({ onClose, de
           ) : null}
         </div>
       </div>
-    </div>
+    </div>,
+    document.body
   );
 };
 
