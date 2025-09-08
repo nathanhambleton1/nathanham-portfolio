@@ -209,7 +209,53 @@ const getDetailContent = (type: 'mobile' | 'hardware' | 'firmware' | null) => {
     case 'firmware':
       return {
         title: 'Firmware',
-        description: 'ESP32 firmware for solenoid control, IoT Core connectivity, and app integration. Handles communication between hardware and mobile app.'
+        sections: [
+          {
+            heading: 'Overview',
+            content:
+              'LiquorBot firmware is written in C for the ESP32 microcontroller, enabling real-time control and seamless integration with hardware and cloud services. The system is designed for reliability, modularity, and advanced automation.'
+          },
+          {
+            heading: 'Non-Blocking RTOS Architecture',
+            content:
+              'Built on FreeRTOS, the firmware uses non-blocking tasks to allow multiple functions to run concurrently. This architecture ensures smooth operation, responsive controls, and efficient resource management.'
+          },
+          {
+            heading: 'AWS IoT Manager & MQTT Communication',
+            content:
+              'The AWS manager connects directly to AWS IoT Core using MQTT messages. All drink orders, device status, and event data are securely transmitted between the app and device, enabling real-time cloud integration.'
+          },
+          {
+            heading: 'Bluetooth Setup & WiFi Provisioning',
+            content:
+              'Initial setup is performed over Bluetooth, allowing the app to send WiFi credentials to the device. Once connected, the ESP32 switches to WiFi for ongoing communication and remote control.'
+          },
+          {
+            heading: 'State Manager & Device Modes',
+            content:
+              'A robust state manager tracks device status, user actions, and operational modes. Maintenance mode, cleaning cycles, and pour restrictions are enforced to ensure safe and reliable operation.'
+          },
+          {
+            heading: 'LED Control & Visual Feedback',
+            content:
+              'Firmware controls the LED ring to provide real-time feedback based on device state. Colors and animations indicate pouring, cleaning, errors, and connectivity, enhancing user experience.'
+          },
+          {
+            heading: 'Advanced Cleaning Modes',
+            content:
+              'Multiple cleaning routines are available: deep clean, quick clean, and custom clean. Each solenoid and pump can be individually activated for thorough maintenance, ensuring hygiene and longevity.'
+          },
+          {
+            heading: 'Pressure Pad Logic',
+            content:
+              'The pressure pad detects when a glass is placed, triggering pour routines and preventing spills. Firmware logic ensures drinks are only poured when a glass is present and the device is in the correct state.'
+          },
+          {
+            heading: 'Modular & Extensible Codebase',
+            content:
+              'The firmware is modular, allowing for easy updates and expansion. Each hardware component (solenoids, pumps, sensors) is managed by dedicated modules, making the system flexible and maintainable.'
+          },
+        ]
       };
     default:
       return {
@@ -220,7 +266,91 @@ const getDetailContent = (type: 'mobile' | 'hardware' | 'firmware' | null) => {
 };
 
 
-// 3D Rotating PCB Images Component for Hardware Section
+// 3D Rotating Firmware Image Component for Firmware Section
+const RotatingFirmwareImage: React.FC = () => {
+  const containerRef = React.useRef<HTMLDivElement>(null);
+  const targetRotation = React.useRef({ x: 0, y: 0 });
+  const currentRotation = React.useRef({ x: 0, y: 0 });
+  const animationFrame = React.useRef<number | null>(null);
+
+  React.useEffect(() => {
+    const container = containerRef.current;
+    if (!container) return;
+
+    const maxRotation = 20;
+    const lerp = (a: number, b: number, t: number) => a + (b - a) * t;
+
+    const animate = () => {
+      currentRotation.current.x = lerp(currentRotation.current.x, targetRotation.current.x, 0.12);
+      currentRotation.current.y = lerp(currentRotation.current.y, targetRotation.current.y, 0.12);
+      container.style.transform = `perspective(1000px) rotateX(${currentRotation.current.x}deg) rotateY(${currentRotation.current.y}deg)`;
+      animationFrame.current = requestAnimationFrame(animate);
+    };
+
+    const handleMouseMove = (e: MouseEvent) => {
+      const rect = container.getBoundingClientRect();
+      const centerX = rect.left + rect.width / 2;
+      const centerY = rect.top + rect.height / 2;
+      let rotateX = -((e.clientY - centerY) / rect.height) * maxRotation;
+      let rotateY = -((centerX - e.clientX) / rect.width) * maxRotation;
+      rotateX = Math.max(-maxRotation, Math.min(maxRotation, rotateX));
+      rotateY = Math.max(-maxRotation, Math.min(maxRotation, rotateY));
+      targetRotation.current = { x: rotateX, y: rotateY };
+    };
+
+    const handleMouseLeave = () => {
+      targetRotation.current = { x: 0, y: 0 };
+    };
+
+    window.addEventListener('mousemove', handleMouseMove);
+    window.addEventListener('mouseleave', handleMouseLeave);
+    animate();
+
+    return () => {
+      window.removeEventListener('mousemove', handleMouseMove);
+      window.removeEventListener('mouseleave', handleMouseLeave);
+      if (animationFrame.current) cancelAnimationFrame(animationFrame.current);
+    };
+  }, []);
+
+  return (
+    <div
+      ref={containerRef}
+      className="rotating-firmware-image"
+      style={{
+        perspective: '1000px',
+        transition: 'transform 0.1s cubic-bezier(0.22, 1, 0.36, 1)',
+        transformStyle: 'preserve-3d',
+        position: 'relative',
+        width: 420,
+        height: 420,
+        marginLeft: 0,
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        background: 'none',
+        boxShadow: 'none',
+        borderRadius: 0,
+      }}
+    >
+      {/* Firmware code structure image - full size, transparent background */}
+      <img
+        src="/code_structure.png"
+        alt="Firmware Code Structure"
+        style={{
+          width: '100%',
+          height: '100%',
+          objectFit: 'contain',
+          background: 'none',
+          boxShadow: 'none',
+          borderRadius: 0,
+          filter: 'none',
+          display: 'block',
+        }}
+      />
+    </div>
+  );
+};
 const RotatingPCBImages: React.FC = () => {
   const containerRef = React.useRef<HTMLDivElement>(null);
   const targetRotation = React.useRef({ x: 0, y: 0 });
@@ -341,8 +471,10 @@ const LiquorBotDetailModal: React.FC<LiquorBotDetailModalProps> = ({ onClose, de
   const [slideIdx, setSlideIdx] = React.useState(0);
   const { title, sections, description } = detailType === 'mobile' ? mobileContent : getDetailContent(detailType);
   const [hardwareSlideIdx, setHardwareSlideIdx] = React.useState(0);
+  const [firmwareSlideIdx, setFirmwareSlideIdx] = React.useState(0);
   const maxSlide = detailType === 'mobile' ? sections.length - 1 : 0;
   const maxHardwareSlide = detailType === 'hardware' && sections ? sections.length - 1 : 0;
+  const maxFirmwareSlide = detailType === 'firmware' && sections ? sections.length - 1 : 0;
 
   React.useEffect(() => {
     document.body.style.overflow = 'hidden';
@@ -366,7 +498,6 @@ const LiquorBotDetailModal: React.FC<LiquorBotDetailModalProps> = ({ onClose, de
         {detailType === 'mobile' && (
           <div className="flex-shrink-0" style={{ minWidth: 340, maxWidth: 380, marginRight: 0 }}>
             <div style={{ transform: 'scale(0.85)', transformOrigin: 'left center', width: '100%' }}>
-              {/* ...existing code... */}
               <RotatingImage />
             </div>
           </div>
@@ -376,6 +507,14 @@ const LiquorBotDetailModal: React.FC<LiquorBotDetailModalProps> = ({ onClose, de
           <div className="flex-shrink-0" style={{ minWidth: 340, maxWidth: 380, marginRight: 0 }}>
             <div style={{ transform: 'scale(0.85)', transformOrigin: 'left center', width: '100%' }}>
               <RotatingPCBImages />
+            </div>
+          </div>
+        )}
+        {/* Firmware Section: Rotating 3D Image */}
+        {detailType === 'firmware' && (
+          <div className="flex-shrink-0" style={{ minWidth: 340, maxWidth: 380, marginRight: 0 }}>
+            <div style={{ transform: 'scale(0.85)', transformOrigin: 'left center', width: '100%' }}>
+              <RotatingFirmwareImage />
             </div>
           </div>
         )}
@@ -480,9 +619,47 @@ const LiquorBotDetailModal: React.FC<LiquorBotDetailModalProps> = ({ onClose, de
               </div>
             </div>
           ) : null}
-          {/* Firmware Section Details (unchanged) */}
-          {detailType === 'firmware' ? (
-            <div className="text-muted-foreground mb-6 w-full">{description}</div>
+          {/* Firmware Section Details - Slideshow */}
+          {detailType === 'firmware' && sections ? (
+            <div className="w-full flex flex-col items-start justify-center mb-6" style={{ minHeight: 140 }}>
+              <h3 className="text-lg font-semibold mb-2 text-foreground">{sections[firmwareSlideIdx].heading}</h3>
+              <p className="text-muted-foreground mb-4">{sections[firmwareSlideIdx].content}</p>
+              <div className="flex items-center justify-between w-full mt-2">
+                <button
+                  className="px-3 py-1 rounded-full bg-minimal-accent/10 text-minimal-accent hover:bg-minimal-accent/30 transition-colors"
+                  onClick={() => setFirmwareSlideIdx(idx => Math.max(0, idx - 1))}
+                  disabled={firmwareSlideIdx === 0}
+                  aria-label="Previous"
+                  style={{ opacity: firmwareSlideIdx === 0 ? 0.5 : 1 }}
+                >
+                  &#8592;
+                </button>
+                <div className="flex gap-2 items-center mt-2">
+                  {sections.map((_, i) => (
+                    <span
+                      key={i}
+                      className={`inline-block rounded-full transition-all duration-200 ${i === firmwareSlideIdx ? 'bg-white' : 'bg-zinc-400'}`}
+                      style={{
+                        width: i === firmwareSlideIdx ? 10 : 6,
+                        height: i === firmwareSlideIdx ? 10 : 6,
+                        opacity: i === firmwareSlideIdx ? 1 : 0.85,
+                        boxShadow: i === firmwareSlideIdx ? '0 0 6px #fff' : 'none',
+                        border: 'none',
+                      }}
+                    />
+                  ))}
+                </div>
+                <button
+                  className="px-3 py-1 rounded-full bg-minimal-accent/10 text-minimal-accent hover:bg-minimal-accent/30 transition-colors"
+                  onClick={() => setFirmwareSlideIdx(idx => Math.min(maxFirmwareSlide, idx + 1))}
+                  disabled={firmwareSlideIdx === maxFirmwareSlide}
+                  aria-label="Next"
+                  style={{ opacity: firmwareSlideIdx === maxFirmwareSlide ? 0.5 : 1 }}
+                >
+                  &#8594;
+                </button>
+              </div>
+            </div>
           ) : null}
         </div>
       </div>
