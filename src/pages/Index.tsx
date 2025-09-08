@@ -9,6 +9,7 @@ import Timeline from '../components/Timeline';
 import { useRef } from 'react';
 import ProjectCard from '../components/ProjectCard';
 import BrandCarousel from '../components/BrandCarousel';
+import LiquorBotModelCanvas from '../components/LiquorBotModel';
 
 const Index = () => {
   // LiquorBot Detail Modal State
@@ -338,6 +339,11 @@ const Index = () => {
             description="A fully automated bartending robot capable of mixing precise cocktails through smartphone app control. Features custom PCB design, stepper motor control systems, and computer vision for ingredient recognition. Built with React Native app, Python backend, and Arduino-based hardware control."
             tags={["Robotics", "Mobile App", "PCB Design", "Computer Vision", "IoT"]}
             featured={true}
+            layout="horizontal"
+            media={<LiquorBotModelCanvas className="w-full h-full" />}
+            className="min-h-[420px] md:min-h-[460px]"
+            mediaNoFrame
+            mediaContainerClassName="md:min-w-[460px] md:w-[520px] h-[360px] md:h-full"
           />
           <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mt-12">
             <div
