@@ -189,12 +189,9 @@
 
   /* Carousel Animation */
   .brand-carousel {
-    animation: scroll-brands 30s linear infinite;
+    animation: scroll-brands 15s linear infinite;
   }
 
-  .brand-carousel:hover {
-    animation-play-state: paused;
-  }
 }
 
 @layer utilities {

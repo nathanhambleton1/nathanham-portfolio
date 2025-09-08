@@ -2,7 +2,7 @@
 import { useState } from 'react';
 
 const BrandCarousel = () => {
-  const [isPaused, setIsPaused] = useState(false);
+
 
 
   // List of logo files in public/brands
@@ -39,19 +39,20 @@ const BrandCarousel = () => {
         <p className="text-muted-foreground">Companies I've worked with across various projects</p>
       </div>
 
-      <div 
-        className="relative"
-        onMouseEnter={() => setIsPaused(true)}
-        onMouseLeave={() => setIsPaused(false)}
-      >
-        {/* Gradient overlays for smooth edges */}
-        <div className="absolute left-0 top-0 bottom-0 w-20 bg-gradient-to-r from-card/100 via-card/80 to-transparent z-10 pointer-events-none" />
-        <div className="absolute right-0 top-0 bottom-0 w-20 bg-gradient-to-l from-card/100 via-card/80 to-transparent z-10 pointer-events-none" />
+  <div className="relative">
+
+  {/* Edge fade effect using CSS mask */}
 
         {/* Scrolling container */}
-        <div 
-          className={`flex gap-8 ${isPaused ? '' : 'brand-carousel'}`}
-          style={{ width: `${duplicatedBrands.length * 120}px` }}
+        <div
+          className="flex gap-8 brand-carousel"
+          style={{
+            width: `${duplicatedBrands.length * 128}px`,
+            WebkitMaskImage:
+              'linear-gradient(to right, transparent 0%, black 10%, black 90%, transparent 100%)',
+            maskImage:
+              'linear-gradient(to right, transparent 0%, black 10%, black 90%, transparent 100%)',
+          }}
         >
           {duplicatedBrands.map((brand, index) => (
             <div
@@ -63,6 +64,7 @@ const BrandCarousel = () => {
                 alt={brand.name}
                 className="w-32 h-32 object-contain group-hover:scale-110 transition-transform duration-300"
                 loading="lazy"
+                style={{ filter: 'brightness(1)' }}
               />
             </div>
           ))}
