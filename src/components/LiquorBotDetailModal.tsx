@@ -264,6 +264,21 @@ const LiquorBotDetailModal: React.FC<LiquorBotDetailModalProps> = ({ onClose, de
                   &#8594;
                 </button>
               </div>
+              {/* App Store button below all info and scroll buttons, left aligned */}
+              <div className="w-full flex justify-start" style={{ paddingTop: 52 }}>
+                <a
+                  href="https://apps.apple.com/us/app/liquorbot/id6746461095"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  style={{ display: 'flex', alignItems: 'center', width: 'auto' }}
+                >
+                  <img
+                    src="/appstore.png"
+                    alt="Download on the App Store"
+                    style={{ width: 200, height: 'auto', objectFit: 'contain', borderRadius: 0, boxShadow: 'none', display: 'block' }}
+                  />
+                </a>
+              </div>
             </div>
           ) : (
             <div className="text-muted-foreground mb-6 w-full">{sections ? sections[0].content : ''}</div>
