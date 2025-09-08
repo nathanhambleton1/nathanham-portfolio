@@ -10,6 +10,7 @@ import { useRef } from 'react';
 import ProjectCard from '../components/ProjectCard';
 import BrandCarousel from '../components/BrandCarousel';
 import LiquorBotModelCanvas from '../components/LiquorBotModel';
+import { IoPhonePortraitOutline, IoConstructOutline, IoCodeSlashOutline } from 'react-icons/io5';
 
 const Index = () => {
   // LiquorBot Detail Modal State
@@ -369,7 +370,7 @@ const Index = () => {
               role="button"
               tabIndex={0}
             >
-              <div className="text-4xl mb-4">📱</div>
+              <IoPhonePortraitOutline className="text-4xl mb-4 text-foreground/90 block mx-auto" />
               <h3 className="text-lg font-semibold mb-2">Mobile App</h3>
               <p className="text-sm text-muted-foreground">React Native app for recipe selection and customization</p>
             </div>
@@ -379,7 +380,7 @@ const Index = () => {
               role="button"
               tabIndex={0}
             >
-              <div className="text-4xl mb-4">🔧</div>
+              <IoConstructOutline className="text-4xl mb-4 text-foreground/90 block mx-auto" />
               <h3 className="text-lg font-semibold mb-2">Hardware</h3>
               <p className="text-sm text-muted-foreground">Custom PCBs with diaphragm pump control systems</p>
             </div>
@@ -389,7 +390,7 @@ const Index = () => {
               role="button"
               tabIndex={0}
             >
-              <div className="text-4xl mb-4">🧠</div>
+              <IoCodeSlashOutline className="text-4xl mb-4 text-foreground/90 block mx-auto" />
               <h3 className="text-lg font-semibold mb-2">Firmware</h3>
               <p className="text-sm text-muted-foreground">ESP32 firmware for solenoid control, IoT Core connectivity, and app integration</p>
             </div>
