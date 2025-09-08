@@ -231,12 +231,11 @@ const Index = () => {
                 {[
                   'Embedded Systems Programming',
                   'Analog & Digital Circuit Design',
-                  'Amplifier Theory',
-                  'Motor Drivers',
+                  'Amplifier Design',
+                  'Power Electronics',
                   'Signal Processing',
-                  'Mechatronics',
-                  'SolarPack: High Voltage Team Lead, Vehicle Dynamics Engineer',
-                  'Intramural Soccer (Semifinalist)'
+                  'Robotics & Control Systems',
+                  'PCB Design & Fabrication',
                 ].map((course, index) => (
                   <div key={index} className="flex items-center gap-3">
                     <div className="w-2 h-2 bg-minimal-accent rounded-full" />
@@ -249,8 +248,12 @@ const Index = () => {
               <h3 className="text-2xl font-semibold mb-4 text-foreground">Achievements</h3>
               <div className="space-y-4">
                 <div>
+                  <div className="text-lg font-medium">Senior Design Project</div>
+                  <div className="text-sm text-muted-foreground">Entrepreneurial capstone: Developed a new product from idea to prototype, including business planning, sponsor outreach, and hands-on fabrication.</div>
+                </div>
+                <div>
                   <div className="text-lg font-medium">Dean's List</div>
-                  <div className="text-sm text-muted-foreground">Fall 2022, Spring 2023, Fall 2023</div>
+                  <div className="text-sm text-muted-foreground">Fall 2022, Spring 2023, Spring 2024, Fall 2024</div>
                 </div>
                 <div>
                   <div className="text-lg font-medium">Solar Car Team Leadership</div>
