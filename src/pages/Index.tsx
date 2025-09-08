@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import SkillDetailModal from '../components/SkillDetailModal';
+import LiquorBotDetailModal from '../components/LiquorBotDetailModal';
 import skillsData from '../lib/skills';
 import { Github, Linkedin, Heart } from 'lucide-react';
 import WheelNavigation from '../components/WheelNavigation';
@@ -10,6 +11,9 @@ import ProjectCard from '../components/ProjectCard';
 import BrandCarousel from '../components/BrandCarousel';
 
 const Index = () => {
+  // LiquorBot Detail Modal State
+  const [liquorBotModalOpen, setLiquorBotModalOpen] = useState(false);
+  const [liquorBotDetailType, setLiquorBotDetailType] = useState<'mobile' | 'hardware' | 'firmware' | null>(null);
   const [visibleSections, setVisibleSections] = useState<Set<string>>(new Set());
   const [sunScale, setSunScale] = useState(1);
   const sunRef = useRef<HTMLImageElement>(null);
@@ -329,32 +333,51 @@ const Index = () => {
               Automated bartending robot with mobile app integration and precision dispensing system
             </p>
           </div>
-          
           <ProjectCard
             title="LiquorBot - Automated Bartending System"
             description="A fully automated bartending robot capable of mixing precise cocktails through smartphone app control. Features custom PCB design, stepper motor control systems, and computer vision for ingredient recognition. Built with React Native app, Python backend, and Arduino-based hardware control."
-            tags={['Robotics', 'Mobile App', 'PCB Design', 'Computer Vision', 'IoT']}
+            tags={["Robotics", "Mobile App", "PCB Design", "Computer Vision", "IoT"]}
             featured={true}
           />
-          
           <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mt-12">
-            <div className="project-card text-center">
+            <div
+              className="project-card text-center cursor-pointer hover:bg-minimal-accent/10 transition-colors"
+              onClick={() => { setLiquorBotModalOpen(true); setLiquorBotDetailType('mobile'); }}
+              role="button"
+              tabIndex={0}
+            >
               <div className="text-4xl mb-4">📱</div>
               <h3 className="text-lg font-semibold mb-2">Mobile App</h3>
               <p className="text-sm text-muted-foreground">React Native app for recipe selection and customization</p>
             </div>
-            <div className="project-card text-center">
+            <div
+              className="project-card text-center cursor-pointer hover:bg-minimal-accent/10 transition-colors"
+              onClick={() => { setLiquorBotModalOpen(true); setLiquorBotDetailType('hardware'); }}
+              role="button"
+              tabIndex={0}
+            >
               <div className="text-4xl mb-4">🔧</div>
               <h3 className="text-lg font-semibold mb-2">Hardware</h3>
               <p className="text-sm text-muted-foreground">Custom PCBs with stepper motor control systems</p>
             </div>
-            <div className="project-card text-center">
-              <div className="text-4xl mb-4">🤖</div>
-              <h3 className="text-lg font-semibold mb-2">AI Integration</h3>
-              <p className="text-sm text-muted-foreground">Computer vision for ingredient recognition and quality control</p>
+            <div
+              className="project-card text-center cursor-pointer hover:bg-minimal-accent/10 transition-colors"
+              onClick={() => { setLiquorBotModalOpen(true); setLiquorBotDetailType('firmware'); }}
+              role="button"
+              tabIndex={0}
+            >
+              <div className="text-4xl mb-4">🧠</div>
+              <h3 className="text-lg font-semibold mb-2">Firmware</h3>
+              <p className="text-sm text-muted-foreground">ESP32 firmware for solenoid control, IoT Core connectivity, and app integration</p>
             </div>
           </div>
         </div>
+        {liquorBotModalOpen && (
+          <LiquorBotDetailModal
+            onClose={() => { setLiquorBotModalOpen(false); setLiquorBotDetailType(null); }}
+            detailType={liquorBotDetailType}
+          />
+        )}
       </section>
 
       {/* TikTok & Marketing */}
