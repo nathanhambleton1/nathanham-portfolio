@@ -450,14 +450,13 @@ const Index = () => {
 
       {/* Projects Section */}
       <section id="projects" className={`py-20 px-4 lg:px-8 section-enter ${visibleSections.has('projects') ? 'visible' : ''}`}>
-        <div className="max-w-6xl mx-auto">
-          <div className="text-center mb-16">
-            <h2 className="text-4xl md:text-5xl font-bold mb-6 text-foreground">Projects</h2>
-            <p className="text-xl text-muted-foreground">Personal engineering projects and creative builds</p>
+  <div className="max-w-6xl mx-auto">
+          <div className="text-center mb-12">
+            <h2 className="text-5xl font-extrabold mb-4 text-white drop-shadow-lg">Projects</h2>
+            <p className="text-lg text-muted-foreground mb-2">Personal engineering projects and creative builds</p>
           </div>
-          
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-2 gap-8">
-            {otherProjects.map((project, index) => (
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-10">
+            {otherProjects.slice(0, 4).map((project, index) => (
               <ProjectCard key={index} {...project} />
             ))}
           </div>
