@@ -9,12 +9,13 @@ import React, { useEffect, useMemo, useState } from "react";
 
 const CONFIG = {
   itemGap: 38,         // vertical spacing
-  curve: 200,          // max leftward offset (px) for far items (reduced from 600)
+  curve: 48,           // horizontal offset (px) for far items - reduced for a subtler "wheel" look
   maxNeighbors: 8,     // items above/below to render
   taperPower: 2.1,     // >1 = steeper taper (reduced from 2.1)
   scaleMin: 0,      // min scale for far items
   labelMinOpacity: 0, // min label opacity (rgba)
-  railWidth: 90,  // 18rem
+  railWidth: 140,  // wider to accommodate left-aligned labels
+  itemGapMin: -50,    // minimum vertical spacing when far from center
 };
 
 const NAV_ITEMS = [
@@ -83,8 +84,10 @@ export default function ArcRailNavigation() {
     Math.min(1, absDist / CONFIG.maxNeighbors);
 
   // Stronger taper using a power curve
-  const leftOffset = (absDist: number) =>
-    -CONFIG.curve * Math.pow(u(absDist), CONFIG.taperPower);
+  // Positive -> move right from the left-anchored rail. Smaller values give a more vertical
+  // appearance (less arcing). Uses a power taper so distance feels natural.
+  // No horizontal offset: keep everything left-anchored
+  const leftOffset = (_absDist: number) => 0;
 
   // Scale: 1 at center → scaleMin at far
   const scaleAt = (absDist: number) =>
@@ -93,6 +96,20 @@ export default function ArcRailNavigation() {
   // Label opacity only (container opacity stays 1 for crisp transform)
   const labelOpacityAt = (absDist: number) =>
     1 - (1 - CONFIG.labelMinOpacity) * u(absDist);
+
+  // Step gap (vertical) between successive items: larger near center, smaller far away
+  const stepGapAt = (absDist: number) =>
+    CONFIG.itemGapMin + (CONFIG.itemGap - CONFIG.itemGapMin) * (1 - u(absDist));
+
+  // Cumulative vertical offset for item at distance `d` (can be negative). We sum
+  // the successive step gaps so items compress smoothly as they get further away.
+  const cumulativeGap = (d: number) => {
+    const sign = Math.sign(d) || 1;
+    const n = Math.abs(d);
+    let s = 0;
+    for (let k = 0; k < n; k++) s += stepGapAt(k);
+    return s * sign;
+  };
 
   return (
     <nav
@@ -112,8 +129,9 @@ export default function ArcRailNavigation() {
             if (abs > CONFIG.maxNeighbors) return null;
 
             const x = leftOffset(abs);
-            // Center the active item vertically in the container
-            const y = centerY + d * CONFIG.itemGap;
+            // Center the active item vertically in the container, using cumulative
+            // gaps so spacing shrinks the further away an item is.
+            const y = centerY + cumulativeGap(d);
             const s = scaleAt(abs);
             const lblOpacity = labelOpacityAt(abs);
             const isActive = i === activeIndex;
@@ -123,10 +141,10 @@ export default function ArcRailNavigation() {
                 key={item.id}
                 onClick={() => scrollToSection(item.id)}
                 aria-current={isActive ? "true" : undefined}
-                className="absolute right-0 outline-none"
-                style={{
-                  transformOrigin: "100% 50%", // lock to right edge
-                  transform: `translate3d(${x}px, ${y - 20}px, 0) scale(${s})`, // -20 to roughly center vertically (button height compensation)
+                className="absolute left-0 outline-none"
+                  style={{
+                    transformOrigin: "0 50%", // lock to left edge
+                    transform: `translate3d(${x}px, ${y - 20}px, 0) scale(${s})`, // -20 to roughly center vertically (button height compensation)
                   transition:
                     "transform 320ms cubic-bezier(.2,.8,.2,1), color 180ms ease",
                   willChange: "transform",
@@ -144,8 +162,8 @@ export default function ArcRailNavigation() {
                   {/* label: right-aligned, no-wrap, darkens with distance */}
                   <span
                     className={
-                      "font-mono tracking-wide whitespace-nowrap text-right " +
-                      (isActive ? "text-white font-semibold" : "font-normal")
+                        "font-mono tracking-wide whitespace-nowrap text-left " +
+                        (isActive ? "text-white font-semibold" : "font-normal")
                     }
                     style={{
                       // darker as it fades off
