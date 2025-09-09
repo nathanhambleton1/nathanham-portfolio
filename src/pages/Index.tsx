@@ -12,6 +12,7 @@ import ProjectCard from '../components/ProjectCard';
 import BrandCarousel from '../components/BrandCarousel';
 import LiquorBotModelCanvas from '../components/LiquorBotModel';
 import { IoPhonePortraitOutline, IoConstructOutline, IoCodeSlashOutline } from 'react-icons/io5';
+import FordExperience from '../components/FordExperience';
 
 const Index = () => {
   // LiquorBot Detail Modal State
@@ -294,6 +295,32 @@ const Index = () => {
             ))} 
           </div> 
         </div> 
+      </section>
+
+      {/* Experience Section */}
+      <section id="experience" className={`py-20 px-4 lg:px-8 section-enter ${visibleSections.has('experience') ? 'visible' : ''}`}>
+        <div className="max-w-6xl mx-auto">
+          <div className="text-center mb-12">
+            <h2 className="text-4xl md:text-5xl font-bold mb-4 text-foreground">Experience</h2>
+            <p className="text-base md:text-lg text-muted-foreground">Aftermarket Vehicle Personalization • Ford Motor Company</p>
+          </div>
+
+          <FordExperience />
+
+          {/* Detailed bullets */}
+          <div className="mt-8 grid grid-cols-1 md:grid-cols-2 gap-4 text-sm text-muted-foreground">
+            <ul className="list-disc pl-5 space-y-2">
+              <li>Built an automated notifier as parts moved through SIPOC stages to reduce communication gaps between planning, marketing, and supply chain teams.</li>
+              <li>Contributed to a vehicle wrap customization platform; coordinated with legal and safety to ensure compliance.</li>
+              <li>Helped concept and launch a new aftermarket package program with agencies on naming and customer experience.</li>
+            </ul>
+            <ul className="list-disc pl-5 space-y-2">
+              <li>Developed an influencer pricing model to standardize compensation rates across platforms and creator tiers.</li>
+              <li>Strengthened cross‑functional communication and internal workflows in a fast‑paced corporate environment.</li>
+              <li>Marketing and sales operations support for Ford Performance aftermarket products.</li>
+            </ul>
+          </div>
+        </div>
       </section>
 
       {/* Solar Car Project */}
