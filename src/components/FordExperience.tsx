@@ -62,11 +62,13 @@ export default function FordExperience() {
       <div className="flex flex-col md:flex-row md:items-center gap-6">
         {/* Left: company + role summary */}
         <div className="md:w-1/3 space-y-3">
-          <div className="flex items-center gap-2 text-foreground">
-            <Building2 className="w-5 h-5" />
-            <span className="font-semibold">Ford Motor Company</span>
+          <div className="flex justify-center items-center gap-3">
+            <img src="/Ford-Symbol.png" alt="Ford Logo" className="h-16 w-auto" style={{  }} />
+            <div className="flex flex-col items-start">
+              <span className="font-semibold text-left">Experience</span>
+              <span className="text-sm text-muted-foreground text-left">Aftermarket Vehicle Personalization • Ford Motor Company</span>
+            </div>
           </div>
-          <div className="text-sm text-muted-foreground">Aftermarket Vehicle Personalization • Internship</div>
           <div className="flex items-center gap-3 text-xs text-muted-foreground">
             <span className="flex items-center gap-1"><Clock className="w-3.5 h-3.5" /> Summer 2024</span>
             <span className="flex items-center gap-1"><MapPin className="w-3.5 h-3.5" /> Detroit, MI · On‑site</span>
