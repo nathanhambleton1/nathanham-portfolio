@@ -26,7 +26,7 @@ const BrandCarousel = () => {
   // Create brand objects with name and logo path
   const brands = logoFiles.map((file, idx) => ({
     name: `Brand ${idx + 1}`,
-    logo: `/brands/${file}`,
+    logo: `/nathanham-portfolio/brands/${file}`,
   }));
 
   // Duplicate the brands array to create seamless infinite scroll

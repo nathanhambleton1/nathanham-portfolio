@@ -173,7 +173,7 @@ const Index = () => {
         <div className="max-w-4xl mx-auto text-center">
           <div className="flex justify-center mb-8">
             <img
-              src="/Headshot%20small.png"
+              src="/nathanham-portfolio/Headshot%20small.png"
               alt="Nathan Hambleton headshot"
               className="w-40 h-40 rounded-full border-4 border-white shadow-lg object-cover"
               style={{ background: '#fff' }}
@@ -330,7 +330,7 @@ const Index = () => {
             <div style={{ position: 'relative', display: 'inline-block', width: '100%' }}>
               <h2 className="text-4xl md:text-5xl font-bold mb-6 text-foreground" style={{ position: 'relative', zIndex: 1 }}>Solar Car Project</h2>
               <img
-                src="/sun.png"
+                src="/nathanham-portfolio/sun.png"
                 alt="Sun"
                 ref={sunRef}
                 style={{

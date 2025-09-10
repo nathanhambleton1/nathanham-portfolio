@@ -63,7 +63,7 @@ export default function FordExperience() {
         {/* Left: company + role summary */}
         <div className="md:w-1/3 space-y-3">
           <div className="flex justify-center items-center gap-3">
-            <img src="/Ford-Symbol.png" alt="Ford Logo" className="h-16 w-auto" style={{  }} />
+            <img src="/nathanham-portfolio/Ford-Symbol.png" alt="Ford Logo" className="h-16 w-auto" style={{  }} />
             <div className="flex flex-col items-start">
               <span className="font-semibold text-left">Experience</span>
               <span className="text-sm text-muted-foreground text-left">Aftermarket Vehicle Personalization • Ford Motor Company</span>
