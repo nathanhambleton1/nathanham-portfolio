@@ -43,8 +43,8 @@ const Timeline = ({ items }: TimelineProps) => {
 
   return (
     <div className="relative max-w-4xl mx-auto">
-      {/* Main timeline line */}
-      <div className="absolute left-8 top-0 bottom-0 timeline-line" />
+      {/* Main timeline line - hidden on mobile */}
+      <div className="absolute left-8 top-0 bottom-0 timeline-line hidden sm:block" />
 
       <div className="space-y-12">
         {items.map((item, index) => (
@@ -56,8 +56,8 @@ const Timeline = ({ items }: TimelineProps) => {
             data-index={index}
             style={{ transitionDelay: `${index * 0.2}s` }}
           >
-            {/* Timeline dot */}
-            <div className="relative z-10 flex-shrink-0">
+            {/* Timeline dot - hidden on mobile */}
+            <div className="relative z-10 flex-shrink-0 hidden sm:block">
               <div 
                 className={`timeline-dot cursor-pointer transition-all duration-300 ${
                   activeIndex === index ? 'active' : ''
@@ -88,7 +88,7 @@ const Timeline = ({ items }: TimelineProps) => {
                   <div className="space-y-2 animate-fade-in">
                     {item.details.map((detail, i) => (
                       <div key={i} className="flex items-start gap-2">
-                        <div className="w-2 h-2 bg-tech-glow-secondary rounded-full mt-2 flex-shrink-0" />
+                        <div className="w-2 h-2 bg-tech-glow-secondary rounded-full mt-2 flex-shrink-0 hidden sm:block" />
                         <span className="text-sm text-foreground/80">{detail}</span>
                       </div>
                     ))}

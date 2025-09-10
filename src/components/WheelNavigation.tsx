@@ -1,4 +1,5 @@
 import React, { useEffect, useMemo, useState } from "react";
+import { useIsMobile } from "../hooks/use-mobile";
 
 /**
  * ArcRailNavigation v2
@@ -30,6 +31,7 @@ const NAV_ITEMS = [
 ];
 
 export default function ArcRailNavigation() {
+  const isMobile = useIsMobile();
   const [activeId, setActiveId] = useState<string>(NAV_ITEMS[0].id);
 
   const activeIndex = useMemo(() => {
@@ -113,74 +115,76 @@ export default function ArcRailNavigation() {
   };
 
   return (
-    <nav
-      aria-label="Section navigation"
-      className="pointer-events-auto fixed left-6 top-1/2 -translate-y-1/2 z-40 select-none"
-      style={{ width: `${CONFIG.railWidth}px` }}
-      role="navigation"
-    >
-      <div className="relative h-[60vh] w-full">
-        {(() => {
-          // Center the active item in the container
-          const containerHeight = 0.6 * window.innerHeight; // 60vh
-          const centerY = containerHeight / 2;
-          return NAV_ITEMS.map((item, i) => {
-            const d = i - activeIndex;
-            const abs = Math.abs(d);
-            if (abs > CONFIG.maxNeighbors) return null;
+    !isMobile && (
+      <nav
+        aria-label="Section navigation"
+        className="pointer-events-auto fixed left-6 top-1/2 -translate-y-1/2 z-40 select-none"
+        style={{ width: `${CONFIG.railWidth}px` }}
+        role="navigation"
+      >
+        <div className="relative h-[60vh] w-full">
+          {(() => {
+            // Center the active item in the container
+            const containerHeight = 0.6 * window.innerHeight; // 60vh
+            const centerY = containerHeight / 2;
+            return NAV_ITEMS.map((item, i) => {
+              const d = i - activeIndex;
+              const abs = Math.abs(d);
+              if (abs > CONFIG.maxNeighbors) return null;
 
-            const x = leftOffset(abs);
-            // Center the active item vertically in the container, using cumulative
-            // gaps so spacing shrinks the further away an item is.
-            const y = centerY + cumulativeGap(d);
-            const s = scaleAt(abs);
-            const lblOpacity = labelOpacityAt(abs);
-            const isActive = i === activeIndex;
+              const x = leftOffset(abs);
+              // Center the active item vertically in the container, using cumulative
+              // gaps so spacing shrinks the further away an item is.
+              const y = centerY + cumulativeGap(d);
+              const s = scaleAt(abs);
+              const lblOpacity = labelOpacityAt(abs);
+              const isActive = i === activeIndex;
 
-            return (
-              <button
-                key={item.id}
-                onClick={() => scrollToSection(item.id)}
-                aria-current={isActive ? "true" : undefined}
-                className="absolute left-0 outline-none"
-                  style={{
-                    transformOrigin: "0 50%", // lock to left edge
-                    transform: `translate3d(${x}px, ${y - 20}px, 0) scale(${s})`, // -20 to roughly center vertically (button height compensation)
-                  transition:
-                    "transform 320ms cubic-bezier(.2,.8,.2,1), color 180ms ease",
-                  willChange: "transform",
-                  zIndex: 1000 - abs,
-                }}
-              >
-                <div className="flex items-center gap-3">
-                  {/* dot (kept fairly consistent; subtle size change via scale) */}
-                  <span
-                    className={
-                      "block rounded-full transition-all duration-300 " +
-                      (isActive ? "h-2 w-2 bg-white" : "h-1.5 w-1.5 bg-white/60")
-                    }
-                  />
-                  {/* label: right-aligned, no-wrap, darkens with distance */}
-                  <span
-                    className={
-                        "font-mono tracking-wide whitespace-nowrap text-left " +
-                        (isActive ? "text-white font-semibold" : "font-normal")
-                    }
+              return (
+                <button
+                  key={item.id}
+                  onClick={() => scrollToSection(item.id)}
+                  aria-current={isActive ? "true" : undefined}
+                  className="absolute left-0 outline-none"
                     style={{
-                      // darker as it fades off
-                      color: `rgba(255,255,255,${lblOpacity.toFixed(3)})`,
-                      // small base-size bump on active; scale does the rest
-                      fontSize: isActive ? "0.85rem" : "0.7rem",
-                    }}
-                  >
-                    {item.label}
-                  </span>
-                </div>
-              </button>
-            );
-          });
-        })()}
-      </div>
-    </nav>
+                      transformOrigin: "0 50%", // lock to left edge
+                      transform: `translate3d(${x}px, ${y - 20}px, 0) scale(${s})`, // -20 to roughly center vertically (button height compensation)
+                    transition:
+                      "transform 320ms cubic-bezier(.2,.8,.2,1), color 180ms ease",
+                    willChange: "transform",
+                    zIndex: 1000 - abs,
+                  }}
+                >
+                  <div className="flex items-center gap-3">
+                    {/* dot (kept fairly consistent; subtle size change via scale) */}
+                    <span
+                      className={
+                        "block rounded-full transition-all duration-300 " +
+                        (isActive ? "h-2 w-2 bg-white" : "h-1.5 w-1.5 bg-white/60")
+                      }
+                    />
+                    {/* label: right-aligned, no-wrap, darkens with distance */}
+                    <span
+                      className={
+                          "font-mono tracking-wide whitespace-nowrap text-left " +
+                          (isActive ? "text-white font-semibold" : "font-normal")
+                      }
+                      style={{
+                        // darker as it fades off
+                        color: `rgba(255,255,255,${lblOpacity.toFixed(3)})`,
+                        // small base-size bump on active; scale does the rest
+                        fontSize: isActive ? "0.85rem" : "0.7rem",
+                      }}
+                    >
+                      {item.label}
+                    </span>
+                  </div>
+                </button>
+              );
+            });
+          })()}
+        </div>
+      </nav>
+    )
   );
 }

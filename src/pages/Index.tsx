@@ -128,7 +128,7 @@ const Index = () => {
     {
       title: 'Portfolio Website',
       description: 'This very website: built from scratch with React + Vite, hosted on GitHub Pages, and served via my custom domain with proper licensing and SSL. Features interactive UI components and acts as my digital portfolio and resume.',
-      tags: ['Frontend', 'React', 'Vite', 'Web Development', 'GitHub Pages', 'Custom Domain'],
+      tags: ['Frontend', 'React', 'Vite', 'Web Development', 'GitHub Pages'],
       featured: true
     },
     {
@@ -169,51 +169,57 @@ const Index = () => {
       <WheelNavigation />
 
       {/* About Section */}
-      <section id="about" className={`min-h-screen flex items-center justify-center px-4 lg:px-8 pt-16 lg:pt-0 section-enter ${visibleSections.has('about') ? 'visible' : ''}`}>
-        <div className="max-w-4xl mx-auto text-center">
-          <div className="flex justify-center mb-8">
+      <section
+        id="about"
+        className={`min-h-screen flex items-center justify-center px-4 lg:px-8 pt-16 lg:pt-0 section-enter ${visibleSections.has('about') ? 'visible' : ''}`}
+      >
+        <div
+          className="w-full max-w-4xl mx-auto flex flex-col items-center text-center"
+          style={{ padding: '1.5rem 0' }}
+        >
+          <div className="flex justify-center mb-8 w-full">
             <img
               src="/nathanham-portfolio/Headshot%20small.png"
               alt="Nathan Hambleton headshot"
-              className="w-40 h-40 rounded-full border-4 border-white shadow-lg object-cover"
+              className="w-32 h-32 md:w-40 md:h-40 rounded-full border-4 border-white shadow-lg object-cover mx-auto"
               style={{ background: '#fff' }}
               loading="lazy"
             />
           </div>
 
-          <h1 className="text-4xl md:text-6xl lg:text-7xl font-bold mb-6 text-foreground">
+          <h1 className="text-3xl sm:text-4xl md:text-6xl lg:text-7xl font-bold mb-4 md:mb-6 text-foreground w-full text-center">
             Nathan Hambleton
           </h1>
 
-          <p className="text-xl md:text-2xl text-muted-foreground mb-8 font-light leading-relaxed">
+          <p className="text-lg sm:text-xl md:text-2xl text-muted-foreground mb-6 md:mb-8 font-light leading-relaxed w-full text-center">
             Electrical Engineer | Product Development | Video Creator
           </p>
 
-          <p className="text-lg text-foreground/80 max-w-2xl mx-auto mb-12 leading-relaxed">
+          <p className="text-base sm:text-lg text-foreground/80 max-w-2xl mx-auto mb-8 md:mb-12 leading-relaxed w-full text-center">
             Electrical engineer passionate about embedded systems, hardware, software, and creative tech. I love building things—from solar cars and IoT robots to mobile apps and VFX content.
           </p>
 
-          {/* Social Links */}
-          <div className="flex items-center justify-center gap-6">
-            <a 
-              href="https://www.linkedin.com/in/nathanhambleton/" 
-              className="flex items-center gap-2 px-6 py-3 bg-card/50 backdrop-blur-sm border border-minimal-border rounded-lg hover:border-minimal-accent transition-all duration-300 minimal-hover group"
+          {/* Social Links - stack vertically on mobile, horizontal on desktop */}
+          <div className="flex flex-col sm:flex-row items-center justify-center gap-4 sm:gap-6 w-full max-w-xs mx-auto">
+            <a
+              href="https://www.linkedin.com/in/nathanhambleton/"
+              className="flex items-center gap-2 px-6 py-3 w-full sm:w-auto bg-card/50 backdrop-blur-sm border border-minimal-border rounded-lg hover:border-minimal-accent transition-all duration-300 minimal-hover group justify-center"
               target="_blank" rel="noopener noreferrer"
             >
               <Linkedin className="w-5 h-5 group-hover:text-minimal-accent transition-colors" />
               <span>LinkedIn</span>
             </a>
-            <a 
-              href="https://github.com/nathanhambleton1" 
-              className="flex items-center gap-2 px-6 py-3 bg-card/50 backdrop-blur-sm border border-minimal-border rounded-lg hover:border-minimal-accent transition-all duration-300 minimal-hover group"
+            <a
+              href="https://github.com/nathanhambleton1"
+              className="flex items-center gap-2 px-6 py-3 w-full sm:w-auto bg-card/50 backdrop-blur-sm border border-minimal-border rounded-lg hover:border-minimal-accent transition-all duration-300 minimal-hover group justify-center"
               target="_blank" rel="noopener noreferrer"
             >
               <Github className="w-5 h-5 group-hover:text-minimal-accent transition-colors" />
               <span>GitHub</span>
             </a>
-            <a 
-              href="https://www.tiktok.com/@nathan_ham" 
-              className="flex items-center gap-2 px-6 py-3 bg-card/50 backdrop-blur-sm border border-minimal-border rounded-lg hover:border-minimal-accent transition-all duration-300 minimal-hover group"
+            <a
+              href="https://www.tiktok.com/@nathan_ham"
+              className="flex items-center gap-2 px-6 py-3 w-full sm:w-auto bg-card/50 backdrop-blur-sm border border-minimal-border rounded-lg hover:border-minimal-accent transition-all duration-300 minimal-hover group justify-center"
               target="_blank" rel="noopener noreferrer"
             >
               <Heart className="w-5 h-5 group-hover:text-minimal-accent transition-colors" />
@@ -344,7 +350,9 @@ const Index = () => {
                   transform: `scale(${sunScale})`,
                   transformOrigin: 'center',
                   transition: 'transform 0.1s',
+                  display: 'none',
                 }}
+                className="hidden sm:block"
                 loading="lazy"
               />
             </div>

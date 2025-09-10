@@ -86,15 +86,19 @@ export default function FordExperience() {
               <button
                 key={ms.key}
                 onClick={() => setActive(i)}
-                className={`px-3 py-1.5 rounded-lg border text-xs transition-colors ${
+                className={`px-3 py-1.5 rounded-lg border text-xs transition-colors flex items-center justify-center ${
                   i === active
                     ? 'border-minimal-accent bg-minimal-accent/10 text-foreground'
                     : 'border-minimal-border hover:border-minimal-accent/50 text-foreground/80'
                 }`}
                 type="button"
                 aria-pressed={i === active}
+                style={{ minWidth: 44, minHeight: 44 }}
               >
-                <span className="inline-flex items-center gap-1.5">{ms.icon}{ms.title}</span>
+                <span className="inline-flex items-center gap-1.5">
+                  {ms.icon}
+                  <span className="hidden sm:inline">{ms.title}</span>
+                </span>
               </button>
             ))}
           </div>
@@ -120,7 +124,12 @@ export default function FordExperience() {
                       className="absolute inset-0 bg-minimal-accent/20 translate-x-[-100%] hover:translate-x-0 transition-transform duration-500"
                       aria-hidden
                     />
-                    <div className="text-center text-xs font-mono text-foreground/90">{stage}</div>
+                    <div
+                      className="text-center font-mono text-foreground/90"
+                      style={{ fontSize: 'clamp(0.65rem, 2vw, 1rem)', wordBreak: 'break-word' }}
+                    >
+                      {stage}
+                    </div>
                   </div>
                 ))}
               </div>
