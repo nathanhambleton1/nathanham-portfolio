@@ -126,27 +126,27 @@ const Index = () => {
   // Projects Data
   const otherProjects = [
     {
-      title: 'Portfolio Website on Raspberry Pi',
-      description: 'This very website! Self-hosted on a Raspberry Pi 4 with custom domain, SSL certificates, and automated deployments. Features Docker containerization and GitHub Actions CI/CD pipeline.',
-      tags: ['Raspberry Pi', 'Docker', 'CI/CD', 'Self-Hosting', 'SSL'],
+      title: 'Portfolio Website',
+      description: 'This very website: built from scratch with React + Vite and hosted on my own PC at low cost. Uses my custom domain with proper licensing/SSL and packs interactive UI pieces to serve as a digital portfolio and resume.',
+      tags: ['Frontend', 'React', 'Vite', 'Web Development', 'Self-Hosted'],
       featured: true
     },
     {
-      title: 'Electric Skateboard v3',
-      description: 'Custom-built electric skateboard with regenerative braking, smartphone app control, and 25-mile range. Features custom battery management system and machined aluminum trucks.',
-      tags: ['Hardware', 'Mobile App', 'BMS', '3D Printing'],
+      title: 'Electric Skateboard',
+      description: 'Multiple iterations culminating in a dual-motor drive using FOC motor drivers. Hand-built lithium-ion battery pack with integrated BMS (configured via vendor UI—learned and set key parameters). PWM remote control integration for throttle/brake, with reliable, smooth control.',
+      tags: ['FOC', 'Dual Motor', 'Battery Pack', 'BMS', 'PWM'],
       featured: false
     },
     {
       title: 'FPV Racing Drone',
-      description: 'High-performance racing drone with custom flight controller, 4K recording capability, and sub-250g weight for competition racing.',
-      tags: ['Drones', 'Flight Control', 'Carbon Fiber', 'Racing'],
+  description: 'Custom built FPV quads from parts, soldered motors and ESCs to the flight controller, and set up analog video feed. Configured radio link/remote control, assembled and tuned the stack, and navigated basic drone regs while planning parts lists and builds.',
+  tags: ['FPV', 'Soldering', 'Analog Video', 'ESC/FC', 'Racing'],
       featured: false
     },
     {
-      title: 'Gaming PC Build',
-      description: 'Custom liquid-cooled gaming rig with RGB integration, custom cable management, and overclocked performance. Built for content creation and streaming.',
-      tags: ['PC Building', 'Liquid Cooling', 'RGB', 'Overclocking'],
+      title: 'Custom PC Build',
+      description: 'Workstation-class PC built for video editing, VFX, encoding, and 3D modeling. Learned PC assembly and component selection (CPU/GPU/RAM/SSD), planned a parts list around budget/performance, and integrated liquid cooling for sustained workloads.',
+      tags: ['PC Building', 'Liquid Cooling', 'GPU/CPU', 'Workstation'],
       featured: false
     }
   ];
