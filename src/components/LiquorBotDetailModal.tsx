@@ -1,9 +1,15 @@
+import React from 'react';
+import { createPortal } from 'react-dom';
+import { FaTiktok, FaInstagram, FaYoutube } from 'react-icons/fa6';
+import { useIsMobile } from '../hooks/use-mobile';
+
 // 3D Rotating Image Component (for mobile app preview)
 const RotatingImage: React.FC = () => {
   const containerRef = React.useRef<HTMLDivElement>(null);
   const targetRotation = React.useRef({ x: 0, y: 0 });
   const currentRotation = React.useRef({ x: 0, y: 0 });
   const animationFrame = React.useRef<number | null>(null);
+  const isMobile = useIsMobile();
 
   React.useEffect(() => {
     const container = containerRef.current;
@@ -65,36 +71,40 @@ const RotatingImage: React.FC = () => {
         <div className="device-shadow"></div>
       </div>
       {/* Floating images for depth effect (customizable) */}
-      <div
-        className="floating-image"
-        style={{ top: '1.5%', left: '5%', transform: 'translateZ(30px) scale(1)', zIndex: 2, position: 'absolute' }}
-      >
-  <img src="/nathanham-portfolio/liquorbot_overlay.png" alt="Liquorbot Overlay" style={{ width: 250, height: 250 }} />
-      </div>
-      <div
-        className="floating-image"
-        style={{ top: '-3%', right: '-15%', transform: 'translateZ(30px) scale(1)', zIndex: 2, position: 'absolute' }}
-      >
-  <img src="/nathanham-portfolio/devicesettings_overlay.png" alt="Device Settings Overlay" style={{ width: 300, height: 300 }} />
-      </div>
-      <div
-        className="floating-image"
-        style={{ bottom: '12%', left: '-6%', transform: 'translateZ(40px) scale(1)', zIndex: 2, position: 'absolute' }}
-      >
-  <img src="/nathanham-portfolio/events_overlay.png" alt="Events Overlay" style={{ width: 250, height: 250 }} />
-      </div>
-      <div
-        className="floating-image"
-        style={{ bottom: '15.5%', right: '-5%', transform: 'translateZ(40px) scale(1)', zIndex: 2, position: 'absolute' }}
-      >
-  <img src="/nathanham-portfolio/drinkmenu_overlay.png" alt="Drink Menu Overlay" style={{ width: 250, height: 250 }} />
-      </div>
-      <div
-        className="floating-image"
-        style={{ bottom: '5.5%', right: '-6%', transform: 'translateZ(40px) scale(1)', zIndex: 2, position: 'absolute' }}
-      >
-  <img src="/nathanham-portfolio/newevent_overlay.png" alt="New Event Overlay" style={{ width: 250, height: 250 }} />
-      </div>
+      {!isMobile && (
+        <>
+          <div
+            className="floating-image"
+            style={{ top: '1.5%', left: '5%', transform: 'translateZ(30px) scale(1)', zIndex: 2, position: 'absolute' }}
+          >
+            <img src="/nathanham-portfolio/liquorbot_overlay.png" alt="Liquorbot Overlay" style={{ width: 250, height: 250 }} />
+          </div>
+          <div
+            className="floating-image"
+            style={{ top: '-3%', right: '-15%', transform: 'translateZ(30px) scale(1)', zIndex: 2, position: 'absolute' }}
+          >
+            <img src="/nathanham-portfolio/devicesettings_overlay.png" alt="Device Settings Overlay" style={{ width: 300, height: 300 }} />
+          </div>
+          <div
+            className="floating-image"
+            style={{ bottom: '12%', left: '-6%', transform: 'translateZ(40px) scale(1)', zIndex: 2, position: 'absolute' }}
+          >
+            <img src="/nathanham-portfolio/events_overlay.png" alt="Events Overlay" style={{ width: 250, height: 250 }} />
+          </div>
+          <div
+            className="floating-image"
+            style={{ bottom: '15.5%', right: '-5%', transform: 'translateZ(40px) scale(1)', zIndex: 2, position: 'absolute' }}
+          >
+            <img src="/nathanham-portfolio/drinkmenu_overlay.png" alt="Drink Menu Overlay" style={{ width: 250, height: 250 }} />
+          </div>
+          <div
+            className="floating-image"
+            style={{ bottom: '5.5%', right: '-6%', transform: 'translateZ(40px) scale(1)', zIndex: 2, position: 'absolute' }}
+          >
+            <img src="/nathanham-portfolio/newevent_overlay.png" alt="New Event Overlay" style={{ width: 250, height: 250 }} />
+          </div>
+        </>
+      )}
       {/* Social Media Icons - top right outside edge */}
       <div
         className="floating-image"
@@ -117,9 +127,6 @@ const RotatingImage: React.FC = () => {
     </div>
   );
 };
-import React from 'react';
-import { createPortal } from 'react-dom';
-import { FaTiktok, FaInstagram, FaYoutube } from 'react-icons/fa6';
 
 
 interface LiquorBotDetailModalProps {
@@ -314,6 +321,7 @@ const RotatingFirmwareImage: React.FC = () => {
     };
   }, []);
 
+  const isMobile = useIsMobile();
   return (
     <div
       ref={containerRef}
@@ -335,20 +343,22 @@ const RotatingFirmwareImage: React.FC = () => {
       }}
     >
       {/* Firmware code structure image - full size, transparent background */}
-      <img
-  src="/nathanham-portfolio/code_structure.png"
-        alt="Firmware Code Structure"
-        style={{
-          width: '100%',
-          height: '100%',
-          objectFit: 'contain',
-          background: 'none',
-          boxShadow: 'none',
-          borderRadius: 0,
-          filter: 'none',
-          display: 'block',
-        }}
-      />
+      {!isMobile && (
+        <img
+          src="/nathanham-portfolio/code_structure.png"
+          alt="Firmware Code Structure"
+          style={{
+            width: '100%',
+            height: '100%',
+            objectFit: 'contain',
+            background: 'none',
+            boxShadow: 'none',
+            borderRadius: 0,
+            filter: 'none',
+            display: 'block',
+          }}
+        />
+      )}
     </div>
   );
 };
@@ -399,6 +409,7 @@ const RotatingPCBImages: React.FC = () => {
   }, []);
 
   // All images are layered at the same position, but with different translateZ for depth
+  const isMobile = useIsMobile();
   return (
     <div
       ref={containerRef}
@@ -413,54 +424,59 @@ const RotatingPCBImages: React.FC = () => {
         marginLeft: 0,
       }}
     >
-      {/* BCU - back layer */}
-      <img
-  src="/nathanham-portfolio/bcu.png"
-        alt="BCU PCB"
-        style={{
-          position: 'absolute',
-          top: 0,
-          left: 0,
-          width: 340,
-          height: 340,
-          objectFit: 'contain',
-          transform: 'translateZ(-40px)',
-          zIndex: 1,
-          pointerEvents: 'none',
-        }}
-      />
-      {/* FCU - middle layer */}
-      <img
-  src="/nathanham-portfolio/fcu.png"
-        alt="FCU PCB"
-        style={{
-          position: 'absolute',
-          top: 0,
-          left: 0,
-          width: 340,
-          height: 340,
-          objectFit: 'contain',
-          transform: 'translateZ(0px)',
-          zIndex: 2,
-          pointerEvents: 'none',
-        }}
-      />
-      {/* Silkscreen - front layer */}
-      <img
-  src="/nathanham-portfolio/silkscreen.png"
-        alt="Silkscreen"
-        style={{
-          position: 'absolute',
-          top: 0,
-          left: 0,
-          width: 340,
-          height: 340,
-          objectFit: 'contain',
-          transform: 'translateZ(40px)',
-          zIndex: 3,
-          pointerEvents: 'none',
-        }}
-      />
+      {/* PCB Images only on non-mobile */}
+      {!isMobile && (
+        <>
+          {/* BCU - back layer */}
+          <img
+            src="/nathanham-portfolio/bcu.png"
+            alt="BCU PCB"
+            style={{
+              position: 'absolute',
+              top: 0,
+              left: 0,
+              width: 340,
+              height: 340,
+              objectFit: 'contain',
+              transform: 'translateZ(-40px)',
+              zIndex: 1,
+              pointerEvents: 'none',
+            }}
+          />
+          {/* FCU - middle layer */}
+          <img
+            src="/nathanham-portfolio/fcu.png"
+            alt="FCU PCB"
+            style={{
+              position: 'absolute',
+              top: 0,
+              left: 0,
+              width: 340,
+              height: 340,
+              objectFit: 'contain',
+              transform: 'translateZ(0px)',
+              zIndex: 2,
+              pointerEvents: 'none',
+            }}
+          />
+          {/* Silkscreen - front layer */}
+          <img
+            src="/nathanham-portfolio/silkscreen.png"
+            alt="Silkscreen"
+            style={{
+              position: 'absolute',
+              top: 0,
+              left: 0,
+              width: 340,
+              height: 340,
+              objectFit: 'contain',
+              transform: 'translateZ(40px)',
+              zIndex: 3,
+              pointerEvents: 'none',
+            }}
+          />
+        </>
+      )}
     </div>
   );
 };
@@ -487,10 +503,11 @@ const LiquorBotDetailModal: React.FC<LiquorBotDetailModalProps> = ({ onClose, de
   // Ensure we only attempt portal client-side
   if (typeof document === 'undefined') return null;
 
+  const isMobile = useIsMobile();
   return createPortal(
     <div className="fixed inset-0 z-50 flex items-center justify-center px-4" role="dialog" aria-modal="true">
       <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={onClose} />
-      <div className="relative bg-card p-8 rounded-lg shadow-lg max-w-4xl w-full z-10 border border-minimal-border flex flex-row items-center justify-center gap-8 overflow-hidden" style={{ minHeight: 420, maxHeight: '90vh' }}>
+      <div className={`relative bg-card p-8 rounded-lg shadow-lg max-w-4xl w-full z-10 border border-minimal-border flex ${isMobile ? 'flex-col items-center justify-center' : 'flex-row items-center justify-center'} gap-8 overflow-hidden`} style={{ minHeight: 420, maxHeight: '90vh' }}>
         <button
           className="absolute top-4 right-4 text-2xl text-muted-foreground hover:text-foreground focus:outline-none"
           onClick={onClose}
@@ -499,7 +516,7 @@ const LiquorBotDetailModal: React.FC<LiquorBotDetailModalProps> = ({ onClose, de
           ×
         </button>
         {/* Mobile Section: App Preview 3D Image */}
-        {detailType === 'mobile' && (
+        {detailType === 'mobile' && !isMobile && (
           <div className="flex-shrink-0" style={{ minWidth: 340, maxWidth: 380, marginRight: 0 }}>
             <div style={{ transform: 'scale(0.85)', transformOrigin: 'left center', width: '100%' }}>
               <RotatingImage />
@@ -507,7 +524,7 @@ const LiquorBotDetailModal: React.FC<LiquorBotDetailModalProps> = ({ onClose, de
           </div>
         )}
         {/* Hardware Section: PCB 3D Layered Images */}
-        {detailType === 'hardware' && (
+        {detailType === 'hardware' && !isMobile && (
           <div className="flex-shrink-0" style={{ minWidth: 340, maxWidth: 380, marginRight: 0 }}>
             <div style={{ transform: 'scale(0.85)', transformOrigin: 'left center', width: '100%' }}>
               <RotatingPCBImages />
@@ -515,14 +532,14 @@ const LiquorBotDetailModal: React.FC<LiquorBotDetailModalProps> = ({ onClose, de
           </div>
         )}
         {/* Firmware Section: Rotating 3D Image */}
-        {detailType === 'firmware' && (
+        {detailType === 'firmware' && !isMobile && (
           <div className="flex-shrink-0" style={{ minWidth: 340, maxWidth: 380, marginRight: 0 }}>
             <div style={{ transform: 'scale(0.85)', transformOrigin: 'left center', width: '100%' }}>
               <RotatingFirmwareImage />
             </div>
           </div>
         )}
-        <div className="flex flex-col items-start justify-center w-full" style={{ minWidth: 260 }}>
+        <div className={`flex flex-col w-full ${isMobile ? 'items-center justify-center text-center' : 'items-start justify-center'}`} style={{ minWidth: 260 }}>
           <h2 className="text-2xl font-bold mb-4 text-foreground">{title}</h2>
           {/* Mobile Section Details */}
           {detailType === 'mobile' ? (

@@ -72,17 +72,17 @@ const BrandCarousel = () => {
       </div>
 
       {/* Stats */}
-      <div className="mt-6 flex justify-center items-center gap-8 text-center">
+      <div className="mt-6 flex flex-col sm:flex-row justify-center items-center gap-8 text-center">
         <div>
           <div className="text-2xl font-bold text-foreground">150,000,000+</div>
           <div className="text-sm text-muted-foreground">Views</div>
         </div>
-        <div className="w-px h-8 bg-minimal-border" />
+        <div className="hidden sm:block w-px h-8 bg-minimal-border" />
         <div>
           <div className="text-2xl font-bold text-foreground">20,000,000+</div>
           <div className="text-sm text-muted-foreground">Likes</div>
         </div>
-        <div className="w-px h-8 bg-minimal-border" />
+        <div className="hidden sm:block w-px h-8 bg-minimal-border" />
         <div>
           <div className="text-2xl font-bold text-foreground">800,000+</div>
           <div className="text-sm text-muted-foreground">Followers</div>
