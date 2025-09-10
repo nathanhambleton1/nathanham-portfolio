@@ -127,8 +127,8 @@ const Index = () => {
   const otherProjects = [
     {
       title: 'Portfolio Website',
-      description: 'This very website: built from scratch with React + Vite and hosted on my own PC at low cost. Uses my custom domain with proper licensing/SSL and packs interactive UI pieces to serve as a digital portfolio and resume.',
-      tags: ['Frontend', 'React', 'Vite', 'Web Development', 'Self-Hosted'],
+      description: 'This very website: built from scratch with React + Vite, hosted on GitHub Pages, and served via my custom domain with proper licensing and SSL. Features interactive UI components and acts as my digital portfolio and resume.',
+      tags: ['Frontend', 'React', 'Vite', 'Web Development', 'GitHub Pages', 'Custom Domain'],
       featured: true
     },
     {
