@@ -4,7 +4,7 @@ import { OrbitControls, useGLTF, Environment } from '@react-three/drei';
 import * as THREE from 'three';
 
 // Path to model in public folder
-const MODEL_PATH = '/Liquorbot_model.glb';
+const MODEL_PATH = '/nathanham-portfolio/Liquorbot_model.glb';
 
 interface LiquorBotProps {
   className?: string;
