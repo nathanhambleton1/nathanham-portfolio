@@ -64,7 +64,7 @@ const RotatingImage: React.FC = () => {
     >
       <div className="device-frame">
         <img 
-          src="/nathanham-portfolio/apppreview_blank.png" 
+          src="/apppreview_blank.png" 
           alt="LiquorBot App Preview" 
           className="app-preview"
         />
@@ -77,31 +77,31 @@ const RotatingImage: React.FC = () => {
             className="floating-image"
             style={{ top: '1.5%', left: '5%', transform: 'translateZ(30px) scale(1)', zIndex: 2, position: 'absolute' }}
           >
-            <img src="/nathanham-portfolio/liquorbot_overlay.png" alt="Liquorbot Overlay" style={{ width: 250, height: 250 }} />
+            <img src="/liquorbot_overlay.png" alt="Liquorbot Overlay" style={{ width: 250, height: 250 }} />
           </div>
           <div
             className="floating-image"
             style={{ top: '-3%', right: '-15%', transform: 'translateZ(30px) scale(1)', zIndex: 2, position: 'absolute' }}
           >
-            <img src="/nathanham-portfolio/devicesettings_overlay.png" alt="Device Settings Overlay" style={{ width: 300, height: 300 }} />
+            <img src="/devicesettings_overlay.png" alt="Device Settings Overlay" style={{ width: 300, height: 300 }} />
           </div>
           <div
             className="floating-image"
             style={{ bottom: '12%', left: '-6%', transform: 'translateZ(40px) scale(1)', zIndex: 2, position: 'absolute' }}
           >
-            <img src="/nathanham-portfolio/events_overlay.png" alt="Events Overlay" style={{ width: 250, height: 250 }} />
+            <img src="/events_overlay.png" alt="Events Overlay" style={{ width: 250, height: 250 }} />
           </div>
           <div
             className="floating-image"
             style={{ bottom: '15.5%', right: '-5%', transform: 'translateZ(40px) scale(1)', zIndex: 2, position: 'absolute' }}
           >
-            <img src="/nathanham-portfolio/drinkmenu_overlay.png" alt="Drink Menu Overlay" style={{ width: 250, height: 250 }} />
+            <img src="/drinkmenu_overlay.png" alt="Drink Menu Overlay" style={{ width: 250, height: 250 }} />
           </div>
           <div
             className="floating-image"
             style={{ bottom: '5.5%', right: '-6%', transform: 'translateZ(40px) scale(1)', zIndex: 2, position: 'absolute' }}
           >
-            <img src="/nathanham-portfolio/newevent_overlay.png" alt="New Event Overlay" style={{ width: 250, height: 250 }} />
+            <img src="/newevent_overlay.png" alt="New Event Overlay" style={{ width: 250, height: 250 }} />
           </div>
         </>
       )}
@@ -345,7 +345,7 @@ const RotatingFirmwareImage: React.FC = () => {
       {/* Firmware code structure image - full size, transparent background */}
       {!isMobile && (
         <img
-          src="/nathanham-portfolio/code_structure.png"
+          src="/code_structure.png"
           alt="Firmware Code Structure"
           style={{
             width: '100%',
@@ -429,7 +429,7 @@ const RotatingPCBImages: React.FC = () => {
         <>
           {/* BCU - back layer */}
           <img
-            src="/nathanham-portfolio/bcu.png"
+            src="/bcu.png"
             alt="BCU PCB"
             style={{
               position: 'absolute',
@@ -445,7 +445,7 @@ const RotatingPCBImages: React.FC = () => {
           />
           {/* FCU - middle layer */}
           <img
-            src="/nathanham-portfolio/fcu.png"
+            src="/fcu.png"
             alt="FCU PCB"
             style={{
               position: 'absolute',
@@ -461,7 +461,7 @@ const RotatingPCBImages: React.FC = () => {
           />
           {/* Silkscreen - front layer */}
           <img
-            src="/nathanham-portfolio/silkscreen.png"
+            src="/silkscreen.png"
             alt="Silkscreen"
             style={{
               position: 'absolute',
@@ -590,7 +590,7 @@ const LiquorBotDetailModal: React.FC<LiquorBotDetailModalProps> = ({ onClose, de
                   style={{ display: 'flex', alignItems: 'center', width: 'auto' }}
                 >
                   <img
-                    src="/nathanham-portfolio/appstore.png"
+                    src="/appstore.png"
                     alt="Download on the App Store"
                     style={{ width: 200, height: 'auto', objectFit: 'contain', borderRadius: 0, boxShadow: 'none', display: 'block' }}
                   />
