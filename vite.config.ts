@@ -22,5 +22,7 @@ export default defineConfig(({ mode }) => ({
   build: {
     outDir: 'docs',
   },
-  base: '/nathanham-portfolio/',
+  // With a custom domain on GitHub Pages, the site is served at the domain root.
+  // Use root base so assets resolve as /assets/* instead of /<repo>/*.
+  base: '/',
 }));
