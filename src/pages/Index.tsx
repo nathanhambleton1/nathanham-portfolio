@@ -350,7 +350,7 @@ const Index = () => {
                   transform: `scale(${sunScale})`,
                   transformOrigin: 'center',
                   transition: 'transform 0.1s',
-                  display: 'none',
+
                 }}
                 className="hidden sm:block"
                 loading="lazy"
