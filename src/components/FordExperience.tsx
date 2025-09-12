@@ -18,15 +18,15 @@ const milestones = [
   },
   {
     key: 'wraps',
-    title: 'Wrap Customization',
+    title: 'Wrap Program',
     blurb:
-      'Contributed to a vehicle wrap customization platform. Coordinated with legal and safety teams to ensure compliance for aftermarket offerings.',
+      'Supported the launch of Ford’s new vehicle wrap customization program, including the rollout of a 3D visualizer website for model selection and wrap preview. Coordinated with legal and safety teams to ensure compliance and best practices for installation. Helped design the customer experience for ordering, shop selection, and wrap visualization.',
     metric: 'Compliance ready',
     icon: <Shield className="w-4 h-4" />,
   },
   {
     key: 'package',
-    title: 'Aftermarket Package',
+    title: 'Aftermarket Packages',
     blurb:
       'Helped concept and launch a new aftermarket package program with external agencies on naming strategy and customer experience.',
     metric: 'New program',
@@ -66,7 +66,7 @@ export default function FordExperience() {
             <img src="/Ford-Symbol.png" alt="Ford Logo" className="h-16 w-auto" style={{  }} />
             <div className="flex flex-col items-start">
               <span className="font-semibold text-left">Experience</span>
-              <span className="text-sm text-muted-foreground text-left">Aftermarket Vehicle Personalization • Ford Motor Company</span>
+              <span className="text-sm text-muted-foreground text-left">Aftermarket Vehicle Personalization Intern • Ford Motor Company</span>
             </div>
           </div>
           <div className="flex items-center gap-3 text-xs text-muted-foreground">

@@ -15,11 +15,11 @@ import { IoPhonePortraitOutline, IoConstructOutline, IoCodeSlashOutline } from '
 import FordExperience from '../components/FordExperience';
 
 const Index = () => {
-  // LiquorBot Detail Modal State
-  const [liquorBotModalOpen, setLiquorBotModalOpen] = useState(false);
-  const [liquorBotDetailType, setLiquorBotDetailType] = useState<'mobile' | 'hardware' | 'firmware' | null>(null);
+  // Drink Machine Detail Modal State
+  const [drinkMachineModalOpen, setDrinkMachineModalOpen] = useState(false);
+  const [drinkMachineDetailType, setDrinkMachineDetailType] = useState<'mobile' | 'hardware' | 'firmware' | null>(null);
   const [visibleSections, setVisibleSections] = useState<Set<string>>(new Set());
-  const [liquorBotInView, setLiquorBotInView] = useState(false);
+  const [drinkMachineInView, setDrinkMachineInView] = useState(false);
   const [sunScale, setSunScale] = useState(1);
   const sunRef = useRef<HTMLImageElement>(null);
 
@@ -59,7 +59,7 @@ const Index = () => {
           if (entry.isIntersecting) {
             const sectionId = entry.target.id;
             setVisibleSections(prev => new Set([...prev, sectionId]));
-            if (sectionId === 'liquorbot') setLiquorBotInView(true);
+            if (sectionId === 'drink-machine') setDrinkMachineInView(true);
           }
         });
       },
@@ -294,28 +294,28 @@ const Index = () => {
         </div>
       </section>
 
-      {/* LiquorBot Project */}
-      <section id="liquorbot" className={`py-20 px-4 lg:px-8 section-enter ${visibleSections.has('liquorbot') ? 'visible' : ''}`}> 
+      {/* Drink Machine Project */}
+      <section id="drink-machine" className={`py-20 px-4 lg:px-8 section-enter ${visibleSections.has('drink-machine') ? 'visible' : ''}`}> 
         <div className="max-w-6xl mx-auto">
           <div className="text-center mb-16">
-            <h2 className="text-4xl md:text-5xl font-bold mb-6 text-foreground">LiquorBot</h2>
+            <h2 className="text-4xl md:text-5xl font-bold mb-6 text-foreground">Drink Machine</h2>
             <p className="text-xl text-muted-foreground max-w-3xl mx-auto leading-relaxed">
-              Automated bartending robot with mobile app integration and precision dispensing system
+              Automated drink machine with mobile app integration and precision dispensing & mixing system
             </p>
           </div>
           <ProjectCard
-            title="LiquorBot - Automated Bartending System"
+            title="Drink Machine - Automated Beverage System"
             description={
               <div className="space-y-3">
                 <p>
-                  A fully automated bartending robot capable of mixing precise cocktails through smartphone app control.
+                  A fully automated drink machine, personally designed, built, and coded from the ground up. Targeted for caterers, restaurants, and events.
                 </p>
                 <ul className="list-disc pl-5 space-y-1 text-sm">
                   <li>
-                    <strong>Mobile App (React Native):</strong> recipe library and customization, strength/size sliders, queueing, BLE/Wi‑Fi control, live progress + ETA, cleaning/flush routines.
+                    <strong>Mobile App (React Native):</strong> fully self-developed library and customization, strength/size sliders, queueing, BLE/Wi‑Fi control, live progress + ETA, cleaning/flush routines.
                   </li>
                   <li>
-                    <strong>Hardware & Electronics:</strong> custom PCBs, diaphragm pumps with check valves, per‑line calibration, food‑safe tubing and reservoirs, LED status indicators, modular bottle manifold.
+                    <strong>Hardware & Electronics:</strong> personally designed and fabricated custom PCBs, diaphragm pumps with check valves, per‑line calibration, food‑safe tubing and reservoirs.
                   </li>
                   <li>
                     <strong>Firmware (ESP32, Arduino framework):</strong> precise pump/solenoid orchestration, per‑ingredient flow profiles, calibration storage, OTA updates, IoT Core/MQTT connectivity, app integration.
@@ -326,7 +326,7 @@ const Index = () => {
             tags={["Robotics", "Mobile App", "PCB Design", "Microcontroller", "IoT"]}
             featured={true}
             layout="horizontal"
-            media={liquorBotInView ? <Suspense fallback={<div className="w-full h-full bg-gray-900 animate-pulse" />}>{<LiquorBotModelCanvas className="w-full h-full" />}</Suspense> : <div className="w-full h-full bg-gray-900 animate-pulse" />}
+            media={drinkMachineInView ? <Suspense fallback={<div className="w-full h-full bg-gray-900 animate-pulse" />}>{<LiquorBotModelCanvas className="w-full h-full" />}</Suspense> : <div className="w-full h-full bg-gray-900 animate-pulse" />}
             className="min-h-[420px] md:min-h-[460px]"
             mediaNoFrame
             mediaContainerClassName="md:min-w-[460px] md:w-[520px] h-[360px] md:h-full"
@@ -334,7 +334,7 @@ const Index = () => {
           <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mt-12">
             <div
               className="project-card text-center cursor-pointer hover:bg-minimal-accent/10 transition-colors"
-              onClick={() => { setLiquorBotModalOpen(true); setLiquorBotDetailType('mobile'); }}
+              onClick={() => { setDrinkMachineModalOpen(true); setDrinkMachineDetailType('mobile'); }}
               role="button"
               tabIndex={0}
             >
@@ -344,7 +344,7 @@ const Index = () => {
             </div>
             <div
               className="project-card text-center cursor-pointer hover:bg-minimal-accent/10 transition-colors"
-              onClick={() => { setLiquorBotModalOpen(true); setLiquorBotDetailType('hardware'); }}
+              onClick={() => { setDrinkMachineModalOpen(true); setDrinkMachineDetailType('hardware'); }}
               role="button"
               tabIndex={0}
             >
@@ -354,7 +354,7 @@ const Index = () => {
             </div>
             <div
               className="project-card text-center cursor-pointer hover:bg-minimal-accent/10 transition-colors"
-              onClick={() => { setLiquorBotModalOpen(true); setLiquorBotDetailType('firmware'); }}
+              onClick={() => { setDrinkMachineModalOpen(true); setDrinkMachineDetailType('firmware'); }}
               role="button"
               tabIndex={0}
             >
@@ -364,10 +364,10 @@ const Index = () => {
             </div>
           </div>
         </div>
-        {liquorBotModalOpen && (
+        {drinkMachineModalOpen && (
           <LiquorBotDetailModal
-            onClose={() => { setLiquorBotModalOpen(false); setLiquorBotDetailType(null); }}
-            detailType={liquorBotDetailType}
+            onClose={() => { setDrinkMachineModalOpen(false); setDrinkMachineDetailType(null); }}
+            detailType={drinkMachineDetailType}
           />
         )}
       </section>

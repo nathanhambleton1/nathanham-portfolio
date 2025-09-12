@@ -23,7 +23,7 @@ const NAV_ITEMS = [
   { id: "about", label: "About" },
   { id: "experience", label: "Experience" },
   { id: "solar-car", label: "Solar Car" },
-  { id: "liquorbot", label: "LiquorBot" },
+  { id: "drink-machine", label: "Drink Machine" },
   { id: "marketing", label: "Marketing" },
   { id: "skills", label: "Skills" },
   { id: "projects", label: "Projects" },
