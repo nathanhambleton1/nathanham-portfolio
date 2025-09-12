@@ -21,13 +21,13 @@ const CONFIG = {
 
 const NAV_ITEMS = [
   { id: "about", label: "About" },
-  { id: "college", label: "College" },
-  { id: "skills", label: "Skills" },
   { id: "experience", label: "Experience" },
   { id: "solar-car", label: "Solar Car" },
   { id: "liquorbot", label: "LiquorBot" },
   { id: "marketing", label: "Marketing" },
+  { id: "skills", label: "Skills" },
   { id: "projects", label: "Projects" },
+  { id: "college", label: "College" },
 ];
 
 export default function ArcRailNavigation() {

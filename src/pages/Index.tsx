@@ -80,7 +80,7 @@ const Index = () => {
       description: 'Led the reconfiguration and maintenance of the high-voltage system powering Fenrir, focusing on battery pack compliance, BMS optimization, and safe operation.',
       period: '2025 - Present',
       details: [
-        'Led a team of 5 undergraduate electical engineering students',
+        'Led a team of 10 undergraduate electical engineering students',
         'Reconfigured custom lithium-ion battery pack from 20kWh to 15kWh to meet new race regulations (100S9P), including spot welding new nickel/copper strips and cell rearrangement',
         'Refined battery management system (BMS) parameters for accurate state-of-charge, thermal, and current protection',
         'Managed motor controller and charging infrastructure for safe, reliable operation',
@@ -196,7 +196,7 @@ const Index = () => {
           </p>
 
           <p className="text-base sm:text-lg text-foreground/80 max-w-2xl mx-auto mb-8 md:mb-12 leading-relaxed w-full text-center">
-            Electrical engineer passionate about embedded systems, hardware, software, and creative tech. I love building things—from solar cars and IoT robots to mobile apps and VFX content.
+            Electrical engineer specializing in embedded systems, hardware, software, and creative technologies. Experienced in delivering end-to-end solutions—from solar vehicles and IoT robotics to mobile applications and visual effects.
           </p>
 
           {/* Social Links - stack vertically on mobile, horizontal on desktop */}
@@ -229,79 +229,7 @@ const Index = () => {
         </div>
       </section>
 
-      {/* Education Section */}
-      <section id="college" className={`py-20 px-4 lg:px-8 section-enter ${visibleSections.has('college') ? 'visible' : ''}`}>
-        <div className="max-w-6xl mx-auto">
-          <div className="text-center mb-16">
-            <h2 className="text-4xl md:text-5xl font-bold mb-6 text-foreground">
-              <a href="https://www.ncsu.edu/" target="_blank" rel="noopener noreferrer" className="hover:text-minimal-accent transition-colors">
-                North Carolina State University
-              </a>
-            </h2>
-            <p className="text-xl text-muted-foreground">B.S. Electrical and Electronics Engineering (2022–2026)</p>
-            <p className="text-lg text-muted-foreground mt-2">Focus: Embedded Systems, Circuit Design, Power Electronics</p>
-          </div>
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
-            <div className="project-card">
-              <h3 className="text-2xl font-semibold mb-4 text-foreground">Coursework & Activities</h3>
-              <div className="space-y-3">
-                {[
-                  'Embedded Systems Programming',
-                  'Analog & Digital Circuit Design',
-                  'Amplifier Design',
-                  'Power Electronics',
-                  'Signal Processing',
-                  'Robotics & Control Systems',
-                  'PCB Design & Fabrication',
-                ].map((course, index) => (
-                  <div key={index} className="flex items-center gap-3">
-                    <div className="w-2 h-2 bg-minimal-accent rounded-full" />
-                    <span className="font-mono text-sm">{course}</span>
-                  </div>
-                ))}
-              </div>
-            </div>
-            <div className="project-card">
-              <h3 className="text-2xl font-semibold mb-4 text-foreground">Achievements</h3>
-              <div className="space-y-4">
-                <div>
-                  <div className="text-lg font-medium">Senior Design Project</div>
-                  <div className="text-sm text-muted-foreground">Entrepreneurial capstone: Developed a new product from idea to prototype, including business planning, sponsor outreach, and hands-on fabrication.</div>
-                </div>
-                <div>
-                  <div className="text-lg font-medium">Dean's List</div>
-                  <div className="text-sm text-muted-foreground">Fall 2022, Spring 2023, Spring 2024, Fall 2024</div>
-                </div>
-                <div>
-                  <div className="text-lg font-medium">Solar Car Team Leadership</div>
-                  <div className="text-sm text-muted-foreground">High Voltage Team Lead</div>
-                </div>
-              </div>
-            </div>
-          </div>
-        </div>
-      </section>
-      {/* Skills Section */}
-      <section id="skills" className={`py-20 px-4 lg:px-8 section-enter ${visibleSections.has('skills') ? 'visible' : ''}`}> 
-        <div className="max-w-6xl mx-auto"> 
-          <div className="text-center mb-16"> 
-            <h2 className="text-4xl md:text-5xl font-bold mb-6 text-foreground">Skills</h2> 
-            <p className="text-xl text-muted-foreground">Embedded Systems • Mobile App Development • Power Electronics • Mechatronics • Product Development</p> 
-          </div> 
-          <div className="flex flex-wrap justify-center gap-4"> 
-            {skillsData.map((skill, idx) => ( 
-              <button 
-                key={idx} 
-                className="px-4 py-2 bg-card/50 border border-minimal-border rounded-lg text-foreground text-sm font-mono hover:bg-minimal-accent/20 transition-colors focus:outline-none" 
-                onClick={() => setSelectedSkill(skill)} 
-                type="button"
-              > 
-                {skill.name} 
-              </button> 
-            ))} 
-          </div> 
-        </div> 
-      </section>
+      
 
       {/* Experience Section */}
       <section id="experience" className={`py-20 px-4 lg:px-8 section-enter ${visibleSections.has('experience') ? 'visible' : ''}`}>
@@ -456,6 +384,28 @@ const Index = () => {
         </div>
       </section>
 
+      {/* Skills Section (moved to just above Projects) */}
+      <section id="skills" className={`py-20 px-4 lg:px-8 section-enter ${visibleSections.has('skills') ? 'visible' : ''}`}>
+        <div className="max-w-6xl mx-auto">
+          <div className="text-center mb-16">
+            <h2 className="text-4xl md:text-5xl font-bold mb-6 text-foreground">Skills</h2>
+            <p className="text-xl text-muted-foreground">Embedded Systems • Mobile App Development • Power Electronics • Mechatronics • Product Development</p>
+          </div>
+          <div className="flex flex-wrap justify-center gap-4">
+            {skillsData.map((skill, idx) => (
+              <button
+                key={idx}
+                className="px-4 py-2 bg-card/50 border border-minimal-border rounded-lg text-foreground text-sm font-mono hover:bg-minimal-accent/20 transition-colors focus:outline-none"
+                onClick={() => setSelectedSkill(skill)}
+                type="button"
+              >
+                {skill.name}
+              </button>
+            ))}
+          </div>
+        </div>
+      </section>
+
       {/* Projects Section */}
       <section id="projects" className={`py-20 px-4 lg:px-8 section-enter ${visibleSections.has('projects') ? 'visible' : ''}`}>
   <div className="max-w-6xl mx-auto">
@@ -467,6 +417,59 @@ const Index = () => {
             {otherProjects.slice(0, 4).map((project, index) => (
               <ProjectCard key={index} {...project} />
             ))}
+          </div>
+        </div>
+      </section>
+
+      {/* Education Section (moved to bottom beneath Projects) */}
+      <section id="college" className={`py-20 px-4 lg:px-8 section-enter ${visibleSections.has('college') ? 'visible' : ''}`}>
+        <div className="max-w-6xl mx-auto">
+          <div className="text-center mb-16">
+            <h2 className="text-4xl md:text-5xl font-bold mb-6 text-foreground">
+              <a href="https://www.ncsu.edu/" target="_blank" rel="noopener noreferrer" className="hover:text-minimal-accent transition-colors">
+                North Carolina State University
+              </a>
+            </h2>
+            <p className="text-xl text-muted-foreground">B.S. Electrical and Electronics Engineering (2022–2026)</p>
+            <p className="text-lg text-muted-foreground mt-2">Focus: Embedded Systems, Circuit Design, Power Electronics</p>
+          </div>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+            <div className="project-card">
+              <h3 className="text-2xl font-semibold mb-4 text-foreground">Coursework & Activities</h3>
+              <div className="space-y-3">
+                {[
+                  'Embedded Systems Programming',
+                  'Analog & Digital Circuit Design',
+                  'Amplifier Design',
+                  'Power Electronics',
+                  'Signal Processing',
+                  'Robotics & Control Systems',
+                  'PCB Design & Fabrication',
+                ].map((course, index) => (
+                  <div key={index} className="flex items-center gap-3">
+                    <div className="w-2 h-2 bg-minimal-accent rounded-full" />
+                    <span className="font-mono text-sm">{course}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+            <div className="project-card">
+              <h3 className="text-2xl font-semibold mb-4 text-foreground">Achievements</h3>
+              <div className="space-y-4">
+                <div>
+                  <div className="text-lg font-medium">Senior Design Project</div>
+                  <div className="text-sm text-muted-foreground">Entrepreneurial capstone: Developed a new product from idea to prototype, including business planning, sponsor outreach, and hands-on fabrication.</div>
+                </div>
+                <div>
+                  <div className="text-lg font-medium">Dean's List</div>
+                  <div className="text-sm text-muted-foreground">Fall 2022, Spring 2023, Spring 2024, Fall 2024</div>
+                </div>
+                <div>
+                  <div className="text-lg font-medium">Solar Car Team Leadership</div>
+                  <div className="text-sm text-muted-foreground">High Voltage Team Lead</div>
+                </div>
+              </div>
+            </div>
           </div>
         </div>
       </section>
