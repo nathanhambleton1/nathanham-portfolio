@@ -1,9 +1,9 @@
 import { useState, useEffect, useRef } from "react";
 import { BackButton } from "../components/BackButton";
-import { Button } from "@/components/ui/button";
-import { Card } from "@/components/ui/card";
-import { Switch } from "@/components/ui/switch";
-import { Label } from "@/components/ui/label";
+import { Button } from "../components/ui/button";
+import { Card } from "../components/ui/card";
+import { Switch } from "../components/ui/switch";
+import { Label } from "../components/ui/label";
 import { Play, Pause, RotateCcw } from "lucide-react";
 import { toast } from "sonner";
 
@@ -16,7 +16,8 @@ const PowerHour = () => {
   const previousMinute = useRef(0);
 
   const currentMinute = Math.floor(elapsedSeconds / 60) + 1;
-  const progress = (elapsedSeconds / 3600) * 100;
+  // Progress for the current minute (0-59 seconds)
+  const progress = ((elapsedSeconds % 60) / 60) * 100;
   const displayMinutes = Math.floor(elapsedSeconds / 60);
   const displaySeconds = elapsedSeconds % 60;
 
@@ -108,9 +109,8 @@ const PowerHour = () => {
   };
 
   return (
-    <div className="min-h-screen bg-gradient-bg">
-      <div className="container max-w-2xl mx-auto px-4 py-8">
-        <BackButton />
+    <div className="min-h-screen bg-gradient-bg flex items-center justify-center">
+      <div className="container max-w-2xl mx-auto px-4 py-8 flex flex-col items-center justify-center">
 
         <div className="text-center mb-8">
           <h1 className="text-4xl font-bold mb-2 text-foreground">Power Hour</h1>
@@ -127,7 +127,7 @@ const PowerHour = () => {
               </div>
             ) : (
               <>
-                <p className="text-5xl font-bold text-primary mb-2">
+                <p className="text-4xl font-bold text-primary mb-2">
                   Minute {currentMinute} / 60
                 </p>
                 <p className="text-3xl text-foreground font-mono">
@@ -142,7 +142,7 @@ const PowerHour = () => {
           <div className="mb-8">
             <div className="h-4 bg-muted rounded-full overflow-hidden">
               <div
-                className="h-full bg-gradient-primary transition-all duration-1000 rounded-full"
+                className="h-full bg-white transition-all duration-1000 rounded-full"
                 style={{ width: `${progress}%` }}
               />
             </div>
@@ -153,7 +153,7 @@ const PowerHour = () => {
             {!isRunning ? (
               <Button
                 onClick={handleStart}
-                className="bg-gradient-primary hover:opacity-90 text-primary-foreground px-8 py-6 text-lg"
+                className="bg-white text-black hover:bg-gray-100 px-8 py-6 text-lg border border-gray-300 shadow"
                 disabled={isComplete}
               >
                 <Play className="w-5 h-5 mr-2" />
@@ -162,8 +162,7 @@ const PowerHour = () => {
             ) : (
               <Button
                 onClick={handlePause}
-                variant="secondary"
-                className="px-8 py-6 text-lg"
+                className="bg-white text-black hover:bg-gray-100 px-8 py-6 text-lg border border-gray-300 shadow"
               >
                 <Pause className="w-5 h-5 mr-2" />
                 Pause
@@ -180,7 +179,7 @@ const PowerHour = () => {
           </div>
 
           {/* Sound Toggle */}
-          <div className="flex items-center justify-center gap-3 pt-6 border-t border-border">
+          <div className="flex items-center justify-center gap-3 pt-10">
             <Switch
               id="sound-toggle"
               checked={soundEnabled}

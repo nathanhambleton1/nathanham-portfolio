@@ -1,10 +1,10 @@
 import { useState } from "react";
 import { BackButton } from "../components/BackButton";
-import { Button } from "@/components/ui/button";
-import { Card } from "@/components/ui/card";
-import { Input } from "@/components/ui/input";
-import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
-import { Label } from "@/components/ui/label";
+import { Button } from "../components/ui/button";
+import { Card } from "../components/ui/card";
+import { Input } from "../components/ui/input";
+import { RadioGroup, RadioGroupItem } from "../components/ui/radio-group";
+import { Label } from "../components/ui/label";
 import { UserPlus, X, Shuffle, Users, Trophy, GripVertical } from "lucide-react";
 import { toast } from "sonner";
 import { DragDropContext, Droppable, Draggable, DropResult } from "@hello-pangea/dnd";
@@ -28,7 +28,8 @@ const BeerBall = () => {
   const [players, setPlayers] = useState<string[]>([]);
   const [newPlayerName, setNewPlayerName] = useState("");
   const [teamMode, setTeamMode] = useState<TeamMode>("random");
-  const [teamSize, setTeamSize] = useState<number>(2);
+  // Team size is fixed to 2 players
+  const teamSize = 2;
   const [teams, setTeams] = useState<Team[]>([]);
   const [numGames, setNumGames] = useState<number>(6);
   const [bracket, setBracket] = useState<Game[]>([]);
@@ -208,8 +209,6 @@ const BeerBall = () => {
   return (
     <div className="min-h-screen bg-gradient-bg">
       <div className="container max-w-3xl mx-auto px-4 py-8">
-        <BackButton />
-
         <div className="text-center mb-8">
           <h1 className="text-4xl font-bold mb-2 text-foreground">Beer Ball Teams & Bracket</h1>
           <p className="text-muted-foreground">Organize teams and schedule matches</p>
@@ -221,9 +220,6 @@ const BeerBall = () => {
             <Users className="w-5 h-5" />
             1. Players
           </h3>
-          <p className="text-sm text-muted-foreground mb-4">
-            Add everyone who will play Beer Ball.
-          </p>
 
           <div className="flex gap-2 mb-4">
             <Input
@@ -236,7 +232,7 @@ const BeerBall = () => {
             />
             <Button
               onClick={addPlayer}
-              className="bg-gradient-secondary text-secondary-foreground"
+              className="bg-white text-black border border-border hover:bg-gray-100"
             >
               <UserPlus className="w-5 h-5" />
             </Button>
@@ -246,7 +242,6 @@ const BeerBall = () => {
             teamMode === "skill" ? (
               <div className="mb-2">
                 <p className="text-xs text-muted-foreground mb-3">
-                  <GripVertical className="w-4 h-4 inline mr-1" />
                   Drag to rank from best (top) to least experienced (bottom)
                 </p>
                 <DragDropContext onDragEnd={onDragEnd}>
@@ -321,45 +316,26 @@ const BeerBall = () => {
 
           <div className="space-y-4">
             <div>
-              <Label className="text-foreground mb-2 block">Team Generation Mode</Label>
               <RadioGroup value={teamMode} onValueChange={(v) => setTeamMode(v as TeamMode)}>
                 <div className="flex items-center space-x-2 mb-2">
                   <RadioGroupItem value="random" id="random" />
-                  <Label htmlFor="random" className="cursor-pointer">
+                  <Label htmlFor="random" className="cursor-pointer ml-2">
                     Random Teams
                   </Label>
                 </div>
                 <div className="flex items-center space-x-2">
                   <RadioGroupItem value="skill" id="skill" />
-                  <Label htmlFor="skill" className="cursor-pointer">
-                    Skill-Based Teams (Balanced)
+                  <Label htmlFor="skill" className="cursor-pointer ml-2">
+                    Skill-Based Teams
                   </Label>
                 </div>
               </RadioGroup>
             </div>
 
-            <div>
-              <Label htmlFor="teamSize" className="text-foreground mb-2 block">
-                Team Size
-              </Label>
-              <div className="flex gap-2">
-                {[2, 3, 4].map((size) => (
-                  <Button
-                    key={size}
-                    variant={teamSize === size ? "default" : "outline"}
-                    onClick={() => setTeamSize(size)}
-                    className="flex-1"
-                  >
-                    {size} Players
-                  </Button>
-                ))}
-              </div>
-            </div>
-
             <Button
               onClick={generateTeams}
               disabled={players.length < teamSize * 2}
-              className="w-full bg-gradient-primary hover:opacity-90 text-primary-foreground"
+              className="w-full bg-white text-black border border-border hover:bg-gray-100"
             >
               <Shuffle className="w-4 h-4 mr-2" />
               Generate Teams
@@ -442,7 +418,7 @@ const BeerBall = () => {
 
               <Button
                 onClick={generateBracket}
-                className="w-full bg-gradient-primary hover:opacity-90 text-primary-foreground"
+                className="w-full bg-white text-black border border-border hover:bg-gray-100"
               >
                 <Trophy className="w-4 h-4 mr-2" />
                 Generate Bracket

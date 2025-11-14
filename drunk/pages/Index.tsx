@@ -5,43 +5,43 @@ const Index = () => {
   const games = [
     {
       title: "Power Hour",
-      description: "Take a sip of beer every minute for an hour. Classic endurance challenge!",
+      description: "Sip of beer every minute for an hour.",
       icon: Clock,
       path: "power-hour",
     },
     {
-      title: "Beer Pong Scoreboard",
-      description: "Track cups and scores for beer pong. Keep the game organized!",
-      icon: Trophy,
-      path: "beer-pong",
+      title: "Beer Ball",
+      description: "Organize teams and create match schedules.",
+      icon: Users,
+      path: "beer-ball",
     },
     {
       title: "King's Cup Tracker",
-      description: "Draw cards and see the rules, no physical deck required.",
+      description: "Draw cards and see the rules.",
       icon: Crown,
       path: "kings-cup",
     },
     {
       title: "Sip Roulette",
-      description: "Randomly pick players and sip prompts. Spin the wheel of fun!",
+      description: "Randomly pick players and sip prompts.",
       icon: Dices,
       path: "sip-roulette",
     },
     {
-      title: "Beer Ball Teams & Bracket",
-      description: "Organize teams and create match schedules. Perfect for tournaments!",
-      icon: Users,
-      path: "beer-ball",
+      title: "Beer Pong Scoreboard",
+      description: "Track cups and scores for beer pong.",
+      icon: Trophy,
+      path: "beer-pong",
     },
   ];
 
   return (
-    <div className="min-h-screen bg-gradient-bg">
-      <div className="container max-w-2xl mx-auto px-4 py-8">
+    <div className="min-h-screen bg-gradient-bg pb-24">
+      <div className="container max-w-2xl mx-auto px-4 py-16 pb-24">
         {/* Header */}
-        <header className="text-center mb-12 animate-slide-up">
+        <header className="text-center mb-12 animate-slide-up pt-16 pb-8">
           <h1 className="text-5xl font-bold mb-3 bg-gradient-primary bg-clip-text text-transparent">
-            DrinkLoop
+            Lets Get Drunk
           </h1>
           <p className="text-muted-foreground text-lg">
             Tap a game to get started
@@ -60,12 +60,6 @@ const Index = () => {
             </div>
           ))}
         </div>
-
-        {/* Disclaimer */}
-        <footer className="text-center text-sm text-muted-foreground border-t border-border pt-6">
-          <p className="font-semibold text-warning mb-1">⚠️ For adults 21+ only</p>
-          <p>Please drink responsibly. Do not drink and drive.</p>
-        </footer>
       </div>
     </div>
   );

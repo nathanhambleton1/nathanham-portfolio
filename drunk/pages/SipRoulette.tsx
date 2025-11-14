@@ -1,8 +1,8 @@
 import { useState } from "react";
 import { BackButton } from "../components/BackButton";
-import { Button } from "@/components/ui/button";
-import { Card } from "@/components/ui/card";
-import { Input } from "@/components/ui/input";
+import { Button } from "../components/ui/button";
+import { Card } from "../components/ui/card";
+import { Input } from "../components/ui/input";
 import { Dices, UserPlus, X } from "lucide-react";
 import { toast } from "sonner";
 
