@@ -15,6 +15,10 @@ const PowerHour = () => {
 
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const [audioUnlocked, setAudioUnlocked] = useState(false);
+  // Web Audio API refs for mixing where supported
+  const audioCtxRef = useRef<AudioContext | null>(null);
+  const beepBufferRef = useRef<AudioBuffer | null>(null);
+  const gainNodeRef = useRef<GainNode | null>(null);
   const previousMinute = useRef(0);
 
   const currentMinute = Math.floor(elapsedSeconds / 60) + 1;
@@ -56,33 +60,98 @@ const PowerHour = () => {
 
   const playBeep = () => {
     if (!soundEnabled) return;
-    if (!audioRef.current) return;
 
+    // Prefer Web Audio API buffer playback (may mix on many platforms).
+    const ctx = audioCtxRef.current;
+    const buffer = beepBufferRef.current;
+    if (ctx && buffer) {
+      try {
+        // Create a one-shot buffer source
+        const src = ctx.createBufferSource();
+        src.buffer = buffer;
+        // connect to gain if present
+        if (gainNodeRef.current) src.connect(gainNodeRef.current);
+        else src.connect(ctx.destination);
+        // start immediately
+        src.start();
+      } catch (err) {
+        console.warn("WebAudio beep play failed:", err);
+        // fallback to audio element
+        playAudioElementFallback();
+      }
+      return;
+    }
+
+    // Fallback: play the audio element
+    playAudioElementFallback();
+  };
+
+  const playAudioElementFallback = () => {
+    if (!audioRef.current) return;
     try {
       audioRef.current.currentTime = 0;
       const playPromise = audioRef.current.play();
-      if (playPromise) {
-        playPromise.catch((err) => {
-          console.warn("Beep play failed:", err);
-        });
-      }
+      if (playPromise) playPromise.catch((err) => console.warn("Beep play failed:", err));
     } catch (error) {
-      console.error("Error playing beep:", error);
+      console.error("Error playing beep element:", error);
     }
   };
 
-  // Called on Start/Resume button pointer down to "unlock" audio on iOS
+  // Called on Start/Resume button pointer down to "unlock" audio on iOS and initialize WebAudio
   const initAudioOnGesture = () => {
-    if (!audioRef.current || audioUnlocked === true) return;
+    if (audioUnlocked) return;
 
+    // First try to create/unlock the Web Audio API context so we can play
+    // short sounds through it (this can allow mixing on some platforms).
+    try {
+      if (!audioCtxRef.current) {
+        const Ctx = (window.AudioContext || (window as any).webkitAudioContext) as
+          | typeof AudioContext
+          | undefined;
+        if (Ctx) {
+          audioCtxRef.current = new Ctx();
+          // create gain node for volume control
+          gainNodeRef.current = audioCtxRef.current.createGain();
+          gainNodeRef.current.gain.value = 1.0;
+          gainNodeRef.current.connect(audioCtxRef.current.destination);
+        }
+      }
+
+      // If we have a WebAudio context, fetch and decode the beep into a buffer.
+      if (audioCtxRef.current && !beepBufferRef.current) {
+        const base = (import.meta as any).env?.BASE_URL ?? "/";
+        const url = `${base}beep.mp3`;
+        fetch(url)
+          .then((res) => res.arrayBuffer())
+          .then((arr) => audioCtxRef.current!.decodeAudioData(arr))
+          .then((decoded) => {
+            beepBufferRef.current = decoded;
+            setAudioUnlocked(true);
+          })
+          .catch((err) => {
+            console.warn("Failed to load beep into WebAudio buffer:", err);
+            // Fallback: try unlocking the audio element
+            tryUnlockAudioElement();
+          });
+        return;
+      }
+
+      // If we reached here and WebAudio isn't available, fall back to unlocking the audio element
+      tryUnlockAudioElement();
+    } catch (err) {
+      console.warn("initAudioOnGesture error:", err);
+      tryUnlockAudioElement();
+    }
+  };
+
+  const tryUnlockAudioElement = () => {
+    if (!audioRef.current) return;
     const el = audioRef.current;
     el.currentTime = 0;
-
     const playPromise = el.play();
     if (playPromise) {
       playPromise
         .then(() => {
-          // Immediately pause; we've now unlocked the audio element
           el.pause();
           el.currentTime = 0;
           setAudioUnlocked(true);
