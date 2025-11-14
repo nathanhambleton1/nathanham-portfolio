@@ -1,0 +1,74 @@
+import { GameCard } from "../components/GameCard";
+import { Clock, Trophy, Crown, Dices, Users } from "lucide-react";
+
+const Index = () => {
+  const games = [
+    {
+      title: "Power Hour",
+      description: "Take a sip of beer every minute for an hour. Classic endurance challenge!",
+      icon: Clock,
+      path: "power-hour",
+    },
+    {
+      title: "Beer Pong Scoreboard",
+      description: "Track cups and scores for beer pong. Keep the game organized!",
+      icon: Trophy,
+      path: "beer-pong",
+    },
+    {
+      title: "King's Cup Tracker",
+      description: "Draw cards and see the rules, no physical deck required.",
+      icon: Crown,
+      path: "kings-cup",
+    },
+    {
+      title: "Sip Roulette",
+      description: "Randomly pick players and sip prompts. Spin the wheel of fun!",
+      icon: Dices,
+      path: "sip-roulette",
+    },
+    {
+      title: "Beer Ball Teams & Bracket",
+      description: "Organize teams and create match schedules. Perfect for tournaments!",
+      icon: Users,
+      path: "beer-ball",
+    },
+  ];
+
+  return (
+    <div className="min-h-screen bg-gradient-bg">
+      <div className="container max-w-2xl mx-auto px-4 py-8">
+        {/* Header */}
+        <header className="text-center mb-12 animate-slide-up">
+          <h1 className="text-5xl font-bold mb-3 bg-gradient-primary bg-clip-text text-transparent">
+            DrinkLoop
+          </h1>
+          <p className="text-muted-foreground text-lg">
+            Tap a game to get started
+          </p>
+        </header>
+
+        {/* Game Cards */}
+        <div className="grid gap-4 mb-12">
+          {games.map((game, index) => (
+            <div
+              key={game.path}
+              className="animate-slide-up"
+              style={{ animationDelay: `${index * 100}ms` }}
+            >
+              <GameCard {...game} />
+            </div>
+          ))}
+        </div>
+
+        {/* Disclaimer */}
+        <footer className="text-center text-sm text-muted-foreground border-t border-border pt-6">
+          <p className="font-semibold text-warning mb-1">⚠️ For adults 21+ only</p>
+          <p>Please drink responsibly. Do not drink and drive.</p>
+        </footer>
+      </div>
+    </div>
+  );
+};
+
+export default Index;
