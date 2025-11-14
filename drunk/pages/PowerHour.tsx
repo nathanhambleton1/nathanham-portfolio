@@ -13,6 +13,7 @@ const PowerHour = () => {
   const [soundEnabled, setSoundEnabled] = useState(true);
   const [isComplete, setIsComplete] = useState(false);
   const audioRef = useRef<HTMLAudioElement | null>(null);
+  const audioContextRef = useRef<AudioContext | null>(null);
   const previousMinute = useRef(0);
 
   const currentMinute = Math.floor(elapsedSeconds / 60) + 1;
@@ -22,14 +23,15 @@ const PowerHour = () => {
   const displaySeconds = elapsedSeconds % 60;
 
   useEffect(() => {
-    // Initialize audio
-    audioRef.current = new Audio();
-    // Using a simple beep sound (we'll create this with Web Audio API)
-    const audioContext = new (window.AudioContext || (window as any).webkitAudioContext)();
-    
+    // Clean up audio context on unmount
     return () => {
-      if (audioRef.current) {
-        audioRef.current.pause();
+      if (audioContextRef.current) {
+        try {
+          audioContextRef.current.close();
+        } catch (e) {
+          // ignore
+        }
+        audioContextRef.current = null;
       }
     };
   }, []);
@@ -70,7 +72,22 @@ const PowerHour = () => {
     if (!soundEnabled) return;
 
     try {
-      const audioContext = new (window.AudioContext || (window as any).webkitAudioContext)();
+      // Reuse a single AudioContext to avoid iOS creating multiple suspended contexts
+      let audioContext = audioContextRef.current;
+      if (!audioContext) {
+        audioContext = new (window.AudioContext || (window as any).webkitAudioContext)();
+        audioContextRef.current = audioContext;
+      }
+
+      // Some browsers (Safari iOS) start the AudioContext in a 'suspended' state
+      if (audioContext.state === "suspended") {
+        // Try to resume; this should be called from a user gesture when possible
+        audioContext.resume().catch((err) => {
+          // resume can fail if not triggered by a user gesture
+          console.warn("AudioContext resume failed:", err);
+        });
+      }
+
       const oscillator = audioContext.createOscillator();
       const gainNode = audioContext.createGain();
 
@@ -87,6 +104,21 @@ const PowerHour = () => {
       oscillator.stop(audioContext.currentTime + 0.3);
     } catch (error) {
       console.error("Error playing beep:", error);
+    }
+  };
+
+  const initAudioOnGesture = () => {
+    if (audioContextRef.current) return;
+    try {
+      const audioContext = new (window.AudioContext || (window as any).webkitAudioContext)();
+      audioContextRef.current = audioContext;
+      // Try to immediately resume so subsequent play calls work on iOS Safari
+      audioContext.resume().catch((err) => {
+        // Not fatal; playBeep will also attempt resume
+        console.warn("AudioContext resume on gesture failed:", err);
+      });
+    } catch (e) {
+      console.warn("Failed to create AudioContext on gesture:", e);
     }
   };
 
@@ -152,6 +184,9 @@ const PowerHour = () => {
           <div className="flex gap-3 justify-center mb-6">
             {!isRunning ? (
               <Button
+                onPointerDown={initAudioOnGesture}
+                onTouchStart={initAudioOnGesture}
+                onMouseDown={initAudioOnGesture}
                 onClick={handleStart}
                 className="bg-white text-black hover:bg-gray-100 px-8 py-6 text-lg border border-gray-300 shadow"
                 disabled={isComplete}
