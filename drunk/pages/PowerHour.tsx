@@ -64,12 +64,10 @@ const PowerHour = () => {
       if (playPromise) {
         playPromise.catch((err) => {
           console.warn("Beep play failed:", err);
-          toast.error("Beep failed to play. Check file path or permissions.");
         });
       }
     } catch (error) {
       console.error("Error playing beep:", error);
-      toast.error("Error playing beep: " + String(error));
     }
   };
 
@@ -91,37 +89,9 @@ const PowerHour = () => {
         })
         .catch((err) => {
           console.warn("Initial audio unlock failed:", err);
-          toast.error("Unable to unlock audio on gesture.");
         });
     }
   };
-
-  // Attach listeners to the audio element so we can notify when the file fails to load
-  useEffect(() => {
-    // run once after mount — the ref should be set by then
-    const el = audioRef.current;
-    if (!el) return;
-
-    const onError = () => {
-      // audio.error may be null; include the src for easy debugging
-      const src = el.src || `${(import.meta as any).env?.BASE_URL ?? '/'}beep.mp3`;
-      console.warn('Audio element error', el.error, 'src=', src);
-      toast.error(`Beep audio failed to load: ${src}`);
-    };
-
-    const onCanPlay = () => {
-      // silent success indicator in console
-      console.debug('Beep audio can play:', el.src);
-    };
-
-    el.addEventListener('error', onError);
-    el.addEventListener('canplaythrough', onCanPlay);
-
-    return () => {
-      el.removeEventListener('error', onError);
-      el.removeEventListener('canplaythrough', onCanPlay);
-    };
-  }, []);
 
   const handleStart = () => {
     setIsRunning(true);
