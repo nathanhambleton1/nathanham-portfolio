@@ -12,29 +12,15 @@ const PowerHour = () => {
   const [elapsedSeconds, setElapsedSeconds] = useState(0);
   const [soundEnabled, setSoundEnabled] = useState(true);
   const [isComplete, setIsComplete] = useState(false);
+
   const audioRef = useRef<HTMLAudioElement | null>(null);
-  const audioContextRef = useRef<AudioContext | null>(null);
+  const [audioUnlocked, setAudioUnlocked] = useState(false);
   const previousMinute = useRef(0);
 
   const currentMinute = Math.floor(elapsedSeconds / 60) + 1;
-  // Progress for the current minute (0-59 seconds)
   const progress = ((elapsedSeconds % 60) / 60) * 100;
   const displayMinutes = Math.floor(elapsedSeconds / 60);
   const displaySeconds = elapsedSeconds % 60;
-
-  useEffect(() => {
-    // Clean up audio context on unmount
-    return () => {
-      if (audioContextRef.current) {
-        try {
-          audioContextRef.current.close();
-        } catch (e) {
-          // ignore
-        }
-        audioContextRef.current = null;
-      }
-    };
-  }, []);
 
   useEffect(() => {
     let interval: NodeJS.Timeout;
@@ -66,59 +52,44 @@ const PowerHour = () => {
     }
 
     return () => clearInterval(interval);
-  }, [isRunning, elapsedSeconds, isComplete]);
+  }, [isRunning, elapsedSeconds, isComplete, soundEnabled, audioUnlocked]);
 
   const playBeep = () => {
     if (!soundEnabled) return;
+    if (!audioRef.current) return;
 
     try {
-      // Reuse a single AudioContext to avoid iOS creating multiple suspended contexts
-      let audioContext = audioContextRef.current;
-      if (!audioContext) {
-        audioContext = new (window.AudioContext || (window as any).webkitAudioContext)();
-        audioContextRef.current = audioContext;
-      }
-
-      // Some browsers (Safari iOS) start the AudioContext in a 'suspended' state
-      if (audioContext.state === "suspended") {
-        // Try to resume; this should be called from a user gesture when possible
-        audioContext.resume().catch((err) => {
-          // resume can fail if not triggered by a user gesture
-          console.warn("AudioContext resume failed:", err);
+      audioRef.current.currentTime = 0;
+      const playPromise = audioRef.current.play();
+      if (playPromise) {
+        playPromise.catch((err) => {
+          console.warn("Beep play failed:", err);
         });
       }
-
-      const oscillator = audioContext.createOscillator();
-      const gainNode = audioContext.createGain();
-
-      oscillator.connect(gainNode);
-      gainNode.connect(audioContext.destination);
-
-      oscillator.frequency.value = 800;
-      oscillator.type = "sine";
-
-      gainNode.gain.setValueAtTime(0.3, audioContext.currentTime);
-      gainNode.gain.exponentialRampToValueAtTime(0.01, audioContext.currentTime + 0.3);
-
-      oscillator.start(audioContext.currentTime);
-      oscillator.stop(audioContext.currentTime + 0.3);
     } catch (error) {
       console.error("Error playing beep:", error);
     }
   };
 
+  // Called on Start/Resume button pointer down to "unlock" audio on iOS
   const initAudioOnGesture = () => {
-    if (audioContextRef.current) return;
-    try {
-      const audioContext = new (window.AudioContext || (window as any).webkitAudioContext)();
-      audioContextRef.current = audioContext;
-      // Try to immediately resume so subsequent play calls work on iOS Safari
-      audioContext.resume().catch((err) => {
-        // Not fatal; playBeep will also attempt resume
-        console.warn("AudioContext resume on gesture failed:", err);
-      });
-    } catch (e) {
-      console.warn("Failed to create AudioContext on gesture:", e);
+    if (!audioRef.current || audioUnlocked === true) return;
+
+    const el = audioRef.current;
+    el.currentTime = 0;
+
+    const playPromise = el.play();
+    if (playPromise) {
+      playPromise
+        .then(() => {
+          // Immediately pause; we've now unlocked the audio element
+          el.pause();
+          el.currentTime = 0;
+          setAudioUnlocked(true);
+        })
+        .catch((err) => {
+          console.warn("Initial audio unlock failed:", err);
+        });
     }
   };
 
@@ -126,6 +97,8 @@ const PowerHour = () => {
     setIsRunning(true);
     if (elapsedSeconds === 0) {
       previousMinute.current = 0;
+      // Play a confirmation beep when the session first starts
+      playBeep();
     }
   };
 
@@ -142,6 +115,13 @@ const PowerHour = () => {
 
   return (
     <div className="min-h-screen bg-gradient-bg flex items-center justify-center">
+      {/* Beep audio – BASE_URL handles GitHub Pages subpath like /drunk/power-hour */}
+      <audio
+        ref={audioRef}
+        src={`${(import.meta as any).env?.BASE_URL ?? '/'}beep.mp3`}
+        preload="auto"
+      />
+
       <div className="container max-w-2xl mx-auto px-4 py-8 flex flex-col items-center justify-center">
 
         <div className="text-center mb-8">
