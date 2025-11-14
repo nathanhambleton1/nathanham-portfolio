@@ -83,8 +83,7 @@ const KingsCup = () => {
   return (
     <div className="min-h-screen bg-gradient-bg">
       <div className="container max-w-2xl mx-auto px-4 py-8">
-        <BackButton />
-
+        <div className="w-full" style={{ height: '48px' }} />
         <div className="text-center mb-8">
           <h1 className="text-4xl font-bold mb-2 text-foreground">King's Cup</h1>
           <p className="text-muted-foreground">Virtual deck with rules built-in</p>
@@ -120,10 +119,12 @@ const KingsCup = () => {
           </Card>
         ) : (
           <Card className="bg-gradient-card border-border p-12 mb-6 text-center">
+            <div className="w-full" style={{ height: '12px' }} />
             <p className="text-6xl mb-4">🃏</p>
             <p className="text-xl text-muted-foreground">
               {isInitialized ? "Draw a card to begin" : "Shuffle the deck to start"}
             </p>
+            <div className="w-full" style={{ height: '12px' }} />
           </Card>
         )}
 
@@ -139,14 +140,14 @@ const KingsCup = () => {
           {deck.length > 0 ? (
             <Button
               onClick={drawCard}
-              className="flex-1 bg-gradient-primary hover:opacity-90 text-primary-foreground py-6 text-lg"
+              className="flex-1 bg-white text-black hover:bg-gray-100 py-6 text-lg border border-gray-300"
             >
               Draw Card
             </Button>
           ) : (
             <Button
               onClick={initializeDeck}
-              className="flex-1 bg-gradient-secondary hover:opacity-90 text-secondary-foreground py-6 text-lg"
+              className="flex-1 bg-white text-black hover:bg-gray-100 py-6 text-lg border border-gray-300"
             >
               <Shuffle className="w-5 h-5 mr-2" />
               New Game / Reshuffle

@@ -53,8 +53,7 @@ const BeerPong = () => {
   return (
     <div className="min-h-screen bg-gradient-bg">
       <div className="container max-w-2xl mx-auto px-4 py-8">
-        <BackButton />
-
+        <div className="w-full" style={{ height: '48px' }} />
         <div className="text-center mb-8">
           <h1 className="text-4xl font-bold mb-2 text-foreground">Beer Pong Scoreboard</h1>
           <p className="text-muted-foreground">Track cups and dominate the table</p>
@@ -65,14 +64,22 @@ const BeerPong = () => {
           <Button
             variant={cupCount === 10 ? "default" : "outline"}
             onClick={() => handleCupCountChange(10)}
-            className={cupCount === 10 ? "bg-gradient-primary" : ""}
+            className={
+              cupCount === 10
+                ? "bg-white text-black border border-gray-300 shadow font-bold"
+                : ""
+            }
           >
             10 Cups
           </Button>
           <Button
             variant={cupCount === 6 ? "default" : "outline"}
             onClick={() => handleCupCountChange(6)}
-            className={cupCount === 6 ? "bg-gradient-primary" : ""}
+            className={
+              cupCount === 6
+                ? "bg-white text-black border border-gray-300 shadow font-bold"
+                : ""
+            }
           >
             6 Cups
           </Button>
@@ -81,7 +88,7 @@ const BeerPong = () => {
         {/* Winner Display */}
         {winner && (
           <Card className="bg-gradient-primary border-0 p-6 mb-6 text-center animate-pulse-glow">
-            <p className="text-3xl font-bold text-primary-foreground">
+            <p className="text-3xl font-bold text-white">
               🏆 {winner} Wins! 🏆
             </p>
           </Card>

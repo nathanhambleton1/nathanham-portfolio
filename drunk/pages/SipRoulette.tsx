@@ -80,8 +80,7 @@ const SipRoulette = () => {
   return (
     <div className="min-h-screen bg-gradient-bg">
       <div className="container max-w-2xl mx-auto px-4 py-8">
-        <BackButton />
-
+        <div className="w-full" style={{ height: '48px' }} />
         <div className="text-center mb-8">
           <h1 className="text-4xl font-bold mb-2 text-foreground">Sip Roulette</h1>
           <p className="text-muted-foreground">Spin the wheel of fate!</p>
@@ -102,7 +101,7 @@ const SipRoulette = () => {
             />
             <Button
               onClick={addPlayer}
-              className="bg-gradient-secondary text-secondary-foreground"
+              className="bg-white text-black hover:bg-gray-200"
             >
               <UserPlus className="w-5 h-5" />
             </Button>
@@ -136,7 +135,7 @@ const SipRoulette = () => {
         <Button
           onClick={spin}
           disabled={players.length === 0}
-          className="w-full bg-gradient-primary hover:opacity-90 text-primary-foreground py-8 text-xl mb-6"
+          className="w-full bg-white text-black hover:bg-gray-200 py-8 text-xl mb-6 border border-gray-300"
         >
           <Dices className="w-6 h-6 mr-2" />
           Spin the Roulette!
@@ -145,7 +144,8 @@ const SipRoulette = () => {
         {/* Current Result */}
         {currentResult && (
           <Card className="bg-gradient-primary border-0 p-8 mb-6 text-center animate-pulse-glow">
-            <p className="text-4xl font-bold text-primary-foreground mb-3">
+            <p className="text-2xl text-white mb-2">The winner is:</p>
+            <p className="text-4xl font-bold text-white mb-3">
               {currentResult.player}
             </p>
             <p className="text-2xl text-primary-foreground/90">
