@@ -79,7 +79,7 @@ export default function CollectPopup({
           <DialogDescription>
             {mode === 'bank' && 'Collect a custom amount from the bank.'}
             {mode === 'pass_go' && 'Collect your pass go amount (can be doubled if landing).'}
-            {mode === 'free_parking' && 'Collect the Free Parking pot (this will empty it).'}
+            {mode === 'free_parking' && 'Collect the Free Parking pot.'}
           </DialogDescription>
         </DialogHeader>
 

@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, useRef } from "react";
 import PayPopup from "../components/PayPopup";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "../components/ui/dialog";
 import CollectPopup from "../components/CollectPopup";
@@ -56,6 +56,8 @@ const Drunkopoly = () => {
   const [collectModalOpen, setCollectModalOpen] = useState(false);
   const [collectMode, setCollectMode] = useState<'bank'|'pass_go'|'free_parking'|null>(null);
   const [blockedPaymentMessage, setBlockedPaymentMessage] = useState<string | null>(null);
+  const [lastFlash, setLastFlash] = useState<'up'|'down'|null>(null);
+  const prevBalanceRef = useRef<number | null>(null);
 
   // Generate unique game code
   const generateCode = (len = 6) => {
@@ -674,7 +676,25 @@ const Drunkopoly = () => {
         if (gameData.data) {
           setGame(gameData.data);
           const updatedPlayer = players.find((p: any) => p.id === player.id);
-          if (updatedPlayer) setPlayer(updatedPlayer);
+          if (updatedPlayer) {
+            // detect balance delta to flash color for incoming/outgoing payments
+            try {
+              const prev = prevBalanceRef.current != null ? prevBalanceRef.current : (player?.balance ?? 0);
+              const next = Number(updatedPlayer.balance ?? 0);
+              if (next > prev) {
+                setLastFlash('up');
+                setTimeout(() => setLastFlash(null), 900);
+              } else if (next < prev) {
+                setLastFlash('down');
+                setTimeout(() => setLastFlash(null), 900);
+              }
+            } catch (e) {
+              // ignore
+            }
+
+            setPlayer(updatedPlayer);
+            prevBalanceRef.current = Number(updatedPlayer.balance ?? 0);
+          }
         }
       } catch (e) {
         console.warn('Polling game state failed', e);
@@ -1055,8 +1075,7 @@ const Drunkopoly = () => {
             Current Balance
           </div>
           <div className="text-6xl font-extrabold text-primary text-center">
-            $
-            {(player?.balance ?? game?.initial_balance ?? 1500).toLocaleString()}
+            <AnimatedNumber value={player?.balance ?? game?.initial_balance ?? 1500} flash={lastFlash} />
           </div>
         </div>
 
@@ -1124,6 +1143,26 @@ const Drunkopoly = () => {
                   return found ? found.name : b.to_player_id;
                 }).join(', ');
                 setBlockedPaymentMessage(`No money was sent to ${names} because they have pending sips. Congrats! 🎉`);
+              }
+
+              // Compute net delta for current player from returned money_events and trigger flash
+              try {
+                const events = result.money_events || [];
+                let net = 0;
+                for (const ev of events) {
+                  const amt = Number(ev.amount || 0);
+                  if (ev.to_player_id === player.id) net += amt;
+                  if (ev.from_player_id === player.id) net -= amt;
+                }
+                if (net > 0) {
+                  setLastFlash('up');
+                  setTimeout(() => setLastFlash(null), 900);
+                } else if (net < 0) {
+                  setLastFlash('down');
+                  setTimeout(() => setLastFlash(null), 900);
+                }
+              } catch (e) {
+                // ignore flash errors
               }
 
               // Refresh state
@@ -1241,6 +1280,85 @@ function Section({
     <div className={`w-full flex flex-col items-center ${className}`}>
       <div className="text-xl font-bold mb-4 text-foreground">{title}</div>
       {children}
+    </div>
+  );
+}
+
+function AnimatedNumber({ value, flash }: { value: number; flash?: 'up'|'down'|null }) {
+  const [display, setDisplay] = useState<number>(value ?? 0);
+  const prevRef = useRef<number>(value ?? 0);
+  const [bump, setBump] = useState<'up' | 'down' | 'neutral'>('neutral');
+
+  useEffect(() => {
+    const start = prevRef.current ?? 0;
+    const end = value ?? 0;
+    if (start === end) return;
+
+    setBump(end > start ? 'up' : 'down');
+
+    const duration = 700;
+    const startTime = performance.now();
+    let raf = 0;
+
+    const easeOut = (t: number) => 1 - Math.pow(1 - t, 3);
+
+    const step = (now: number) => {
+      const t = Math.min(1, (now - startTime) / duration);
+      const eased = easeOut(t);
+      const curr = start + (end - start) * eased;
+      setDisplay(curr);
+      if (t < 1) {
+        raf = requestAnimationFrame(step);
+      } else {
+        prevRef.current = end;
+        setTimeout(() => setBump('neutral'), 350);
+      }
+    };
+
+    raf = requestAnimationFrame(step);
+    return () => cancelAnimationFrame(raf);
+  }, [value]);
+
+  // allow external flash override via prop
+  useEffect(() => {
+    if (!flash) return;
+    setBump(flash === 'up' ? 'up' : 'down');
+    const t = setTimeout(() => setBump('neutral'), 700);
+    return () => clearTimeout(t);
+  }, [flash]);
+
+  const formatted = Math.round(display).toLocaleString();
+
+  const baseStyle: React.CSSProperties = {
+    transition: 'transform 320ms cubic-bezier(.2,.8,.2,1), color 320ms',
+    transformOrigin: 'center',
+  };
+
+  const upStyle: React.CSSProperties = {
+    ...baseStyle,
+    transform: 'translateY(-6px) scale(1.06) rotate(-3deg)'
+  };
+
+  const downStyle: React.CSSProperties = {
+    ...baseStyle,
+    transform: 'translateY(4px) scale(1.02) rotate(2deg)'
+  };
+
+  const styleToUse = bump === 'up' ? upStyle : bump === 'down' ? downStyle : baseStyle;
+  // Use either the internal bump state OR the external flash prop
+  // to determine color so external flashes (from payments) always reflect
+  // increase/decrease visually even if the internal animation timing differs.
+  const isUp = bump === 'up' || flash === 'up';
+  const isDown = bump === 'down' || flash === 'down';
+  const colorClass = isUp ? 'text-green-400' : isDown ? 'text-destructive' : 'text-primary';
+
+  // Inline hex color to ensure it overrides any inherited text color
+  const colorHex = isUp ? '#34D399' /* green-400 */ : isDown ? '#EF4444' /* red-500 */ : undefined;
+
+  return (
+    <div aria-live="polite" className="inline-flex items-baseline gap-1">
+      <span className={`text-2xl align-baseline ${colorClass}`} style={{ ...styleToUse, color: colorHex }}>{"$"}</span>
+      <span className={`align-baseline ${colorClass}`} style={{ ...styleToUse, fontVariantNumeric: 'tabular-nums', color: colorHex }}>{formatted}</span>
     </div>
   );
 }
