@@ -4,6 +4,7 @@ create table public.players (
   name text not null,
   balance int4 not null default 0,
   pending_sips int4 not null default 0,
+  total_sips int4 not null default 0,
   is_commissioner boolean not null default false,
   is_online boolean not null default true,
   last_seen_at timestamptz not null default now(),

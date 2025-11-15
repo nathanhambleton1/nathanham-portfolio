@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import PayPopup from "../components/PayPopup";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "../components/ui/dialog";
 import CollectPopup from "../components/CollectPopup";
 import SipPopup from "../components/SipPopup";
 import ActivityLog from "../components/ActivityLog";
@@ -59,6 +60,7 @@ const Drunkopoly = () => {
   const [freeParkingPot, setFreeParkingPot] = useState(0);
   const [collectModalOpen, setCollectModalOpen] = useState(false);
   const [collectMode, setCollectMode] = useState<'bank'|'pass_go'|'free_parking'|null>(null);
+  const [blockedPaymentMessage, setBlockedPaymentMessage] = useState<string | null>(null);
 
   // On mount, try to restore session from localStorage and auto-join
   useEffect(() => {
@@ -400,8 +402,9 @@ const Drunkopoly = () => {
       {/* Top bar */}
       <div className="flex items-center justify-between px-6 py-4 z-50">
         {/* Name (top left) */}
-        <div className="font-semibold text-lg text-foreground">
-          {player?.name ?? name}
+        <div className="font-semibold text-lg text-foreground flex items-center gap-2">
+          <div>{player?.name ?? name}</div>
+          <div className="text-sm text-muted-foreground">{(player?.total_sips ?? 0)} sips</div>
         </div>
         {/* Game code (top right) with popover */}
         <GameCodePopover code={game?.code ?? gameCode} onLeave={handleLeave} onLogout={handleLogoutOfGame} />
@@ -425,7 +428,8 @@ const Drunkopoly = () => {
                 </svg>
 
                 <div className="text-2xl font-bold">You have {player.pending_sips} sip{player.pending_sips > 1 ? 's' : ''}</div>
-                <div className="text-sm text-white/80">Finish them to unlock the game.</div>
+                <p className="mt-3 text-lg text-white/90">Please finish your sips to continue playing.</p>
+                <p className="mt-1 text-sm text-white/70">You cannot collect money until you've finished.</p>
 
                 <div className="w-full mt-4">
                   <Button
@@ -545,6 +549,17 @@ const Drunkopoly = () => {
                 const body = await res.json().catch(() => ({}));
                 throw new Error(body.error || 'Payment failed');
               }
+              const body = await res.json().catch(() => ({}));
+
+              // If the server returned money_events showing zero-amount attempts, show an immediate message to the user
+              const blocked = (body.money_events || []).filter((me: any) => (Number(me.amount || 0) === 0) && me.to_player_id);
+              if (blocked.length > 0) {
+                const names = blocked.map((b: any) => {
+                  const found = (playersList || []).find((pl: any) => pl.id === b.to_player_id);
+                  return found ? found.name : b.to_player_id;
+                }).join(', ');
+                setBlockedPaymentMessage(`No money was sent to ${names} because they have pending sips. Congrats! 🎉`);
+              }
 
               // refresh players and game state
               const [playersRes, gameRes] = await Promise.all([
@@ -568,6 +583,21 @@ const Drunkopoly = () => {
             }
           }}
         />
+
+      {/* Blocked payment message modal styled like PayPopup */}
+      <Dialog open={!!blockedPaymentMessage} onOpenChange={v => { if (!v) setBlockedPaymentMessage(null); }}>
+        <DialogContent>
+          <div className="px-4">
+            <DialogHeader>
+              <DialogTitle>Payment Blocked</DialogTitle>
+            </DialogHeader>
+            <div className="mb-4">{blockedPaymentMessage}</div>
+            <DialogFooter>
+              <Button onClick={() => setBlockedPaymentMessage(null)}>OK</Button>
+            </DialogFooter>
+          </div>
+        </DialogContent>
+      </Dialog>
 
       <CollectPopup
         open={collectModalOpen}

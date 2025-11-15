@@ -79,7 +79,7 @@ export default function SipPopup({
             <input
               type="range"
               min={1}
-              max={25}
+              max={20}
               step={1}
               value={sipCount}
               onChange={(e) => setSipCount(Number(e.target.value))}

@@ -91,46 +91,25 @@ app.post('/games/:code/payments', async (req, res) => {
         .eq('game_id', game.id);
       if (apErr) throw apErr;
       const recipients = (allPlayers || []).filter((p) => p.id !== actor_player_id);
-      total = amountPer * recipients.length;
-      const inserts = recipients.map((r) => ({
-        game_id: game.id,
-        actor_player_id: actor_player_id,
-        from_player_id: actor_player_id,
-        to_player_id: r.id,
-        amount: amountPer,
-        type: opts.type || 'tax',
-        description: opts.description || null,
-      }));
-      const { data: inserted, error: meErr } = await supabase
-        .from('money_events')
-        .insert(inserts)
-        .select();
-      if (meErr) throw meErr;
-      meData = inserted;
 
-      // credit each recipient
+      // prepare inserts but if recipient has pending_sips, record a 0-amount event and descriptive message
+      const inserts = [];
       for (const r of recipients) {
-        const newBal = (r.balance || 0) + amountPer;
-        const { error: uRecErr } = await supabase
-          .from('players')
-          .update({ balance: newBal })
-          .eq('id', r.id);
-        if (uRecErr) throw uRecErr;
-      }
-    } else {
-      // normal behavior: create entries for provided payments
-      total = payments.reduce((s, p) => s + (Number(p.amount) || 0), 0);
-      const inserts = payments.map((p) => {
-        return {
+        const hasPending = (r.pending_sips || 0) > 0;
+        const amt = hasPending ? 0 : amountPer;
+        const desc = hasPending ? (opts.description || `Recipient has pending sips; no money was sent`) : (opts.description || null);
+        inserts.push({
           game_id: game.id,
           actor_player_id: actor_player_id,
-          from_player_id: p.from_player_id || actor_player_id,
-          to_player_id: p.to || null,
-          amount: Number(p.amount) || 0,
-          type: opts.type || (opts.freeParking ? 'tax' : 'manual'),
-          description: opts.description || null,
-        };
-      });
+          from_player_id: actor_player_id,
+          to_player_id: r.id,
+          amount: amt,
+          type: opts.type || 'tax',
+          description: desc,
+        });
+        total += amt;
+      }
+
       const { data: inserted, error: meErr } = await supabase
         .from('money_events')
         .insert(inserts)
@@ -138,30 +117,137 @@ app.post('/games/:code/payments', async (req, res) => {
       if (meErr) throw meErr;
       meData = inserted;
 
-      // credit recipients
-      const recipientMap = new Map();
-      for (const p of payments) {
-        if (!p.to) continue;
-        recipientMap.set(p.to, (recipientMap.get(p.to) || 0) + Number(p.amount || 0));
-      }
-      for (const [rid, amt] of recipientMap.entries()) {
+      // credit each recipient only for amounts > 0
+      for (const ins of inserts) {
+        if (!ins.to_player_id || (ins.amount || 0) <= 0) continue;
         const { data: rRows, error: rErr } = await supabase
           .from('players')
           .select('*')
-          .eq('id', rid)
+          .eq('id', ins.to_player_id)
           .eq('game_id', game.id)
           .limit(1);
         if (rErr) throw rErr;
         if (!rRows || rRows.length === 0) {
-          console.warn('Recipient not found in game, skipping credit:', rid);
+          console.warn('Recipient not found in game, skipping credit:', ins.to_player_id);
           continue;
         }
         const recipient = rRows[0];
-        const newBal = (recipient.balance || 0) + amt;
+        const newBal = (recipient.balance || 0) + ins.amount;
         const { error: uRecErr } = await supabase
           .from('players')
           .update({ balance: newBal })
-          .eq('id', rid);
+          .eq('id', ins.to_player_id);
+        if (uRecErr) throw uRecErr;
+      }
+    } else {
+      // normal behavior: create entries for provided payments
+      // We'll check recipients for pending sips and record 0-amount events for blocked recipients.
+      const inserts = [];
+      // compute per-recipient attempted amounts (for multi-recipient payments)
+      const recipientMapAttempt = new Map();
+      for (const p of payments) {
+        const amt = Number(p.amount || 0);
+        if (!p.to) continue;
+        recipientMapAttempt.set(p.to, (recipientMapAttempt.get(p.to) || 0) + amt);
+      }
+
+      // For payments to specific recipients, fetch each recipient and decide whether to credit
+      for (const p of payments) {
+        const intended = Number(p.amount || 0);
+        if (!p.to) {
+          // bank or null recipient entries remain unchanged
+          inserts.push({
+            game_id: game.id,
+            actor_player_id: actor_player_id,
+            from_player_id: p.from_player_id || actor_player_id,
+            to_player_id: null,
+            amount: intended,
+            type: opts.type || (opts.freeParking ? 'tax' : 'manual'),
+            description: opts.description || null,
+          });
+          total += intended;
+          continue;
+        }
+
+        // fetch recipient to inspect pending_sips
+        const { data: rRows, error: rErr } = await supabase
+          .from('players')
+          .select('*')
+          .eq('id', p.to)
+          .eq('game_id', game.id)
+          .limit(1);
+        if (rErr) throw rErr;
+        if (!rRows || rRows.length === 0) {
+          console.warn('Recipient not found in game, recording event but skipping credit:', p.to);
+          // Still record the event with amount 0 to avoid deducting payer for missing recipient
+          inserts.push({
+            game_id: game.id,
+            actor_player_id: actor_player_id,
+            from_player_id: p.from_player_id || actor_player_id,
+            to_player_id: p.to,
+            amount: 0,
+            type: opts.type || (opts.freeParking ? 'tax' : 'manual'),
+            description: opts.description || null,
+          });
+          continue;
+        }
+
+        const recipient = rRows[0];
+        const hasPending = (recipient.pending_sips || 0) > 0;
+        if (hasPending) {
+          // record a zero-amount event with a helpful description; do not credit the recipient nor deduct payer
+          inserts.push({
+            game_id: game.id,
+            actor_player_id: actor_player_id,
+            from_player_id: p.from_player_id || actor_player_id,
+            to_player_id: p.to,
+            amount: 0,
+            type: opts.type || (opts.freeParking ? 'tax' : 'manual'),
+            description: opts.description || `Recipient has pending sips; no money was sent`,
+          });
+          continue;
+        }
+
+        // recipient has no pending sips: record intended amount and mark for credit
+        inserts.push({
+          game_id: game.id,
+          actor_player_id: actor_player_id,
+          from_player_id: p.from_player_id || actor_player_id,
+          to_player_id: p.to,
+          amount: intended,
+          type: opts.type || (opts.freeParking ? 'tax' : 'manual'),
+          description: opts.description || null,
+        });
+        total += intended;
+      }
+
+      const { data: inserted, error: meErr } = await supabase
+        .from('money_events')
+        .insert(inserts)
+        .select();
+      if (meErr) throw meErr;
+      meData = inserted;
+
+      // credit recipients: only those inserted with amount > 0
+      for (const ins of inserts) {
+        if (!ins.to_player_id || (ins.amount || 0) <= 0) continue;
+        const { data: rRows2, error: rErr2 } = await supabase
+          .from('players')
+          .select('*')
+          .eq('id', ins.to_player_id)
+          .eq('game_id', game.id)
+          .limit(1);
+        if (rErr2) throw rErr2;
+        if (!rRows2 || rRows2.length === 0) {
+          console.warn('Recipient not found when crediting, skipping:', ins.to_player_id);
+          continue;
+        }
+        const recipient = rRows2[0];
+        const newBal = (recipient.balance || 0) + ins.amount;
+        const { error: uRecErr } = await supabase
+          .from('players')
+          .update({ balance: newBal })
+          .eq('id', ins.to_player_id);
         if (uRecErr) throw uRecErr;
       }
     }
@@ -379,14 +465,30 @@ app.post('/games/:code/sips/complete', async (req, res) => {
       .select();
     if (uErr) throw uErr;
 
-    // set player's pending_sips to zero
+    // compute total sip_count completed by this action
+    const totalCompleted = (updated || []).reduce((sum, r) => sum + (Number(r.sip_count || 0)), 0);
+
+    // fetch player row so we can update their totals
+    const { data: pRows, error: pFetchErr } = await supabase
+      .from('players')
+      .select('*')
+      .eq('id', actor_player_id)
+      .eq('game_id', game.id)
+      .limit(1);
+    if (pFetchErr) throw pFetchErr;
+    if (!pRows || pRows.length === 0) return res.status(404).json({ error: 'Player not found in game' });
+    const playerRow = pRows[0];
+
+    const newTotalSips = (playerRow.total_sips || 0) + totalCompleted;
+
+    // set player's pending_sips to zero and increment total_sips
     const { error: pErr } = await supabase
       .from('players')
-      .update({ pending_sips: 0 })
+      .update({ pending_sips: 0, total_sips: newTotalSips })
       .eq('id', actor_player_id);
     if (pErr) throw pErr;
 
-    return res.json({ ok: true, cleared: updated ? updated.length : 0 });
+    return res.json({ ok: true, cleared: updated ? updated.length : 0, total_completed: totalCompleted, new_total_sips: newTotalSips });
   } catch (err) {
     console.error('Complete sips error:', err);
     return res.status(500).json({ error: err.message || 'Failed to complete sips' });
@@ -534,6 +636,22 @@ app.post('/games/join', async (req, res) => {
       else game.host_player_id = playerData.id;
     }
 
+    // Log join event
+    try {
+      await supabase.from('money_events').insert([
+        {
+          game_id: game.id,
+          actor_player_id: playerData.id,
+          from_player_id: null,
+          to_player_id: playerData.id,
+          amount: 0,
+          type: 'join',
+          description: `${playerData.name} joined the game`,
+        },
+      ]);
+    } catch (e) {
+      console.warn('Failed to log join event:', e.message || e);
+    }
     return res.status(201).json({ game, player: playerData });
   } catch (err) {
     console.error('Join game error:', err);
@@ -643,6 +761,29 @@ app.delete('/games/:code/players/:playerId', async (req, res) => {
       console.warn('Error clearing host_player_id:', e.message || e);
     }
 
+    // Log leave event before deleting the player
+    try {
+      // Get player name for log
+      const { data: playerRows, error: playerErr } = await supabase
+        .from('players')
+        .select('id, name')
+        .eq('id', playerId)
+        .limit(1);
+      const playerName = playerRows && playerRows.length > 0 ? playerRows[0].name : 'A player';
+      await supabase.from('money_events').insert([
+        {
+          game_id: game.id,
+          actor_player_id: playerId,
+          from_player_id: playerId,
+          to_player_id: null,
+          amount: 0,
+          type: 'leave',
+          description: `${playerName} left the game`,
+        },
+      ]);
+    } catch (e) {
+      console.warn('Failed to log leave event:', e.message || e);
+    }
     // finally delete the player
     const { error: pErr } = await supabase
       .from('players')

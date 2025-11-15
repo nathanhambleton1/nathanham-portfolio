@@ -65,6 +65,20 @@ export default function ActivityLog({
     const from = idToName(e.from_player_id);
     const to = idToName(e.to_player_id);
     if (e.kind === "money") {
+      // Special handling for join/leave events
+      if ((e.type === "join" || e.type === "leave") && e.description) {
+        return e.description;
+      }
+      // If this is a zero-amount event with a description (e.g. blocked due to pending sips), surface that message
+      if ((e.amount || 0) === 0 && e.description) {
+        // Simplify blocked payment log for pending sips
+        if (e.description.toLowerCase().includes('pending sips')) {
+          return `Payment blocked: recipient has pending sips.`;
+        }
+        if (e.from_player_id && e.to_player_id) return `${actor} attempted to pay ${to} $0 — ${e.description}`;
+        if (!e.from_player_id && e.to_player_id) return `${actor} would have received $0 — ${e.description}`;
+        return `${actor} money event: ${e.type} $0 — ${e.description}`;
+      }
       if (e.type === "free_parking_collect")
         return `${actor} collected $${(e.amount || 0).toLocaleString()} from Free Parking`;
       if (!e.from_player_id && e.to_player_id)
