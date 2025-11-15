@@ -86,10 +86,22 @@ app.post('/games/join', async (req, res) => {
 
     const game = games[0];
 
+
+    // Check if this is the first player in the game
+    const { data: existingPlayersCount, error: countErr } = await supabase
+      .from('players')
+      .select('id', { count: 'exact', head: true })
+      .eq('game_id', game.id);
+    if (countErr) throw countErr;
+    const isFirstPlayer = (existingPlayersCount && typeof existingPlayersCount.count === 'number')
+      ? existingPlayersCount.count === 0
+      : true;
+
     const playerInsert = {
       game_id: game.id,
       name,
       balance: game.initial_balance ?? 0,
+      is_commissioner: isFirstPlayer,
     };
 
     const { data: playerData, error: pErr } = await supabase
@@ -99,9 +111,46 @@ app.post('/games/join', async (req, res) => {
       .single();
 
     if (pErr) {
+      // If the insert failed due to unique name constraint, treat this as a rejoin:
+      // fetch the existing player and return it (mark online / update last_seen_at).
       if (pErr.code === '23505' || (pErr.details && pErr.details.includes('players_game_name_key'))) {
-        return res.status(409).json({ error: 'A player with that name already exists in this game' });
+        try {
+          const { data: existingPlayers, error: eErr } = await supabase
+            .from('players')
+            .select('*')
+            .eq('game_id', game.id)
+            .eq('name', name)
+            .limit(1);
+          if (eErr) throw eErr;
+          if (existingPlayers && existingPlayers.length > 0) {
+            const existing = existingPlayers[0];
+
+            // update last_seen and mark online
+            const { error: uErr } = await supabase
+              .from('players')
+              .update({ is_online: true, last_seen_at: new Date().toISOString() })
+              .eq('id', existing.id);
+            if (uErr) console.warn('Failed to update existing player last_seen:', uErr.message || uErr);
+
+            // ensure host_player_id is set if missing
+            if (!game.host_player_id) {
+              const { error: huErr } = await supabase
+                .from('games')
+                .update({ host_player_id: existing.id })
+                .eq('id', game.id);
+              if (huErr) console.warn('Failed to set host_player_id:', huErr.message || huErr);
+              else game.host_player_id = existing.id;
+            }
+
+            return res.status(200).json({ game, player: existing });
+          }
+          return res.status(500).json({ error: 'Player exists but could not be retrieved' });
+        } catch (e) {
+          console.error('Error retrieving existing player:', e);
+          return res.status(500).json({ error: 'Failed to retrieve existing player' });
+        }
       }
+
       console.error('Error inserting player:', pErr);
       return res.status(500).json({ error: 'Failed to create player' });
     }
@@ -138,6 +187,77 @@ app.get('/games/:code', async (req, res) => {
   } catch (err) {
     console.error('Get game error:', err);
     return res.status(500).json({ error: 'Failed to fetch game' });
+  }
+});
+
+// Remove a player from a game (delete related events then the player)
+app.delete('/games/:code/players/:playerId', async (req, res) => {
+  try {
+    const { code, playerId } = req.params;
+
+    // find the game by code
+    const { data: games, error: gErr } = await supabase
+      .from('games')
+      .select('*')
+      .eq('code', code)
+      .limit(1);
+    if (gErr) throw gErr;
+    if (!games || games.length === 0) return res.status(404).json({ error: 'Game not found' });
+    const game = games[0];
+
+    // delete money events referencing this player in the game
+    try {
+      const meCond = `actor_player_id.eq.${playerId},from_player_id.eq.${playerId},to_player_id.eq.${playerId}`;
+      const { error: meErr } = await supabase
+        .from('money_events')
+        .delete()
+        .or(meCond)
+        .eq('game_id', game.id);
+      if (meErr) console.warn('Failed to delete money_events for player:', meErr.message || meErr);
+    } catch (e) {
+      console.warn('Error deleting money events:', e.message || e);
+    }
+
+    // delete sip events referencing this player in the game
+    try {
+      const seCond = `from_player_id.eq.${playerId},to_player_id.eq.${playerId}`;
+      const { error: seErr } = await supabase
+        .from('sip_events')
+        .delete()
+        .or(seCond)
+        .eq('game_id', game.id);
+      if (seErr) console.warn('Failed to delete sip_events for player:', seErr.message || seErr);
+    } catch (e) {
+      console.warn('Error deleting sip events:', e.message || e);
+    }
+
+    // if this player was host, clear host_player_id
+    try {
+      const { error: uErr } = await supabase
+        .from('games')
+        .update({ host_player_id: null })
+        .eq('id', game.id)
+        .eq('host_player_id', playerId);
+      if (uErr) console.warn('Failed to clear host_player_id:', uErr.message || uErr);
+    } catch (e) {
+      console.warn('Error clearing host_player_id:', e.message || e);
+    }
+
+    // finally delete the player
+    const { error: pErr } = await supabase
+      .from('players')
+      .delete()
+      .eq('id', playerId)
+      .eq('game_id', game.id);
+    if (pErr) {
+      console.error('Delete player error:', pErr);
+      return res.status(500).json({ error: 'Failed to remove player' });
+    }
+
+    return res.json({ ok: true });
+  } catch (err) {
+    console.error('Remove player error:', err);
+    return res.status(500).json({ error: err.message || 'Internal error' });
   }
 });
 

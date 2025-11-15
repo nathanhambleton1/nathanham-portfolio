@@ -10,6 +10,17 @@ import {
 import { Input } from "../components/ui/input";
 import { Button } from "../components/ui/button";
 import { Popover, PopoverTrigger, PopoverContent } from "../components/ui/popover";
+import {
+  AlertDialog,
+  AlertDialogTrigger,
+  AlertDialogContent,
+  AlertDialogHeader,
+  AlertDialogFooter,
+  AlertDialogTitle,
+  AlertDialogDescription,
+  AlertDialogAction,
+  AlertDialogCancel,
+} from "../components/ui/alert-dialog";
 
 type Screen = "join-create" | "enter-name" | "home";
 
@@ -184,6 +195,30 @@ const Drunkopoly = () => {
   }
 
   // Step 3: Home (main game screen)
+  const handleLeave = async () => {
+    try {
+      if (!game || !player) return;
+      const res = await fetch(`${API_BASE}/games/${game.code}/players/${player.id}`, {
+        method: 'DELETE',
+      });
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({}));
+        throw new Error(body.error || 'Failed to leave game');
+      }
+
+      // reset local state back to join screen
+      setPlayer(null);
+      setGame(null);
+      setGameCode('');
+      setName('');
+      setScreen('join-create');
+    } catch (err: any) {
+      console.error('Leave game error:', err);
+      // optionally show an error to the user
+      alert(err.message || 'Failed to leave game');
+    }
+  };
+
   return (
     <div className="min-h-screen bg-gradient-bg flex flex-col">
       {/* Top bar */}
@@ -193,10 +228,9 @@ const Drunkopoly = () => {
           {player?.name ?? name}
         </div>
         {/* Game code (top right) with popover */}
-        <GameCodePopover code={game?.code ?? gameCode} />
+        <GameCodePopover code={game?.code ?? gameCode} onLeave={handleLeave} />
       </div>
 
-      {/* Centered balance */}
       <div className="flex-1 flex flex-col items-center justify-center">
         <div className="mb-8">
           <div className="text-muted-foreground text-lg mb-2 text-center">
@@ -208,12 +242,18 @@ const Drunkopoly = () => {
           </div>
         </div>
 
+        {/* SIP section for commissioner */}
+        {player?.is_commissioner && (
+          <Section title="Sips">
+            <div className="grid grid-cols-1 gap-4 w-64">
+              <Button variant="secondary" className="py-6">Give Sips</Button>
+            </div>
+          </Section>
+        )}
+
         {/* Pay section */}
-        <Section title="Pay">
+        <Section title="Pay" className={player?.is_commissioner ? "mt-8" : ""}>
           <div className="grid grid-cols-2 gap-4 w-64">
-            <Button variant="secondary" className="py-6">
-              Rent
-            </Button>
             <Button variant="secondary" className="py-6">
               Bank
             </Button>
@@ -262,7 +302,7 @@ function Section({
   );
 }
 
-function GameCodePopover({ code }: { code: string }) {
+function GameCodePopover({ code, onLeave }: { code: string; onLeave?: () => void }) {
   return (
     <Popover>
       <PopoverTrigger asChild>
@@ -276,9 +316,27 @@ function GameCodePopover({ code }: { code: string }) {
       <PopoverContent align="end" className="w-56">
         <div className="flex flex-col gap-2">
           <div className="font-mono text-lg font-bold text-center">{code}</div>
-          <Button variant="destructive" className="w-full mt-2">
-            Leave Game
-          </Button>
+          <AlertDialog>
+            <AlertDialogTrigger asChild>
+              <Button variant="destructive" className="w-full mt-2">
+                Leave Game
+              </Button>
+            </AlertDialogTrigger>
+            <AlertDialogContent>
+              <AlertDialogHeader>
+                <AlertDialogTitle>Are you sure you want to leave?</AlertDialogTitle>
+                <AlertDialogDescription>
+                  If you leave the game, <b>all your data will be permanently removed</b> from this session. This action cannot be undone. Please be careful!
+                </AlertDialogDescription>
+              </AlertDialogHeader>
+              <AlertDialogFooter>
+                <AlertDialogCancel>Cancel</AlertDialogCancel>
+                <AlertDialogAction onClick={onLeave} className="bg-destructive text-destructive-foreground hover:bg-destructive/90">
+                  Yes, remove my data
+                </AlertDialogAction>
+              </AlertDialogFooter>
+            </AlertDialogContent>
+          </AlertDialog>
         </div>
       </PopoverContent>
     </Popover>
