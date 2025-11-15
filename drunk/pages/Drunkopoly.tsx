@@ -765,21 +765,6 @@ const Drunkopoly = () => {
           </CardHeader>
           <CardContent>
             <div className="flex flex-col gap-8">
-              <Button
-                className="w-full py-4 text-lg font-semibold shadow-md"
-                size="lg"
-                onClick={() => {
-                  setMode("create");
-                  setScreen("enter-name");
-                }}
-              >
-                Create Game
-              </Button>
-              <div className="flex items-center gap-2">
-                <div className="flex-1 border-t border-border" />
-                <span className="text-muted-foreground text-xs">or</span>
-                <div className="flex-1 border-t border-border" />
-              </div>
               <form
                 className="flex flex-col gap-4"
                 onSubmit={(e) => {
@@ -797,10 +782,25 @@ const Drunkopoly = () => {
                   maxLength={8}
                   autoFocus
                 />
-                <Button className="w-full" type="submit" disabled={!gameCode.trim()}>
+                <Button className="w-full py-4 text-lg font-semibold shadow-md" size="lg" type="submit" disabled={!gameCode.trim()}>
                   Join Game
                 </Button>
               </form>
+              <div className="flex items-center gap-2">
+                <div className="flex-1 border-t border-border" />
+                <span className="text-muted-foreground text-xs">or</span>
+                <div className="flex-1 border-t border-border" />
+              </div>
+              <Button
+                className="w-full py-4 text-lg font-semibold shadow-md"
+                size="lg"
+                onClick={() => {
+                  setMode("create");
+                  setScreen("enter-name");
+                }}
+              >
+                Create Game
+              </Button>
             </div>
           </CardContent>
         </Card>
