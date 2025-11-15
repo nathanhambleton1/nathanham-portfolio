@@ -1,5 +1,6 @@
 import { useEffect, useState, useRef } from "react";
 import PayPopup from "../components/PayPopup";
+import { UserPlus, DollarSign, Users, Percent, Crown, PiggyBank } from "lucide-react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "../components/ui/dialog";
 import CollectPopup from "../components/CollectPopup";
 import SipPopup from "../components/SipPopup";
@@ -1083,8 +1084,11 @@ const Drunkopoly = () => {
         {player?.is_commissioner && (
           <Section title="Sips">
             <div className="grid grid-cols-1 gap-4 w-64">
-              <Button variant="secondary" className="py-6" onClick={() => setSipModalOpen(true)}>Give Sips</Button>
-            </div>
+                <Button variant="secondary" className="py-6" onClick={() => setSipModalOpen(true)}>
+                  <UserPlus className="h-5 w-5" />
+                  Give Sips
+                </Button>
+              </div>
           </Section>
         )}
 
@@ -1099,6 +1103,7 @@ const Drunkopoly = () => {
                 setPayModalOpen(true);
               }}
             >
+              <DollarSign className="h-5 w-5" />
               Bank
             </Button>
             <Button
@@ -1109,6 +1114,7 @@ const Drunkopoly = () => {
                 setPayModalOpen(true);
               }}
             >
+              <Users className="h-5 w-5" />
               Players
             </Button>
             <Button
@@ -1119,6 +1125,7 @@ const Drunkopoly = () => {
                 setPayModalOpen(true);
               }}
             >
+              <Percent className="h-5 w-5" />
               Tax
             </Button>
           </div>
@@ -1243,9 +1250,11 @@ const Drunkopoly = () => {
         <Section title="Collect" className="mt-8">
           <div className="grid grid-cols-2 gap-4 w-64">
             <Button variant="secondary" className="py-6" onClick={() => { setCollectMode('bank'); setCollectModalOpen(true); }}>
+              <DollarSign className="h-5 w-5" />
               Bank
             </Button>
             <Button variant="secondary" className="py-6" onClick={() => { setCollectMode('pass_go'); setCollectModalOpen(true); }}>
+              <Crown className="h-5 w-5" />
               Pass Go
             </Button>
             <Button 
@@ -1256,8 +1265,8 @@ const Drunkopoly = () => {
                 setCollectModalOpen(true); 
               }}
             >
+              <PiggyBank className="h-5 w-5" />
               Free Parking
-              <span className="ml-2 text-primary font-bold">${freeParkingPot}</span>
             </Button>
           </div>
         </Section>
