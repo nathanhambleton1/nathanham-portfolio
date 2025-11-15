@@ -1,6 +1,9 @@
 import { useEffect, useState } from "react";
+import { createClient } from '@supabase/supabase-js';
 
-const API_BASE = (import.meta as any).env?.VITE_API_URL || "http://localhost:4000";
+const supabaseUrl = 'https://kcyrvubzhsphpxfsewii.supabase.co';
+const supabaseAnonKey = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImtjeXJ2dWJ6aHNwaHB4ZnNld2lpIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjMxODAwMTcsImV4cCI6MjA3ODc1NjAxN30.8psClrpif-F1DWj67u2tErnU8-4ZYjw5LvEfRK3oHkI';
+const supabase = createClient(supabaseUrl, supabaseAnonKey);
 
 type EventRow = {
   id: string;
@@ -29,27 +32,69 @@ export default function ActivityLog({
   const [expanded, setExpanded] = useState(false);
 
   useEffect(() => {
+    if (!gameCode) return;
+
     let mounted = true;
-    let timer: number | null = null;
+    let gameId: string | null = null;
 
     const fetchEvents = async () => {
-      if (!gameCode) return;
       try {
-        const res = await fetch(`${API_BASE}/games/${gameCode}/events?limit=200`);
-        if (!res.ok) return;
-        const body = await res.json().catch(() => ({}));
+        // First get the game ID from the code
+        const { data: games, error: gErr } = await supabase
+          .from('games')
+          .select('id')
+          .eq('code', gameCode)
+          .limit(1);
+        
+        if (gErr || !games || games.length === 0) return;
+        
+        gameId = games[0].id;
+        
+        // Get events from the game_events view
+        const { data: eventsData, error: eErr } = await supabase
+          .from('game_events')
+          .select('*')
+          .eq('game_id', gameId)
+          .order('created_at', { ascending: false })
+          .limit(200);
+        
         if (!mounted) return;
-        setEvents(body.events || []);
+        
+        if (!eErr && eventsData) {
+          setEvents(eventsData);
+        }
       } catch (e) {
         console.warn("Failed to fetch events", e);
       }
     };
 
     fetchEvents();
-    timer = window.setInterval(fetchEvents, pollInterval);
+
+    // Set up real-time subscription for new events
+    const subscription = supabase
+      .channel('game_events_changes')
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'game_events',
+        },
+        (payload) => {
+          if (!mounted) return;
+          
+          // Refresh events when there are changes
+          fetchEvents();
+        }
+      )
+      .subscribe();
+
+    // Also set up polling as a fallback
+    const timer = window.setInterval(fetchEvents, pollInterval);
 
     return () => {
       mounted = false;
+      subscription.unsubscribe();
       if (timer) clearInterval(timer);
     };
   }, [gameCode, pollInterval]);
