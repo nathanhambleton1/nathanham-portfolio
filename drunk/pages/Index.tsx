@@ -45,13 +45,7 @@ const Index = () => {
     <div className="min-h-screen bg-gradient-bg pb-24">
       <div className="container max-w-2xl mx-auto px-4 py-16 pb-24">
         {/* Header */}
-        <header className="text-center mb-12 animate-slide-up pt-16 pb-8">
-          <h1 className="text-5xl font-bold mb-3 bg-gradient-primary bg-clip-text text-transparent">
-            Lets Get Drunk
-          </h1>
-          <p className="text-muted-foreground text-lg">
-            Tap a game to get started
-          </p>
+        <header className="text-center mb-12 animate-slide-up pt-1 pb-8">
         </header>
 
         {/* Game Cards */}
