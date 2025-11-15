@@ -4,6 +4,12 @@ import { Clock, Trophy, Crown, Dices, Users } from "lucide-react";
 const Index = () => {
   const games = [
     {
+      title: "Drunkopoly",
+      description: "Monopoly with a drinking twist.",
+      icon: Crown,
+      path: "drunkopoly",
+    },
+    {
       title: "Power Hour",
       description: "Sip of beer every minute for an hour.",
       icon: Clock,
