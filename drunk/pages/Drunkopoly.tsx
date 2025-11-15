@@ -1,6 +1,8 @@
 import { useEffect, useState } from "react";
 import PayPopup from "../components/PayPopup";
 import CollectPopup from "../components/CollectPopup";
+import SipPopup from "../components/SipPopup";
+import ActivityLog from "../components/ActivityLog";
 import {
   Card,
   CardHeader,
@@ -30,6 +32,13 @@ const API_BASE = (import.meta as any).env?.VITE_API_URL || "http://localhost:400
 console.log("Drunkopoly API_BASE:", API_BASE);
 
 const Drunkopoly = () => {
+    // Log out of game: remove from game, keep account data
+    const handleLogoutOfGame = () => {
+      setGame(null);
+      setGameCode("");
+      // Do NOT clear name or localStorage name
+      setScreen("join-create");
+    };
   const STORAGE_KEY_CODE = "drunkopoly:gameCode";
   const STORAGE_KEY_NAME = "drunkopoly:name";
 
@@ -45,6 +54,7 @@ const Drunkopoly = () => {
   const [playersList, setPlayersList] = useState<any[]>([]);
   const [payModalOpen, setPayModalOpen] = useState(false);
   const [payMode, setPayMode] = useState<"bank" | "players" | "tax" | null>(null);
+  const [sipModalOpen, setSipModalOpen] = useState(false);
   // Free Parking pot state
   const [freeParkingPot, setFreeParkingPot] = useState(0);
   const [collectModalOpen, setCollectModalOpen] = useState(false);
@@ -121,6 +131,68 @@ const Drunkopoly = () => {
   useEffect(() => {
     if (game) setFreeParkingPot(game.free_parking_balance || 0);
   }, [game]);
+
+  // Polling: periodically refresh game and players so other clients see updates
+  useEffect(() => {
+    if (screen !== 'home' || !game || !player) return;
+
+    let stopped = false;
+    let timer: number | null = null;
+    let inFlight = false;
+
+    const fetchState = async () => {
+      if (inFlight) return;
+      inFlight = true;
+      try {
+        const [playersRes, gameRes] = await Promise.all([
+          fetch(`${API_BASE}/games/${game.code}/players`),
+          fetch(`${API_BASE}/games/${game.code}`),
+        ]);
+
+        if (playersRes.ok) {
+          const pb = await playersRes.json();
+          setPlayersList(pb.players || []);
+          const updated = (pb.players || []).find((p: any) => p.id === player.id);
+          if (updated) setPlayer(updated);
+        }
+
+        if (gameRes.ok) {
+          const gb = await gameRes.json();
+          if (gb.game) setGame(gb.game);
+        }
+      } catch (e) {
+        console.warn('Polling game state failed', e);
+      } finally {
+        inFlight = false;
+      }
+    };
+
+    const scheduleNext = () => {
+      if (stopped) return;
+      const hidden = typeof document !== 'undefined' && document.visibilityState === 'hidden';
+      const delay = hidden ? 5000 : 500; // 2s when visible, 10s when hidden
+      timer = window.setTimeout(async () => {
+        if (stopped) return;
+        await fetchState();
+        scheduleNext();
+      }, delay);
+    };
+
+    // initial fetch then schedule
+    fetchState();
+    scheduleNext();
+
+    const onVisibility = () => {
+      if (document.visibilityState === 'visible') fetchState();
+    };
+    document.addEventListener('visibilitychange', onVisibility);
+
+    return () => {
+      stopped = true;
+      if (timer) clearTimeout(timer);
+      document.removeEventListener('visibilitychange', onVisibility);
+    };
+  }, [screen, game?.code, player?.id]);
 
   // Step 1: Join/Create Game
   if (screen === "join-create") {
@@ -326,14 +398,78 @@ const Drunkopoly = () => {
   return (
     <div className="min-h-screen bg-gradient-bg flex flex-col">
       {/* Top bar */}
-      <div className="flex items-center justify-between px-6 py-4">
+      <div className="flex items-center justify-between px-6 py-4 z-50">
         {/* Name (top left) */}
         <div className="font-semibold text-lg text-foreground">
           {player?.name ?? name}
         </div>
         {/* Game code (top right) with popover */}
-        <GameCodePopover code={game?.code ?? gameCode} onLeave={handleLeave} />
+        <GameCodePopover code={game?.code ?? gameCode} onLeave={handleLeave} onLogout={handleLogoutOfGame} />
       </div>
+
+      {/* Lockdown overlay when player has pending sips */}
+      {player?.pending_sips > 0 && (
+        <div className="fixed inset-0 z-40 pointer-events-auto">
+          {/* fully opaque black background to hide everything below */}
+          <div className="absolute inset-0 bg-black" />
+
+          {/* centered content (below header which has z-50) */}
+          <div className="relative z-40 min-h-screen flex items-center justify-center px-6">
+            <div className="max-w-lg w-full text-center text-white">
+              <div className="flex flex-col items-center gap-6 py-12">
+                {/* white lock icon */}
+                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" className="w-16 h-16 text-white" fill="none" stroke="currentColor" strokeWidth={1.5}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M12 15v2" />
+                  <rect x="4" y="10" width="16" height="10" rx="2" strokeWidth={1.5} />
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M7 10V8a5 5 0 0110 0v2" />
+                </svg>
+
+                <div className="text-2xl font-bold">You have {player.pending_sips} sip{player.pending_sips > 1 ? 's' : ''}</div>
+                <div className="text-sm text-white/80">Finish them to unlock the game.</div>
+
+                <div className="w-full mt-4">
+                  <Button
+                    className="w-full"
+                    onClick={async () => {
+                      try {
+                        const res = await fetch(`${API_BASE}/games/${game.code}/sips/complete`, {
+                          method: 'POST',
+                          headers: { 'Content-Type': 'application/json' },
+                          body: JSON.stringify({ actor_player_id: player.id }),
+                        });
+                        if (!res.ok) {
+                          const body = await res.json().catch(() => ({}));
+                          throw new Error(body.error || 'Failed to complete sips');
+                        }
+                        // refresh players and game state
+                        const [playersRes, gameRes] = await Promise.all([
+                          fetch(`${API_BASE}/games/${game.code}/players`),
+                          fetch(`${API_BASE}/games/${game.code}`),
+                        ]);
+                        if (playersRes.ok) {
+                          const pb = await playersRes.json();
+                          setPlayersList(pb.players || []);
+                          const updated = (pb.players || []).find((p: any) => p.id === player.id);
+                          if (updated) setPlayer(updated);
+                        }
+                        if (gameRes.ok) {
+                          const gb = await gameRes.json();
+                          if (gb.game) setGame(gb.game);
+                        }
+                      } catch (err: any) {
+                        console.error('Complete sips error:', err);
+                        alert(err.message || 'Failed to complete sips');
+                      }
+                    }}
+                  >
+                    Done
+                  </Button>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
 
       <div className="flex-1 flex flex-col items-center justify-center">
         <div className="mb-8">
@@ -350,7 +486,7 @@ const Drunkopoly = () => {
         {player?.is_commissioner && (
           <Section title="Sips">
             <div className="grid grid-cols-1 gap-4 w-64">
-              <Button variant="secondary" className="py-6">Give Sips</Button>
+              <Button variant="secondary" className="py-6" onClick={() => setSipModalOpen(true)}>Give Sips</Button>
             </div>
           </Section>
         )}
@@ -472,6 +608,44 @@ const Drunkopoly = () => {
           }
         }}
       />
+
+      <SipPopup
+        open={sipModalOpen}
+        onOpenChange={(v) => setSipModalOpen(v)}
+        currentPlayer={player}
+        players={playersList}
+        onSubmit={async (to, sip_count) => {
+          if (!game || !player) return;
+          try {
+            const res = await fetch(`${API_BASE}/games/${game.code}/sips`, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ actor_player_id: player.id, to_player_id: to, sip_count: sip_count }),
+            });
+            if (!res.ok) {
+              const body = await res.json().catch(() => ({}));
+              throw new Error(body.error || 'Failed to assign sips');
+            }
+
+            // refresh players and game state
+            const [playersRes, gameRes] = await Promise.all([
+              fetch(`${API_BASE}/games/${game.code}/players`),
+              fetch(`${API_BASE}/games/${game.code}`),
+            ]);
+            if (playersRes.ok) {
+              const pb = await playersRes.json();
+              setPlayersList(pb.players || []);
+            }
+            if (gameRes.ok) {
+              const gb = await gameRes.json();
+              if (gb.game) setGame(gb.game);
+            }
+          } catch (err: any) {
+            console.error('Assign sips error:', err);
+            alert(err.message || 'Failed to assign sips');
+          }
+        }}
+      />
         {/* Collect section */}
         <Section title="Collect" className="mt-8">
           <div className="grid grid-cols-2 gap-4 w-64">
@@ -481,13 +655,21 @@ const Drunkopoly = () => {
             <Button variant="secondary" className="py-6" onClick={() => { setCollectMode('pass_go'); setCollectModalOpen(true); }}>
               Pass Go
             </Button>
-            <Button variant="secondary" className="py-6" onClick={() => { setCollectMode('free_parking'); setCollectModalOpen(true); }}>
+            <Button 
+              variant="secondary" 
+              className="py-6" 
+              onClick={() => { 
+                setCollectMode('free_parking'); 
+                setCollectModalOpen(true); 
+              }}
+            >
               Free Parking
               <span className="ml-2 text-primary font-bold">${freeParkingPot}</span>
             </Button>
           </div>
         </Section>
       </div>
+      <ActivityLog gameCode={game?.code ?? gameCode} players={playersList} />
     </div>
   );
 };
@@ -509,7 +691,7 @@ function Section({
   );
 }
 
-function GameCodePopover({ code, onLeave }: { code: string; onLeave?: () => void }) {
+function GameCodePopover({ code, onLeave, onLogout }: { code: string; onLeave?: () => void; onLogout?: () => void }) {
   return (
     <Popover>
       <PopoverTrigger asChild>
@@ -523,6 +705,10 @@ function GameCodePopover({ code, onLeave }: { code: string; onLeave?: () => void
       <PopoverContent align="end" className="w-56">
         <div className="flex flex-col gap-2">
           <div className="font-mono text-lg font-bold text-center">{code}</div>
+          {/* Log Out of Game Button */}
+          <Button variant="secondary" className="w-full mt-2" onClick={onLogout}>
+            Log Out
+          </Button>
           <AlertDialog>
             <AlertDialogTrigger asChild>
               <Button variant="destructive" className="w-full mt-2">

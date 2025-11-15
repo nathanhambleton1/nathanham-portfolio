@@ -33,28 +33,30 @@ export default function PayPopup({
 
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [amountPer, setAmountPer] = useState<number>(5);
+  const [rawAmount, setRawAmount] = useState<string>("5");
 
+  // Initialize popup state only when the dialog actually opens (avoid resets during polling updates)
+  const prevOpenRef = React.useRef<boolean>(false);
   useEffect(() => {
-    // reset when opening or mode changes
-    if (open) {
-      setSelectedIds(new Set());
+    const prev = prevOpenRef.current;
+    if (!prev && open) {
+      setSelectedIds(new Set()); // Always start with no selection
       setFreeParking(false);
-      // default to first other player if exists
-      if (mode === "players" && others.length > 0) {
-        setSelectedIds(new Set([others[0].id]));
-      }
-      // clamp amountPer to a sensible default
       setAmountPer(5);
     }
-  }, [open, mode, others]);
+    prevOpenRef.current = open;
+  }, [open]);
 
   if (!mode) return null;
 
   // For tax, always 1 payment (to bank or free parking), not per player
+  const roundUpToFive = (v: number) => Math.max(0, Math.ceil(v / 5) * 5);
   const count = selectedIds.size || (mode === "bank" ? 1 : 0);
-  const total = mode === "tax" ? amountPer : (mode === "bank" ? amountPer : amountPer * count);
-
-  const clampToFive = (v: number) => Math.max(0, Math.round(v / 5) * 5);
+  const rawAmountNum = Number(rawAmount) || 0;
+  const roundedLive = roundUpToFive(rawAmountNum);
+  const total = mode === "tax"
+    ? roundedLive
+    : (mode === "bank" ? roundedLive : roundedLive * count);
 
   const togglePlayer = (id: string) => {
     const next = new Set(selectedIds);
@@ -65,15 +67,18 @@ export default function PayPopup({
 
   const handleSubmit = () => {
     if (!currentPlayer) return;
+    // Round up to nearest 5 on submit
+    const rounded = roundUpToFive(Number(rawAmount));
+    setAmountPer(rounded);
+    setRawAmount(String(rounded));
     let payments: { to: string | null; amount: number }[] = [];
     if (mode === "bank") {
-      payments = [{ to: null, amount: total }];
+      payments = [{ to: null, amount: rounded }];
     } else if (mode === "tax") {
-      // Tax: always one payment, to bank or free parking
-      payments = [{ to: null, amount: amountPer }];
+      payments = [{ to: null, amount: rounded }];
     } else {
       const ids = Array.from(selectedIds);
-      payments = ids.map((id) => ({ to: id, amount: amountPer }));
+      payments = ids.map((id) => ({ to: id, amount: rounded }));
     }
     onSubmit(payments, { freeParking: mode === "tax" && freeParking });
     onOpenChange(false);
@@ -138,23 +143,31 @@ export default function PayPopup({
               min={0}
               max={maxForSlider}
               step={5}
-              value={amountPer}
-              onChange={(e) => setAmountPer(clampToFive(Number(e.target.value)))}
+              value={roundUpToFive(Number(rawAmount))}
+              onChange={(e) => {
+                setRawAmount(e.target.value);
+                setAmountPer(roundUpToFive(Number(e.target.value)));
+              }}
               className="w-full"
             />
             <div className="flex items-center gap-2">
               <Input
-                value={String(amountPer)}
+                value={rawAmount}
                 onChange={(e) => {
-                  const v = Number(e.target.value || 0);
-                  setAmountPer(clampToFive(v));
+                  // Allow any number input
+                  setRawAmount(e.target.value);
+                }}
+                onBlur={() => {
+                  // On blur, round up
+                  const rounded = roundUpToFive(Number(rawAmount));
+                  setAmountPer(rounded);
+                  setRawAmount(String(rounded));
                 }}
                 className="w-32"
                 type="number"
-                step={5}
                 min={0}
               />
-              <div className="text-sm text-muted-foreground">increments of 5</div>
+              <div className="text-sm text-muted-foreground">will round up to nearest 5</div>
             </div>
           </div>
         </div>
@@ -162,7 +175,16 @@ export default function PayPopup({
         <DialogFooter>
           <div className="flex gap-2 w-full justify-end">
             <Button variant="secondary" onClick={() => onOpenChange(false)}>Cancel</Button>
-            <Button onClick={handleSubmit} className="bg-primary">Pay</Button>
+            <Button 
+              onClick={handleSubmit} 
+              className={`bg-primary${(Number(rawAmount) > (currentPlayer?.balance ?? 0)) ? ' opacity-60 cursor-not-allowed' : ''}`}
+              disabled={
+                (mode === 'players' && selectedIds.size === 0) ||
+                (Number(rawAmount) > (currentPlayer?.balance ?? 0))
+              }
+            >
+              Pay
+            </Button>
           </div>
         </DialogFooter>
       </DialogContent>

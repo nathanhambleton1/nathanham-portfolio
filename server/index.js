@@ -292,6 +292,107 @@ app.post('/games/:code/collect', async (req, res) => {
   }
 });
 
+// Assign sips from one player to another
+app.post('/games/:code/sips', async (req, res) => {
+  try {
+    const code = req.params.code;
+    const { actor_player_id, to_player_id, sip_count } = req.body || {};
+    if (!actor_player_id) return res.status(400).json({ error: 'actor_player_id is required' });
+    if (!to_player_id) return res.status(400).json({ error: 'to_player_id is required' });
+    const count = Number(sip_count || 0);
+    if (count <= 0) return res.status(400).json({ error: 'sip_count must be greater than 0' });
+
+    // find game
+    const { data: games, error: gErr } = await supabase
+      .from('games')
+      .select('*')
+      .eq('code', code)
+      .limit(1);
+    if (gErr) throw gErr;
+    if (!games || games.length === 0) return res.status(404).json({ error: 'Game not found' });
+    const game = games[0];
+
+    // insert sip event
+    const insertRow = {
+      game_id: game.id,
+      from_player_id: actor_player_id,
+      to_player_id: to_player_id,
+      sip_count: count,
+      status: 'pending',
+    };
+    const { data: inserted, error: iErr } = await supabase
+      .from('sip_events')
+      .insert([insertRow])
+      .select();
+    if (iErr) throw iErr;
+
+    // increment recipient pending_sips by reading current value and updating
+    const { data: rRows, error: rErr } = await supabase
+      .from('players')
+      .select('*')
+      .eq('id', to_player_id)
+      .eq('game_id', game.id)
+      .limit(1);
+    if (rErr) throw rErr;
+    if (!rRows || rRows.length === 0) {
+      return res.status(404).json({ error: 'Recipient not found in game' });
+    }
+    const recipient = rRows[0];
+    const newPending = (recipient.pending_sips || 0) + count;
+    const { error: uErr } = await supabase
+      .from('players')
+      .update({ pending_sips: newPending })
+      .eq('id', to_player_id);
+    if (uErr) throw uErr;
+
+    return res.json({ ok: true, sip_event: Array.isArray(inserted) ? inserted[0] : inserted });
+  } catch (err) {
+    console.error('Assign sips error:', err);
+    return res.status(500).json({ error: err.message || 'Failed to assign sips' });
+  }
+});
+
+// Complete pending sips for a player (player acknowledges they've finished)
+app.post('/games/:code/sips/complete', async (req, res) => {
+  try {
+    const code = req.params.code;
+    const { actor_player_id } = req.body || {};
+    if (!actor_player_id) return res.status(400).json({ error: 'actor_player_id is required' });
+
+    // find game
+    const { data: games, error: gErr } = await supabase
+      .from('games')
+      .select('*')
+      .eq('code', code)
+      .limit(1);
+    if (gErr) throw gErr;
+    if (!games || games.length === 0) return res.status(404).json({ error: 'Game not found' });
+    const game = games[0];
+
+    // mark sip_events as cleared
+    const { data: updated, error: uErr } = await supabase
+      .from('sip_events')
+      .update({ status: 'cleared', cleared_at: new Date().toISOString() })
+      .eq('game_id', game.id)
+      .eq('to_player_id', actor_player_id)
+      .eq('status', 'pending')
+      .select();
+    if (uErr) throw uErr;
+
+    // set player's pending_sips to zero
+    const { error: pErr } = await supabase
+      .from('players')
+      .update({ pending_sips: 0 })
+      .eq('id', actor_player_id);
+    if (pErr) throw pErr;
+
+    return res.json({ ok: true, cleared: updated ? updated.length : 0 });
+  } catch (err) {
+    console.error('Complete sips error:', err);
+    return res.status(500).json({ error: err.message || 'Failed to complete sips' });
+  }
+});
+
 function generateCode(len = 6) {
   const chars = 'ABCDEFGHJKMNPQRSTUVWXYZ23456789'; // avoid similar-looking chars
   let out = '';
@@ -455,6 +556,37 @@ app.get('/games/:code', async (req, res) => {
   } catch (err) {
     console.error('Get game error:', err);
     return res.status(500).json({ error: 'Failed to fetch game' });
+  }
+});
+
+// Get recent activity events for a game (money + sips)
+app.get('/games/:code/events', async (req, res) => {
+  try {
+    const code = req.params.code;
+    const limit = Number(req.query.limit || 100);
+
+    const { data: games, error: gErr } = await supabase
+      .from('games')
+      .select('*')
+      .eq('code', code)
+      .limit(1);
+    if (gErr) throw gErr;
+    if (!games || games.length === 0) return res.status(404).json({ error: 'Game not found' });
+    const game = games[0];
+
+    // read from the view `game_events` which combines money_events and sip_events
+    const { data: events, error: eErr } = await supabase
+      .from('game_events')
+      .select('id,game_id,created_at,kind,type,actor_player_id,from_player_id,to_player_id,amount,sip_count,description')
+      .eq('game_id', game.id)
+      .order('created_at', { ascending: false })
+      .limit(limit);
+    if (eErr) throw eErr;
+
+    return res.json({ events: events || [] });
+  } catch (err) {
+    console.error('Get events error:', err);
+    return res.status(500).json({ error: err.message || 'Failed to fetch events' });
   }
 });
 

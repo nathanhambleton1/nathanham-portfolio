@@ -25,26 +25,44 @@ export default function CollectPopup({
   game: any | null;
   onCollect: (opts: any) => void;
 }) {
+  const [rawAmount, setRawAmount] = useState<string>("0");
   const [amount, setAmount] = useState<number>(0);
   const [doubled, setDoubled] = useState(false);
-  const clampToFive = (v: number) => Math.max(0, Math.round(v / 5) * 5);
+  const roundUpToFive = (v: number) => Math.max(0, Math.ceil(v / 5) * 5);
 
+  // Initialize popup state only when the dialog actually opens (avoid resets during polling updates)
+  const prevOpenRef = React.useRef<boolean>(false);
   useEffect(() => {
-    if (open) {
+    const prev = prevOpenRef.current;
+    if (!prev && open) {
+      setRawAmount("0");
       setAmount(0);
       setDoubled(false);
-      if (mode === 'pass_go' && game) setAmount(game.pass_go_amount || 200);
-      if (mode === 'free_parking' && game) setAmount(game.free_parking_balance || 0);
+      if (mode === 'pass_go' && game) {
+        setRawAmount(String(game.pass_go_amount || 200));
+        setAmount(game.pass_go_amount || 200);
+      }
+      if (mode === 'free_parking' && game) {
+        setRawAmount(String(game.free_parking_balance || 0));
+        setAmount(game.free_parking_balance || 0);
+      }
     }
+    prevOpenRef.current = open;
   }, [open, mode, game]);
 
+
   if (!mode) return null;
+
+  const rawAmountNum = Number(rawAmount) || 0;
+  const roundedLive = roundUpToFive(rawAmountNum);
 
   const handleSubmit = () => {
     if (!currentPlayer) return;
     if (mode === 'bank') {
-      if (amount <= 0) return alert('Enter a valid amount');
-      onCollect({ type: 'bank', amount });
+      if (roundedLive <= 0) return alert('Enter a valid amount');
+      setAmount(roundedLive);
+      setRawAmount(String(roundedLive));
+      onCollect({ type: 'bank', amount: roundedLive });
     } else if (mode === 'pass_go') {
       onCollect({ type: 'pass_go', doubled });
     } else if (mode === 'free_parking') {
@@ -70,30 +88,36 @@ export default function CollectPopup({
             <div className="space-y-2">
               <div className="flex items-center justify-between">
                 <div className="text-sm font-medium">Amount</div>
-                <div className="text-sm text-muted-foreground">Total: ${amount.toLocaleString()}</div>
+                <div className="text-sm text-muted-foreground">Total: ${roundedLive.toLocaleString()}</div>
               </div>
               <input
                 type="range"
                 min={0}
                 max={2000}
                 step={5}
-                value={amount}
-                onChange={(e) => setAmount(clampToFive(Number(e.target.value)))}
+                value={roundedLive}
+                onChange={(e) => {
+                  setRawAmount(e.target.value);
+                  setAmount(roundUpToFive(Number(e.target.value)));
+                }}
                 className="w-full"
               />
               <div className="flex items-center gap-2">
                 <Input
-                  value={String(amount)}
+                  value={rawAmount}
                   onChange={(e) => {
-                    const v = Number(e.target.value || 0);
-                    setAmount(clampToFive(v));
+                    setRawAmount(e.target.value);
+                  }}
+                  onBlur={() => {
+                    const rounded = roundUpToFive(Number(rawAmount));
+                    setAmount(rounded);
+                    setRawAmount(String(rounded));
                   }}
                   className="w-32"
                   type="number"
-                  step={5}
                   min={0}
                 />
-                <div className="text-sm text-muted-foreground">increments of 5</div>
+                <div className="text-sm text-muted-foreground">will round up to nearest 5</div>
               </div>
             </div>
           )}
@@ -119,7 +143,13 @@ export default function CollectPopup({
         <DialogFooter>
           <div className="flex gap-2 w-full justify-end">
             <Button variant="secondary" onClick={() => onOpenChange(false)}>Cancel</Button>
-            <Button onClick={handleSubmit} className="bg-primary">Collect</Button>
+            <Button 
+              onClick={handleSubmit} 
+              className="bg-primary"
+              disabled={mode === 'free_parking' && (game?.free_parking_balance || 0) === 0}
+            >
+              Collect
+            </Button>
           </div>
         </DialogFooter>
       </DialogContent>
