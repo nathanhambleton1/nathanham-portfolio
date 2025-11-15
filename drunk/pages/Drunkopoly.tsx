@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import PayPopup from "../components/PayPopup";
+import CollectPopup from "../components/CollectPopup";
 import {
   Card,
   CardHeader,
@@ -46,6 +47,8 @@ const Drunkopoly = () => {
   const [payMode, setPayMode] = useState<"bank" | "players" | "tax" | null>(null);
   // Free Parking pot state
   const [freeParkingPot, setFreeParkingPot] = useState(0);
+  const [collectModalOpen, setCollectModalOpen] = useState(false);
+  const [collectMode, setCollectMode] = useState<'bank'|'pass_go'|'free_parking'|null>(null);
 
   // On mount, try to restore session from localStorage and auto-join
   useEffect(() => {
@@ -430,16 +433,55 @@ const Drunkopoly = () => {
           }}
         />
 
+      <CollectPopup
+        open={collectModalOpen}
+        onOpenChange={(v) => setCollectModalOpen(v)}
+        mode={collectMode}
+        currentPlayer={player}
+        game={game}
+        onCollect={async (opts) => {
+          if (!game || !player) return;
+          try {
+            const res = await fetch(`${API_BASE}/games/${game.code}/collect`, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ actor_player_id: player.id, opts }),
+            });
+            if (!res.ok) {
+              const body = await res.json().catch(() => ({}));
+              throw new Error(body.error || 'Collect failed');
+            }
+            // refresh players and game
+            const [playersRes, gameRes] = await Promise.all([
+              fetch(`${API_BASE}/games/${game.code}/players`),
+              fetch(`${API_BASE}/games/${game.code}`),
+            ]);
+            if (playersRes.ok) {
+              const pb = await playersRes.json();
+              setPlayersList(pb.players || []);
+              const updated = (pb.players || []).find((p: any) => p.id === player.id);
+              if (updated) setPlayer(updated);
+            }
+            if (gameRes.ok) {
+              const gb = await gameRes.json();
+              if (gb.game) setGame(gb.game);
+            }
+          } catch (err: any) {
+            console.error('Collect error:', err);
+            alert(err.message || 'Failed to collect');
+          }
+        }}
+      />
         {/* Collect section */}
         <Section title="Collect" className="mt-8">
           <div className="grid grid-cols-2 gap-4 w-64">
-            <Button variant="secondary" className="py-6">
+            <Button variant="secondary" className="py-6" onClick={() => { setCollectMode('bank'); setCollectModalOpen(true); }}>
               Bank
             </Button>
-            <Button variant="secondary" className="py-6">
+            <Button variant="secondary" className="py-6" onClick={() => { setCollectMode('pass_go'); setCollectModalOpen(true); }}>
               Pass Go
             </Button>
-            <Button variant="secondary" className="py-6">
+            <Button variant="secondary" className="py-6" onClick={() => { setCollectMode('free_parking'); setCollectModalOpen(true); }}>
               Free Parking
               <span className="ml-2 text-primary font-bold">${freeParkingPot}</span>
             </Button>

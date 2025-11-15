@@ -195,6 +195,103 @@ app.post('/games/:code/payments', async (req, res) => {
   }
 });
 
+// Collect money for a player (bank, pass_go, free_parking)
+app.post('/games/:code/collect', async (req, res) => {
+  try {
+    const code = req.params.code;
+    const { actor_player_id, opts = {} } = req.body || {};
+    if (!actor_player_id) return res.status(400).json({ error: 'actor_player_id is required' });
+
+    // find game
+    const { data: games, error: gErr } = await supabase
+      .from('games')
+      .select('*')
+      .eq('code', code)
+      .limit(1);
+    if (gErr) throw gErr;
+    if (!games || games.length === 0) return res.status(404).json({ error: 'Game not found' });
+    const game = games[0];
+
+    // fetch player
+    const { data: pRows, error: pErr } = await supabase
+      .from('players')
+      .select('*')
+      .eq('id', actor_player_id)
+      .eq('game_id', game.id)
+      .limit(1);
+    if (pErr) throw pErr;
+    if (!pRows || pRows.length === 0) return res.status(404).json({ error: 'Player not found in game' });
+    const player = pRows[0];
+
+    let amount = 0;
+    let meRow = null;
+
+    if (opts.type === 'bank') {
+      amount = Number(opts.amount || 0);
+      if (amount <= 0) return res.status(400).json({ error: 'Invalid amount for bank collect' });
+
+      // create money_event (bank -> player)
+      const { data: meData, error: meErr } = await supabase
+        .from('money_events')
+        .insert([{ game_id: game.id, actor_player_id, from_player_id: null, to_player_id: actor_player_id, amount, type: 'bank', description: opts.description || null }])
+        .select()
+        .single();
+      if (meErr) throw meErr;
+      meRow = meData;
+
+    } else if (opts.type === 'pass_go') {
+      const base = Number(game.pass_go_amount || 200);
+      const doubled = !!opts.doubled;
+      amount = doubled ? base * 2 : base;
+
+      const { data: meData, error: meErr } = await supabase
+        .from('money_events')
+        .insert([{ game_id: game.id, actor_player_id, from_player_id: null, to_player_id: actor_player_id, amount, type: 'go', description: opts.description || null }])
+        .select()
+        .single();
+      if (meErr) throw meErr;
+      meRow = meData;
+
+    } else if (opts.type === 'free_parking') {
+      const pot = Number(game.free_parking_balance || 0);
+      if (pot <= 0) return res.status(400).json({ error: 'Free parking pot is empty' });
+      amount = pot;
+
+      // create money_event recording collect from free parking (bank-like)
+      const { data: meData, error: meErr } = await supabase
+        .from('money_events')
+        .insert([{ game_id: game.id, actor_player_id, from_player_id: null, to_player_id: actor_player_id, amount, type: 'free_parking_collect', description: opts.description || null }])
+        .select()
+        .single();
+      if (meErr) throw meErr;
+      meRow = meData;
+
+      // clear pot
+      const { error: upgErr } = await supabase
+        .from('games')
+        .update({ free_parking_balance: 0 })
+        .eq('id', game.id);
+      if (upgErr) throw upgErr;
+
+    } else {
+      return res.status(400).json({ error: 'Invalid collect type' });
+    }
+
+    // credit player's balance
+    const newBal = (player.balance || 0) + amount;
+    const { error: upErr } = await supabase
+      .from('players')
+      .update({ balance: newBal })
+      .eq('id', actor_player_id);
+    if (upErr) throw upErr;
+
+    return res.json({ ok: true, money_event: meRow, new_balance: newBal });
+  } catch (err) {
+    console.error('Collect error:', err);
+    return res.status(500).json({ error: err.message || 'Failed to process collect' });
+  }
+});
+
 function generateCode(len = 6) {
   const chars = 'ABCDEFGHJKMNPQRSTUVWXYZ23456789'; // avoid similar-looking chars
   let out = '';
