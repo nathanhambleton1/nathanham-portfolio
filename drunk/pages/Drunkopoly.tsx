@@ -1,4 +1,5 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
+import PayPopup from "../components/PayPopup";
 import {
   Card,
   CardHeader,
@@ -28,6 +29,9 @@ const API_BASE = (import.meta as any).env?.VITE_API_URL || "http://localhost:400
 console.log("Drunkopoly API_BASE:", API_BASE);
 
 const Drunkopoly = () => {
+  const STORAGE_KEY_CODE = "drunkopoly:gameCode";
+  const STORAGE_KEY_NAME = "drunkopoly:name";
+
   const [screen, setScreen] = useState<Screen>("join-create");
   const [gameCode, setGameCode] = useState("");
   const [name, setName] = useState("");
@@ -37,6 +41,83 @@ const Drunkopoly = () => {
   const [error, setError] = useState<string | null>(null);
   const [game, setGame] = useState<any | null>(null);
   const [player, setPlayer] = useState<any | null>(null);
+  const [playersList, setPlayersList] = useState<any[]>([]);
+  const [payModalOpen, setPayModalOpen] = useState(false);
+  const [payMode, setPayMode] = useState<"bank" | "players" | "tax" | null>(null);
+  // Free Parking pot state
+  const [freeParkingPot, setFreeParkingPot] = useState(0);
+
+  // On mount, try to restore session from localStorage and auto-join
+  useEffect(() => {
+    const savedCode = typeof window !== "undefined" ? localStorage.getItem(STORAGE_KEY_CODE) : null;
+    const savedName = typeof window !== "undefined" ? localStorage.getItem(STORAGE_KEY_NAME) : null;
+    if (savedCode && savedName) {
+      // attempt to re-join the game with saved credentials
+      (async () => {
+        setLoading(true);
+        try {
+          const res = await fetch(`${API_BASE}/games/join`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ code: savedCode, name: savedName }),
+          });
+          const body = await res.json().catch(() => ({}));
+          if (!res.ok) {
+            // failed to rejoin, clear storage
+            localStorage.removeItem(STORAGE_KEY_CODE);
+            localStorage.removeItem(STORAGE_KEY_NAME);
+            return;
+          }
+          const { game: g, player: p } = body;
+          setGame(g);
+          setPlayer(p);
+          setGameCode(g.code);
+          setName(savedName);
+          setScreen("home");
+        } catch (err) {
+          console.error("Auto-join failed:", err);
+          localStorage.removeItem(STORAGE_KEY_CODE);
+          localStorage.removeItem(STORAGE_KEY_NAME);
+        } finally {
+          setLoading(false);
+        }
+      })();
+    }
+  }, []);
+
+  useEffect(() => {
+    if (screen === "home" && player && game) {
+      // fetch players for this game from the server
+      (async () => {
+        try {
+          const res = await fetch(`${API_BASE}/games/${game.code}/players`);
+          if (res.ok) {
+            const body = await res.json();
+            setPlayersList(body.players || []);
+          } else {
+            // fallback to demo list if endpoint not available
+            setPlayersList((prev) => {
+              if (prev.length) return prev;
+              const self = { id: player.id, name: player.name, balance: player.balance ?? (game?.initial_balance ?? 1500) };
+              const others = [
+                { id: "demo-1", name: "Alex", balance: 1200 },
+                { id: "demo-2", name: "Casey", balance: 900 },
+                { id: "demo-3", name: "Jordan", balance: 1500 },
+              ];
+              return [self, ...others];
+            });
+          }
+        } catch (e) {
+          console.warn('Failed to fetch players, using fallback demo list', e);
+        }
+      })();
+    }
+  }, [screen, player, game]);
+
+  // keep free parking pot in sync with game
+  useEffect(() => {
+    if (game) setFreeParkingPot(game.free_parking_balance || 0);
+  }, [game]);
 
   // Step 1: Join/Create Game
   if (screen === "join-create") {
@@ -146,6 +227,13 @@ const Drunkopoly = () => {
                     setGame(g);
                     setPlayer(p);
                     setGameCode(g.code);
+                    // persist for reloads
+                    try {
+                      localStorage.setItem(STORAGE_KEY_CODE, g.code);
+                      localStorage.setItem(STORAGE_KEY_NAME, name);
+                    } catch (e) {
+                      /* ignore storage errors */
+                    }
                     setScreen("home");
                   } else {
                     // join existing
@@ -164,6 +252,13 @@ const Drunkopoly = () => {
                     setGame(g);
                     setPlayer(p);
                     setGameCode(g.code);
+                    // persist for reloads
+                    try {
+                      localStorage.setItem(STORAGE_KEY_CODE, g.code);
+                      localStorage.setItem(STORAGE_KEY_NAME, name);
+                    } catch (e) {
+                      /* ignore storage errors */
+                    }
                     setScreen("home");
                   }
                 } catch (err: any) {
@@ -211,6 +306,12 @@ const Drunkopoly = () => {
       setGame(null);
       setGameCode('');
       setName('');
+      try {
+        localStorage.removeItem(STORAGE_KEY_CODE);
+        localStorage.removeItem(STORAGE_KEY_NAME);
+      } catch (e) {
+        /* ignore */
+      }
       setScreen('join-create');
     } catch (err: any) {
       console.error('Leave game error:', err);
@@ -254,17 +355,80 @@ const Drunkopoly = () => {
         {/* Pay section */}
         <Section title="Pay" className={player?.is_commissioner ? "mt-8" : ""}>
           <div className="grid grid-cols-2 gap-4 w-64">
-            <Button variant="secondary" className="py-6">
+            <Button
+              variant="secondary"
+              className="py-6"
+              onClick={() => {
+                setPayMode("bank");
+                setPayModalOpen(true);
+              }}
+            >
               Bank
             </Button>
-            <Button variant="secondary" className="py-6">
+            <Button
+              variant="secondary"
+              className="py-6"
+              onClick={() => {
+                setPayMode("players");
+                setPayModalOpen(true);
+              }}
+            >
               Players
             </Button>
-            <Button variant="secondary" className="py-6">
+            <Button
+              variant="secondary"
+              className="py-6"
+              onClick={() => {
+                setPayMode("tax");
+                setPayModalOpen(true);
+              }}
+            >
               Tax
             </Button>
           </div>
         </Section>
+
+        <PayPopup
+          open={payModalOpen}
+          onOpenChange={(v) => setPayModalOpen(v)}
+          mode={payMode}
+          currentPlayer={player}
+          players={playersList}
+          onSubmit={async (payments, opts) => {
+            if (!game || !player) return;
+            try {
+              const res = await fetch(`${API_BASE}/games/${game.code}/payments`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ actor_player_id: player.id, payments, opts: { ...(opts || {}), mode: payMode } }),
+              });
+              if (!res.ok) {
+                const body = await res.json().catch(() => ({}));
+                throw new Error(body.error || 'Payment failed');
+              }
+
+              // refresh players and game state
+              const [playersRes, gameRes] = await Promise.all([
+                fetch(`${API_BASE}/games/${game.code}/players`),
+                fetch(`${API_BASE}/games/${game.code}`),
+              ]);
+              if (playersRes.ok) {
+                const pb = await playersRes.json();
+                setPlayersList(pb.players || []);
+                // if current player present in refreshed list, update top-level player
+                const updated = (pb.players || []).find((p: any) => p.id === player.id);
+                if (updated) setPlayer(updated);
+              }
+              if (gameRes.ok) {
+                const gb = await gameRes.json();
+                if (gb.game) setGame(gb.game);
+              }
+            } catch (err: any) {
+              console.error('Payment error:', err);
+              alert(err.message || 'Failed to process payment');
+            }
+          }}
+        />
 
         {/* Collect section */}
         <Section title="Collect" className="mt-8">
@@ -277,6 +441,7 @@ const Drunkopoly = () => {
             </Button>
             <Button variant="secondary" className="py-6">
               Free Parking
+              <span className="ml-2 text-primary font-bold">${freeParkingPot}</span>
             </Button>
           </div>
         </Section>

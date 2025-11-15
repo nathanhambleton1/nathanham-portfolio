@@ -24,6 +24,177 @@ app.get('/health', (req, res) => {
   res.json({ ok: true });
 });
 
+// Get players for a game by code
+app.get('/games/:code/players', async (req, res) => {
+  try {
+    const code = req.params.code;
+    const { data: games, error: gErr } = await supabase
+      .from('games')
+      .select('id')
+      .eq('code', code)
+      .limit(1);
+    if (gErr) throw gErr;
+    if (!games || games.length === 0) return res.status(404).json({ error: 'Game not found' });
+    const game = games[0];
+
+    const { data: players, error: pErr } = await supabase
+      .from('players')
+      .select('*')
+      .eq('game_id', game.id)
+      .order('created_at', { ascending: true });
+    if (pErr) throw pErr;
+    return res.json({ players: players || [] });
+  } catch (err) {
+    console.error('Get players error:', err);
+    return res.status(500).json({ error: 'Failed to fetch players' });
+  }
+});
+
+// Process payments for a game
+app.post('/games/:code/payments', async (req, res) => {
+  try {
+    const code = req.params.code;
+    const { actor_player_id, payments = [], opts = {} } = req.body || {};
+    if (!actor_player_id) return res.status(400).json({ error: 'actor_player_id is required' });
+    if (!Array.isArray(payments) || payments.length === 0) return res.status(400).json({ error: 'payments are required' });
+
+    // find game
+    const { data: games, error: gErr } = await supabase
+      .from('games')
+      .select('*')
+      .eq('code', code)
+      .limit(1);
+    if (gErr) throw gErr;
+    if (!games || games.length === 0) return res.status(404).json({ error: 'Game not found' });
+    const game = games[0];
+
+    // fetch actor to validate and get current balance
+    const { data: actorRows, error: aErr } = await supabase
+      .from('players')
+      .select('*')
+      .eq('id', actor_player_id)
+      .eq('game_id', game.id)
+      .limit(1);
+    if (aErr) throw aErr;
+    if (!actorRows || actorRows.length === 0) return res.status(404).json({ error: 'Actor player not found in game' });
+    const actor = actorRows[0];
+
+    // handle tax distribution to all other players when requested
+    let meData = [];
+    let total = 0;
+    if (opts.mode === 'tax' && !opts.freeParking && payments.length === 1 && (payments[0].to == null)) {
+      // distribute payments[0].amount to all other players
+      const amountPer = Number(payments[0].amount || 0);
+      const { data: allPlayers, error: apErr } = await supabase
+        .from('players')
+        .select('*')
+        .eq('game_id', game.id);
+      if (apErr) throw apErr;
+      const recipients = (allPlayers || []).filter((p) => p.id !== actor_player_id);
+      total = amountPer * recipients.length;
+      const inserts = recipients.map((r) => ({
+        game_id: game.id,
+        actor_player_id: actor_player_id,
+        from_player_id: actor_player_id,
+        to_player_id: r.id,
+        amount: amountPer,
+        type: opts.type || 'tax',
+        description: opts.description || null,
+      }));
+      const { data: inserted, error: meErr } = await supabase
+        .from('money_events')
+        .insert(inserts)
+        .select();
+      if (meErr) throw meErr;
+      meData = inserted;
+
+      // credit each recipient
+      for (const r of recipients) {
+        const newBal = (r.balance || 0) + amountPer;
+        const { error: uRecErr } = await supabase
+          .from('players')
+          .update({ balance: newBal })
+          .eq('id', r.id);
+        if (uRecErr) throw uRecErr;
+      }
+    } else {
+      // normal behavior: create entries for provided payments
+      total = payments.reduce((s, p) => s + (Number(p.amount) || 0), 0);
+      const inserts = payments.map((p) => {
+        return {
+          game_id: game.id,
+          actor_player_id: actor_player_id,
+          from_player_id: p.from_player_id || actor_player_id,
+          to_player_id: p.to || null,
+          amount: Number(p.amount) || 0,
+          type: opts.type || (opts.freeParking ? 'tax' : 'manual'),
+          description: opts.description || null,
+        };
+      });
+      const { data: inserted, error: meErr } = await supabase
+        .from('money_events')
+        .insert(inserts)
+        .select();
+      if (meErr) throw meErr;
+      meData = inserted;
+
+      // credit recipients
+      const recipientMap = new Map();
+      for (const p of payments) {
+        if (!p.to) continue;
+        recipientMap.set(p.to, (recipientMap.get(p.to) || 0) + Number(p.amount || 0));
+      }
+      for (const [rid, amt] of recipientMap.entries()) {
+        const { data: rRows, error: rErr } = await supabase
+          .from('players')
+          .select('*')
+          .eq('id', rid)
+          .eq('game_id', game.id)
+          .limit(1);
+        if (rErr) throw rErr;
+        if (!rRows || rRows.length === 0) {
+          console.warn('Recipient not found in game, skipping credit:', rid);
+          continue;
+        }
+        const recipient = rRows[0];
+        const newBal = (recipient.balance || 0) + amt;
+        const { error: uRecErr } = await supabase
+          .from('players')
+          .update({ balance: newBal })
+          .eq('id', rid);
+        if (uRecErr) throw uRecErr;
+      }
+    }
+
+    // decrement actor balance (take the money out of the payer)
+    try {
+      const { error: uActorErr } = await supabase
+        .from('players')
+        .update({ balance: (actor.balance || 0) - total })
+        .eq('id', actor_player_id);
+      if (uActorErr) throw uActorErr;
+    } catch (e) {
+      console.error('Failed to update actor balance:', e);
+      return res.status(500).json({ error: 'Failed to update payer balance' });
+    }
+
+    // if freeParking option present, increment game's free_parking_balance
+    if (opts.freeParking) {
+      const add = total;
+      const { error: upgErr } = await supabase
+        .from('games')
+        .update({ free_parking_balance: (game.free_parking_balance || 0) + add })
+        .eq('id', game.id);
+      if (upgErr) throw upgErr;
+    }
+
+    return res.json({ ok: true, money_events: meData });
+  } catch (err) {
+    console.error('Process payments error:', err);
+    return res.status(500).json({ error: err.message || 'Failed to process payments' });
+  }
+});
+
 function generateCode(len = 6) {
   const chars = 'ABCDEFGHJKMNPQRSTUVWXYZ23456789'; // avoid similar-looking chars
   let out = '';
