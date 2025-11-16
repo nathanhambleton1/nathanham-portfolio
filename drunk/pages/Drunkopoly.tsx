@@ -57,7 +57,6 @@ const Drunkopoly = () => {
   const [collectModalOpen, setCollectModalOpen] = useState(false);
   const [collectMode, setCollectMode] = useState<'bank'|'pass_go'|'free_parking'|null>(null);
   const [blockedPaymentMessage, setBlockedPaymentMessage] = useState<string | null>(null);
-  const [lastFlash, setLastFlash] = useState<'up'|'down'|null>(null);
   const prevBalanceRef = useRef<number | null>(null);
 
   // Generate unique game code
@@ -678,21 +677,7 @@ const Drunkopoly = () => {
           setGame(gameData.data);
           const updatedPlayer = players.find((p: any) => p.id === player.id);
           if (updatedPlayer) {
-            // detect balance delta to flash color for incoming/outgoing payments
-            try {
-              const prev = prevBalanceRef.current != null ? prevBalanceRef.current : (player?.balance ?? 0);
-              const next = Number(updatedPlayer.balance ?? 0);
-              if (next > prev) {
-                setLastFlash('up');
-                setTimeout(() => setLastFlash(null), 900);
-              } else if (next < prev) {
-                setLastFlash('down');
-                setTimeout(() => setLastFlash(null), 900);
-              }
-            } catch (e) {
-              // ignore
-            }
-
+            // Update player; AnimatedNumber will animate when `balance` changes
             setPlayer(updatedPlayer);
             prevBalanceRef.current = Number(updatedPlayer.balance ?? 0);
           }
@@ -727,50 +712,30 @@ const Drunkopoly = () => {
     };
   }, [screen, game?.code, player?.id]);
 
-  // Handle logout (just leave game, keep name)
-  const handleLogoutOfGame = () => {
+  // Handle logout: fully clear session (localStorage + supabase auth) and reset state
+  const handleLogoutOfGame = async () => {
+    try {
+      if (supabase && supabase.auth && typeof supabase.auth.signOut === 'function') {
+        await supabase.auth.signOut();
+      }
+    } catch (err) {
+      console.warn('Supabase signOut failed:', err);
+    }
+
+    if (typeof window !== 'undefined') {
+      try {
+        localStorage.removeItem(STORAGE_KEY_CODE);
+        localStorage.removeItem(STORAGE_KEY_NAME);
+      } catch (e) {
+        // ignore
+      }
+    }
+
+    setPlayer(null);
     setGame(null);
     setGameCode("");
+    setName("");
     setScreen("join-create");
-  };
-
-  // Handle leave game (remove data)
-  const handleLeave = async () => {
-    try {
-      if (!game || !player) return;
-      
-      // Delete player and related data
-      const { error } = await supabase
-        .from('players')
-        .delete()
-        .eq('id', player.id)
-        .eq('game_id', game.id);
-      
-      if (error) throw error;
-
-      // Log leave event
-      await supabase.from('money_events').insert([{
-        game_id: game.id,
-        actor_player_id: player.id,
-        from_player_id: player.id,
-        to_player_id: null,
-        amount: 0,
-        type: 'leave',
-        description: `${player.name} left the game`,
-      }]);
-
-      // Reset state
-      setPlayer(null);
-      setGame(null);
-      setGameCode('');
-      setName('');
-      localStorage.removeItem(STORAGE_KEY_CODE);
-      localStorage.removeItem(STORAGE_KEY_NAME);
-      setScreen('join-create');
-    } catch (err: any) {
-      console.error('Leave game error:', err);
-      alert(err.message || 'Failed to leave game');
-    }
   };
 
   // Step 1: Join/Create Game
@@ -1026,7 +991,7 @@ const Drunkopoly = () => {
           <div>{player?.name ?? name}</div>
           <div className="text-sm text-muted-foreground">{(player?.total_sips ?? 0)} sips</div>
         </div>
-        <GameCodePopover code={game?.code ?? gameCode} onLeave={handleLeave} onLogout={handleLogoutOfGame} />
+        <GameCodePopover code={game?.code ?? gameCode} onLogout={handleLogoutOfGame} />
       </div>
 
       {/* Lockdown overlay when player has pending sips */}
@@ -1076,7 +1041,7 @@ const Drunkopoly = () => {
             Current Balance
           </div>
           <div className="text-6xl font-extrabold text-primary text-center">
-            <AnimatedNumber value={player?.balance ?? game?.initial_balance ?? 1500} flash={lastFlash} />
+            <AnimatedNumber value={player?.balance ?? game?.initial_balance ?? 1500} />
           </div>
         </div>
 
@@ -1152,25 +1117,7 @@ const Drunkopoly = () => {
                 setBlockedPaymentMessage(`No money was sent to ${names} because they have pending sips. Congrats! 🎉`);
               }
 
-              // Compute net delta for current player from returned money_events and trigger flash
-              try {
-                const events = result.money_events || [];
-                let net = 0;
-                for (const ev of events) {
-                  const amt = Number(ev.amount || 0);
-                  if (ev.to_player_id === player.id) net += amt;
-                  if (ev.from_player_id === player.id) net -= amt;
-                }
-                if (net > 0) {
-                  setLastFlash('up');
-                  setTimeout(() => setLastFlash(null), 900);
-                } else if (net < 0) {
-                  setLastFlash('down');
-                  setTimeout(() => setLastFlash(null), 900);
-                }
-              } catch (e) {
-                // ignore flash errors
-              }
+              // Refresh state; AnimatedNumber will animate based on the changed `balance` value
 
               // Refresh state
               const players = await fetchPlayers(game.code);
@@ -1230,6 +1177,7 @@ const Drunkopoly = () => {
           onOpenChange={(v) => setSipModalOpen(v)}
           currentPlayer={player}
           players={playersList}
+          allowSelf={!!(player?.is_commissioner || (game?.host_player_id === player?.id))}
           onSubmit={async (to, sip_count) => {
             if (!game || !player) return;
             try {
@@ -1293,7 +1241,7 @@ function Section({
   );
 }
 
-function AnimatedNumber({ value, flash }: { value: number; flash?: 'up'|'down'|null }) {
+function AnimatedNumber({ value }: { value: number }) {
   const [display, setDisplay] = useState<number>(value ?? 0);
   const prevRef = useRef<number>(value ?? 0);
   const [bump, setBump] = useState<'up' | 'down' | 'neutral'>('neutral');
@@ -1328,13 +1276,7 @@ function AnimatedNumber({ value, flash }: { value: number; flash?: 'up'|'down'|n
     return () => cancelAnimationFrame(raf);
   }, [value]);
 
-  // allow external flash override via prop
-  useEffect(() => {
-    if (!flash) return;
-    setBump(flash === 'up' ? 'up' : 'down');
-    const t = setTimeout(() => setBump('neutral'), 700);
-    return () => clearTimeout(t);
-  }, [flash]);
+  // bump only driven by internal value changes
 
   const formatted = Math.round(display).toLocaleString();
 
@@ -1357,8 +1299,8 @@ function AnimatedNumber({ value, flash }: { value: number; flash?: 'up'|'down'|n
   // Use either the internal bump state OR the external flash prop
   // to determine color so external flashes (from payments) always reflect
   // increase/decrease visually even if the internal animation timing differs.
-  const isUp = bump === 'up' || flash === 'up';
-  const isDown = bump === 'down' || flash === 'down';
+  const isUp = bump === 'up';
+  const isDown = bump === 'down';
   const colorClass = isUp ? 'text-green-400' : isDown ? 'text-destructive' : 'text-primary';
 
   // Inline hex color to ensure it overrides any inherited text color
@@ -1372,7 +1314,7 @@ function AnimatedNumber({ value, flash }: { value: number; flash?: 'up'|'down'|n
   );
 }
 
-function GameCodePopover({ code, onLeave, onLogout }: { code: string; onLeave?: () => void; onLogout?: () => void }) {
+function GameCodePopover({ code, onLogout }: { code: string; onLogout?: () => void }) {
   return (
     <Popover>
       <PopoverTrigger asChild>
@@ -1389,27 +1331,6 @@ function GameCodePopover({ code, onLeave, onLogout }: { code: string; onLeave?: 
           <Button variant="secondary" className="w-full mt-2" onClick={onLogout}>
             Log Out
           </Button>
-          <AlertDialog>
-            <AlertDialogTrigger asChild>
-              <Button variant="destructive" className="w-full mt-2">
-                Leave Game
-              </Button>
-            </AlertDialogTrigger>
-            <AlertDialogContent>
-              <AlertDialogHeader>
-                <AlertDialogTitle>Are you sure you want to leave?</AlertDialogTitle>
-                <AlertDialogDescription>
-                  If you leave the game, <b>all your data will be permanently removed</b> from this session. This action cannot be undone. Please be careful!
-                </AlertDialogDescription>
-              </AlertDialogHeader>
-              <AlertDialogFooter>
-                <AlertDialogCancel>Cancel</AlertDialogCancel>
-                <AlertDialogAction onClick={onLeave} className="bg-destructive text-destructive-foreground hover:bg-destructive/90">
-                  Yes, remove my data
-                </AlertDialogAction>
-              </AlertDialogFooter>
-            </AlertDialogContent>
-          </AlertDialog>
         </div>
       </PopoverContent>
     </Popover>

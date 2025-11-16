@@ -18,14 +18,17 @@ export default function SipPopup({
   currentPlayer,
   players = [],
   onSubmit,
+  allowSelf,
 }: {
   open: boolean;
   onOpenChange: (v: boolean) => void;
   currentPlayer: Player | null;
   players?: Player[];
   onSubmit: (to: string, sip_count: number) => void;
+  allowSelf?: boolean;
 }) {
-  const others = useMemo(() => players.filter((p) => p.id !== currentPlayer?.id), [players, currentPlayer]);
+  // include all players as possible recipients — don't limit selection anymore
+  const others = useMemo(() => players, [players]);
 
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [sipCount, setSipCount] = useState<number>(1);
@@ -60,11 +63,11 @@ export default function SipPopup({
           <div className="space-y-2">
             <div className="text-sm font-medium">Choose recipient</div>
             <div className="grid gap-2">
-              {others.length === 0 && <div className="text-sm text-muted-foreground">No other players</div>}
+              {others.length === 0 && <div className="text-sm text-muted-foreground">No players</div>}
               {others.map((p) => (
                 <label key={p.id} className={`flex items-center gap-2 p-2 border rounded ${selectedId === p.id ? 'bg-primary/10' : ''}`}>
                   <input type="radio" name="sip-recipient" checked={selectedId === p.id} onChange={() => setSelectedId(p.id)} />
-                  <div className="flex-1">{p.name}</div>
+                  <div className="flex-1">{p.name}{p.id === currentPlayer?.id ? ' (you)' : ''}</div>
                   <div className="text-sm text-muted-foreground">{(p.pending_sips || 0) > 0 ? `${p.pending_sips} pending` : ''}</div>
                 </label>
               ))}
