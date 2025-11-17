@@ -28,6 +28,7 @@ import {
   AlertDialogCancel,
 } from "../components/ui/alert-dialog";
 import { createClient } from '@supabase/supabase-js';
+import { useNavigate } from "react-router-dom";
 
 // Initialize Supabase client
 const supabaseUrl = 'https://kcyrvubzhsphpxfsewii.supabase.co';
@@ -58,6 +59,7 @@ const Drunkopoly = () => {
   const [collectMode, setCollectMode] = useState<'bank'|'pass_go'|'free_parking'|null>(null);
   const [blockedPaymentMessage, setBlockedPaymentMessage] = useState<string | null>(null);
   const prevBalanceRef = useRef<number | null>(null);
+  const navigate = useNavigate();
 
   // Generate unique game code
   const generateCode = (len = 6) => {
@@ -991,7 +993,10 @@ const Drunkopoly = () => {
           <div>{player?.name ?? name}</div>
           <div className="text-sm text-muted-foreground">{(player?.total_sips ?? 0)} sips</div>
         </div>
-        <GameCodePopover code={game?.code ?? gameCode} onLogout={handleLogoutOfGame} />
+        <div className="flex items-center gap-2">
+          <Button variant="ghost" size="sm" onClick={() => navigate('/drunk/drunkopoly/rules')}>Rules</Button>
+          <GameCodePopover code={game?.code ?? gameCode} onLogout={handleLogoutOfGame} />
+        </div>
       </div>
 
       {/* Lockdown overlay when player has pending sips */}
