@@ -64,6 +64,8 @@ const Drunkopoly = () => {
   const [recentGames, setRecentGames] = useState<string[]>([]);
   const [recentPlayers, setRecentPlayers] = useState<any[] | null>(null);
   const [playersList, setPlayersList] = useState<any[]>([]);
+  const [removedNoticeOpen, setRemovedNoticeOpen] = useState(false);
+  const [removedNoticeMsg, setRemovedNoticeMsg] = useState<string | null>(null);
   const [payModalOpen, setPayModalOpen] = useState(false);
   const [payMode, setPayMode] = useState<"bank" | "players" | "tax" | null>(null);
   const [sipModalOpen, setSipModalOpen] = useState(false);
@@ -83,16 +85,32 @@ const Drunkopoly = () => {
   // Subscribe to the `game_events` view (same source ActivityLog uses) and show
   // a toast containing the sender name + optional note.
   useEffect(() => {
-    // load recent games from localStorage
-    try {
-      const raw = typeof window !== "undefined" ? localStorage.getItem(STORAGE_KEY_RECENT) : null;
-      if (raw) {
+    // load recent games from localStorage and filter out any that no longer exist
+    (async () => {
+      try {
+        const raw = typeof window !== "undefined" ? localStorage.getItem(STORAGE_KEY_RECENT) : null;
+        if (!raw) return;
         const parsed = JSON.parse(raw || "[]");
-        if (Array.isArray(parsed)) setRecentGames(parsed.filter(Boolean).map((s: any) => String(s)));
+        if (!Array.isArray(parsed)) return;
+        const codes = parsed.filter(Boolean).map((s: any) => String(s));
+        if (codes.length === 0) return;
+
+        try {
+          // Fetch existing games in one query
+          const { data: existing = [], error: exErr } = await supabase.from('games').select('code').in('code', codes);
+          if (exErr) throw exErr;
+          const existingSet = new Set((existing || []).map((g: any) => String(g.code)));
+          const filtered = codes.filter((c: string) => existingSet.has(c));
+          setRecentGames(filtered);
+          persistRecentGames(filtered);
+        } catch (e) {
+          // If Supabase check fails, fall back to showing the raw list
+          setRecentGames(codes);
+        }
+      } catch (e) {
+        // ignore JSON/localStorage errors
       }
-    } catch (e) {
-      // ignore
-    }
+    })();
   }, []);
 
   const persistRecentGames = (list: string[]) => {
@@ -111,6 +129,7 @@ const Drunkopoly = () => {
   };
 
   const handleRecentClick = async (code: string) => {
+    setLoading(true);
     try {
       setGameCode(code);
       setMode('join');
@@ -124,6 +143,8 @@ const Drunkopoly = () => {
     } catch (e) {
       // fallback to enter name
       setScreen('enter-name');
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -140,9 +161,9 @@ const Drunkopoly = () => {
 
       setGame(g);
       setPlayer(p);
-      setName(p.name);
+      setName((p.name ?? '').toUpperCase());
       setGameCode(g.code);
-      try { localStorage.setItem(STORAGE_KEY_CODE, g.code); localStorage.setItem(STORAGE_KEY_NAME, p.name); } catch (e) { /* ignore */ }
+      try { localStorage.setItem(STORAGE_KEY_CODE, g.code); localStorage.setItem(STORAGE_KEY_NAME, (p.name ?? '').toUpperCase()); } catch (e) { /* ignore */ }
       pushRecentGame(g.code);
       setScreen('home');
     } catch (err) {
@@ -323,6 +344,21 @@ const Drunkopoly = () => {
     } catch (err) {
       console.error('Get players error:', err);
       return [];
+    }
+  };
+
+  const isNameKicked = async (gameId: string, nameToCheck: string) => {
+    try {
+      const { data } = await supabase
+        .from('money_events')
+        .select('id')
+        .eq('game_id', gameId)
+        .eq('type', 'kick')
+        .ilike('description', `%kicked:${nameToCheck}%`)
+        .limit(1);
+      return !!(data && data.length > 0);
+    } catch (e) {
+      return false;
     }
   };
 
@@ -1023,7 +1059,7 @@ const Drunkopoly = () => {
             .from('players')
             .select('*')
             .eq('game_id', game.id)
-            .eq('name', savedName)
+            .eq('name', (savedName ?? '').toUpperCase())
             .limit(1);
 
           if (pErr) throw pErr;
@@ -1037,6 +1073,15 @@ const Drunkopoly = () => {
               .update({ is_online: true, last_seen_at: new Date().toISOString() })
               .eq('id', player.id);
           } else {
+            // Prevent auto-creation if this name was kicked
+            const kicked = await isNameKicked(game.id, (savedName ?? '').toUpperCase());
+            if (kicked) {
+              try { localStorage.removeItem(STORAGE_KEY_CODE); localStorage.removeItem(STORAGE_KEY_NAME); } catch {}
+              try { toast({ title: 'Removed', description: 'You were removed from this game and cannot rejoin.' }); } catch {}
+              setLoading(false);
+              setScreen('join-create');
+              return;
+            }
             // Check if first player
             const { data: allPlayers, error: countErr } = await supabase
               .from('players')
@@ -1045,11 +1090,11 @@ const Drunkopoly = () => {
             
             const isFirstPlayer = !allPlayers || allPlayers.length === 0;
             
-            const { data: newPlayer, error: newErr } = await supabase
+              const { data: newPlayer, error: newErr } = await supabase
               .from('players')
               .insert([{
                 game_id: game.id,
-                name: savedName,
+                name: (savedName ?? '').toUpperCase(),
                 balance: game.initial_balance ?? 0,
                 is_commissioner: isFirstPlayer,
               }])
@@ -1082,7 +1127,7 @@ const Drunkopoly = () => {
           setGame(game);
           setPlayer(player);
           setGameCode(game.code);
-          setName(savedName);
+          setName((savedName ?? '').toUpperCase());
           setScreen("home");
         } catch (err) {
           console.error("Auto-join failed:", err);
@@ -1190,6 +1235,21 @@ const Drunkopoly = () => {
             // ignore
           }
         })
+        .on('postgres_changes', { event: 'DELETE', schema: 'public', table: 'players', filter: `game_id=eq.${gameId}` }, async (payload: any) => {
+          try {
+            // Refresh players list
+            const players = await fetchPlayers(game.code);
+            setPlayersList(players);
+            // If the deleted player is the current player, show notice and log out when closed
+            const oldRow = payload?.old;
+            if (oldRow && player && String(oldRow.id) === String(player.id)) {
+              setRemovedNoticeMsg('You were removed from the game.');
+              setRemovedNoticeOpen(true);
+            }
+          } catch (e) {
+            // ignore
+          }
+        })
         .subscribe();
     } catch (e) {
       console.warn('Supabase realtime subscribe failed', e);
@@ -1230,6 +1290,74 @@ const Drunkopoly = () => {
     setScreen("join-create");
   };
 
+  const handleRemovePlayer = async (id: string) => {
+    try {
+      if (!game) return;
+      if (!player || !player.is_commissioner) {
+        try { toast({ title: 'Not allowed', description: 'Only the commissioner can remove players.' }); } catch {}
+        return;
+      }
+
+      // Insert a 'kick' event so the removed name cannot rejoin easily
+      try {
+        const { data: removedRows } = await supabase.from('players').select('name').eq('id', id).limit(1);
+        const removedName = removedRows && removedRows.length > 0 ? removedRows[0].name : null;
+        await supabase.from('money_events').insert([{
+          game_id: game.id,
+          actor_player_id: player.id,
+          from_player_id: null,
+          to_player_id: null,
+          amount: 0,
+          type: 'kick',
+          description: `kicked:${removedName ?? ''}:${id}`,
+        }]);
+      } catch (e) {
+        // non-fatal
+        console.warn('Failed to insert kick event', e);
+      }
+
+      const { error } = await supabase.from('players').delete().eq('id', id).eq('game_id', game.id);
+      if (error) throw error;
+
+      // Refresh player list
+      const updated = await fetchPlayers(game.code);
+      setPlayersList(updated);
+      try { toast({ title: 'Player removed', description: 'Player was removed from the game.' }); } catch {}
+    } catch (err) {
+      console.error('Remove player failed', err);
+      // If delete failed due to foreign key constraints (referenced in money_events),
+      // try nulling those references then retry deletion.
+      try {
+        const e = err as any;
+        const isFk = e && (e.code === '23503' || (e.details && String(e.details).includes('still referenced')));
+        if (isFk && game) {
+          try {
+            await supabase.from('money_events').update({ actor_player_id: null }).eq('actor_player_id', id).eq('game_id', game.id);
+            await supabase.from('money_events').update({ from_player_id: null }).eq('from_player_id', id).eq('game_id', game.id);
+            await supabase.from('money_events').update({ to_player_id: null }).eq('to_player_id', id).eq('game_id', game.id);
+
+            // Retry deletion
+            const { error: delErr } = await supabase.from('players').delete().eq('id', id).eq('game_id', game.id);
+            if (delErr) throw delErr;
+
+            const updated2 = await fetchPlayers(game.code);
+            setPlayersList(updated2);
+            try { toast({ title: 'Player removed', description: 'Player was removed after clearing related events.' }); } catch {}
+            return;
+          } catch (inner) {
+            console.error('Retry delete after nulling references failed', inner);
+            try { toast({ title: 'Remove failed', description: 'Unable to remove player due to related records.' }); } catch {}
+            return;
+          }
+        }
+      } catch (checkerErr) {
+        console.error('FK check failed', checkerErr);
+      }
+
+      try { toast({ title: 'Remove failed', description: (err as any)?.message || 'Unable to remove player.' }); } catch {}
+    }
+  };
+
   // Step 1: Join/Create Game
   if (screen === "join-create") {
     return (
@@ -1245,11 +1373,33 @@ const Drunkopoly = () => {
             <div className="flex flex-col gap-8">
               <form
                 className="flex flex-col gap-4"
-                onSubmit={(e) => {
+                onSubmit={async (e) => {
                   e.preventDefault();
-                  if (gameCode.trim()) {
+                  setError(null);
+                  if (!gameCode.trim()) return;
+                  try {
+                    setLoading(true);
+                    // Verify the game exists now (before moving to name entry)
+                    const { data: games, error: gErr } = await supabase
+                      .from('games')
+                      .select('*')
+                      .eq('code', gameCode)
+                      .limit(1);
+                    if (gErr) throw gErr;
+                    if (!games || games.length === 0) {
+                      try { toast({ title: 'Game not found', description: 'No game exists with that code.' }); } catch {}
+                      setLoading(false);
+                      return;
+                    }
+                    // cache the game in state so the next step can reuse it and avoid re-checking
+                    setGame(games[0]);
                     setMode("join");
                     setScreen("enter-name");
+                  } catch (err: any) {
+                    console.error('Join check failed', err);
+                    setError((err && err.message) || 'Failed to check game');
+                  } finally {
+                    setLoading(false);
                   }
                 }}
               >
@@ -1260,8 +1410,15 @@ const Drunkopoly = () => {
                   maxLength={8}
                   autoFocus
                 />
-                <Button className="w-full py-4 text-lg font-semibold shadow-md" size="lg" type="submit" disabled={!gameCode.trim()}>
-                  Join Game
+                <Button className="w-full py-4 text-lg font-semibold shadow-md" size="lg" type="submit" disabled={!gameCode.trim() || loading}>
+                  {loading ? (
+                    <>
+                      <Clock className="mr-2 h-4 w-4 animate-spin" />
+                      Looking for game...
+                    </>
+                  ) : (
+                    'Join Game'
+                  )}
                 </Button>
               </form>
               <div className="flex items-center gap-2">
@@ -1350,86 +1507,92 @@ const Drunkopoly = () => {
                     setScreen("confirm-settings");
                     return;
                   } else {
-                    // Join existing game
-                    const { data: games, error: gErr } = await supabase
-                      .from('games')
-                      .select('*')
-                      .eq('code', gameCode)
-                      .limit(1);
-                    
-                    if (gErr) throw gErr;
-                    if (!games || games.length === 0) throw new Error('Game not found');
-                    
-                    const game = games[0];
+                    // Join existing game: prefer cached `game` state if present, otherwise fetch
+                    let localGame = game;
+                    if (!localGame || localGame.code !== gameCode) {
+                      const { data: games2, error: gErr2 } = await supabase
+                        .from('games')
+                        .select('*')
+                        .eq('code', gameCode)
+                        .limit(1);
+                      if (gErr2) throw gErr2;
+                      if (!games2 || games2.length === 0) throw new Error('Game not found');
+                      localGame = games2[0];
+                    }
 
                     // Check if player exists
                     const { data: existingPlayers, error: pErr } = await supabase
                       .from('players')
                       .select('*')
-                      .eq('game_id', game.id)
+                      .eq('game_id', localGame.id)
                       .eq('name', name)
                       .limit(1);
-                    
                     if (pErr) throw pErr;
 
-                    let player;
+                    let newOrExistingPlayer;
                     if (existingPlayers && existingPlayers.length > 0) {
-                      player = existingPlayers[0];
+                      newOrExistingPlayer = existingPlayers[0];
                       // Update last seen
                       await supabase
                         .from('players')
                         .update({ is_online: true, last_seen_at: new Date().toISOString() })
-                        .eq('id', player.id);
+                        .eq('id', newOrExistingPlayer.id);
                     } else {
+                      // Prevent creating a player with a name that was kicked
+                      const kicked = await isNameKicked(localGame.id, name);
+                      if (kicked) {
+                        setError('This name was removed from the game and cannot rejoin. Please choose a different name.');
+                        setLoading(false);
+                        return;
+                      }
+
                       // Create new player
                       const { data: allPlayers } = await supabase
                         .from('players')
                         .select('id', { count: 'exact' })
-                        .eq('game_id', game.id);
-                      
+                        .eq('game_id', localGame.id);
                       const isFirstPlayer = !allPlayers || allPlayers.length === 0;
-                      
-                      const { data: newPlayer, error: newErr } = await supabase
+
+                      const { data: createdPlayer, error: newErr } = await supabase
                         .from('players')
                         .insert([{
-                          game_id: game.id,
-                          name,
-                          balance: game.initial_balance ?? 0,
+                          game_id: localGame.id,
+                          name: (name ?? '').toUpperCase(),
+                          balance: localGame.initial_balance ?? 0,
                           is_commissioner: isFirstPlayer,
                         }])
                         .select()
                         .single();
-                      
                       if (newErr) throw newErr;
-                      player = newPlayer;
+                      newOrExistingPlayer = createdPlayer;
 
                       // Set host if first player
-                      if (isFirstPlayer && !game.host_player_id) {
+                      if (isFirstPlayer && !localGame.host_player_id) {
                         await supabase
                           .from('games')
-                          .update({ host_player_id: player.id })
-                          .eq('id', game.id);
+                          .update({ host_player_id: newOrExistingPlayer.id })
+                          .eq('id', localGame.id);
                       }
 
                       // Log join
                       await supabase.from('money_events').insert([{
-                        game_id: game.id,
-                        actor_player_id: player.id,
+                        game_id: localGame.id,
+                        actor_player_id: newOrExistingPlayer.id,
                         from_player_id: null,
-                        to_player_id: player.id,
+                        to_player_id: newOrExistingPlayer.id,
                         amount: 0,
                         type: 'join',
-                        description: `${player.name} joined the game`,
+                        description: `${newOrExistingPlayer.name} joined the game`,
                       }]);
                     }
 
-                    setGame(game);
-                    setPlayer(player);
-                    setGameCode(game.code);
-                    localStorage.setItem(STORAGE_KEY_CODE, game.code);
-                    localStorage.setItem(STORAGE_KEY_NAME, name);
-                    pushRecentGame(game.code);
-                    setScreen("home");
+                    // Persist state and go home
+                    setGame(localGame);
+                    setPlayer(newOrExistingPlayer);
+                    setGameCode(localGame.code);
+                    try { localStorage.setItem(STORAGE_KEY_CODE, localGame.code); localStorage.setItem(STORAGE_KEY_NAME, (name ?? '').toUpperCase()); } catch (e) {}
+                    pushRecentGame(localGame.code);
+                    setScreen('home');
                   }
                 } catch (err: any) {
                   console.error("Join/Create error:", err);
@@ -1442,7 +1605,7 @@ const Drunkopoly = () => {
               <Input
                 placeholder="Your name"
                 value={name}
-                onChange={(e) => setName(e.target.value)}
+                onChange={(e) => setName((e.target.value ?? '').toUpperCase())}
                 maxLength={20}
                 autoFocus
               />
@@ -1506,7 +1669,7 @@ const Drunkopoly = () => {
                     .from('players')
                     .insert([{
                       game_id: newGame.id,
-                      name,
+                      name: (name ?? '').toUpperCase(),
                       balance: Number(newGame.initial_balance ?? tempInitialBalance ?? 0),
                       is_commissioner: true,
                     }])
@@ -1536,7 +1699,7 @@ const Drunkopoly = () => {
                   setPlayer(newPlayer);
                   setGameCode(newGame.code);
                   localStorage.setItem(STORAGE_KEY_CODE, newGame.code);
-                  localStorage.setItem(STORAGE_KEY_NAME, name);
+                  localStorage.setItem(STORAGE_KEY_NAME, (name ?? '').toUpperCase());
                   pushRecentGame(newGame.code);
                   setScreen('home');
                 } catch (err: any) {
@@ -1597,6 +1760,17 @@ const Drunkopoly = () => {
   return (
     <div className="min-h-screen bg-gradient-bg flex flex-col">
       <Toaster />
+      <AlertDialog open={removedNoticeOpen} onOpenChange={(v) => { if (!v) handleLogoutOfGame(); setRemovedNoticeOpen(v); }}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Removed from game</AlertDialogTitle>
+            <AlertDialogDescription>{removedNoticeMsg ?? 'You were removed from this game.'}</AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogAction onClick={() => { setRemovedNoticeOpen(false); }}>OK</AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
       {/* Top bar */}
       <div className="flex items-center justify-between px-6 py-4 z-50">
         <div className="font-semibold text-lg text-foreground flex items-center gap-2">
@@ -1605,7 +1779,14 @@ const Drunkopoly = () => {
         </div>
         <div className="flex items-center gap-2">
           <Button variant="ghost" size="sm" onClick={() => navigate('/drunk/drunkopoly/rules')}>Rules</Button>
-          <GameCodePopover code={game?.code ?? gameCode} onLogout={handleLogoutOfGame} />
+          <GameCodePopover
+            code={game?.code ?? gameCode}
+            onLogout={handleLogoutOfGame}
+            players={playersList}
+            currentPlayer={player}
+            game={game}
+            onRemovePlayer={handleRemovePlayer}
+          />
         </div>
       </div>
 
@@ -2120,7 +2301,27 @@ function AnimatedNumber({ value }: { value: number }) {
   );
 }
 
-function GameCodePopover({ code, onLogout }: { code: string; onLogout?: () => void }) {
+function GameCodePopover({ code, onLogout, players, currentPlayer, game, onRemovePlayer }: { code: string; onLogout?: () => void; players?: any[]; currentPlayer?: any; game?: any; onRemovePlayer?: (id: string) => Promise<void> }) {
+  const [playersOpen, setPlayersOpen] = useState(false);
+  const [confirmOpen, setConfirmOpen] = useState(false);
+  const [pendingRemove, setPendingRemove] = useState<{ id: string; name?: string } | null>(null);
+
+  const requestRemove = (id: string, name?: string) => {
+    setPendingRemove({ id, name });
+    setConfirmOpen(true);
+  };
+
+  const handleConfirmRemove = async () => {
+    if (!onRemovePlayer || !pendingRemove) return;
+    try {
+      await onRemovePlayer(pendingRemove.id);
+      setConfirmOpen(false);
+      setPendingRemove(null);
+    } catch (e) {
+      try { toast({ title: 'Unable to remove', description: 'Failed to remove player.' }); } catch {}
+    }
+  };
+
   const handleCopyInvite = async () => {
     try {
       const base = window.location.origin + window.location.pathname;
@@ -2152,6 +2353,7 @@ function GameCodePopover({ code, onLogout }: { code: string; onLogout?: () => vo
   };
 
   return (
+    <>
     <Popover>
       <PopoverTrigger asChild>
         <Button
@@ -2167,12 +2369,66 @@ function GameCodePopover({ code, onLogout }: { code: string; onLogout?: () => vo
             <Copy size={16} />
             Invite Link
           </Button>
+          <Button variant="secondary" className="w-full mt-1" onClick={() => setPlayersOpen(true)}>
+            <Users size={16} />
+            Players
+          </Button>
           <Button variant="destructive" className="w-full mt-1 ring-2 ring-red-500/10 shadow-sm shadow-red-500/20" onClick={onLogout}>
             Log Out
           </Button>
         </div>
       </PopoverContent>
     </Popover>
+    <Dialog open={playersOpen} onOpenChange={setPlayersOpen}>
+      <DialogContent className="max-w-lg">
+        <DialogHeader>
+          <DialogTitle>Players</DialogTitle>
+        </DialogHeader>
+        <div className="space-y-2 mt-2">
+          {(players && players.length > 0) ? (
+            players.map((p: any) => {
+              const isSelf = currentPlayer && String(currentPlayer.id) === String(p.id);
+              const isCommissioner = !!p.is_commissioner;
+              const canRemove = currentPlayer && (currentPlayer.is_commissioner || currentPlayer.is_commissioner === true) && !isCommissioner && !isSelf;
+              return (
+                <div key={p.id} className="flex items-center gap-3 py-2 px-2 border rounded">
+                  <div className="flex-1">
+                    <div className="font-medium">{p.name}{isCommissioner ? ' • Commissioner' : isSelf ? ' • You' : ''}</div>
+                    <div className="text-sm text-muted-foreground">Balance: ${Number(p.balance || 0).toLocaleString()}</div>
+                  </div>
+                  <div>
+                    <Button size="sm" variant="destructive" disabled={!canRemove} onClick={() => requestRemove(p.id, p.name)}>
+                      Remove
+                    </Button>
+                  </div>
+                </div>
+              );
+            })
+          ) : (
+            <div className="text-sm text-muted-foreground">No players found.</div>
+          )}
+        </div>
+        <DialogFooter>
+          <Button onClick={() => setPlayersOpen(false)}>Close</Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+
+    <AlertDialog open={confirmOpen} onOpenChange={(v) => { setConfirmOpen(v); if (!v) setPendingRemove(null); }}>
+      <AlertDialogContent>
+        <AlertDialogHeader>
+          <AlertDialogTitle>Remove player</AlertDialogTitle>
+          <AlertDialogDescription>
+            Are you sure you want to remove <span className="font-medium">{pendingRemove?.name ?? 'this player'}</span> from the game? This action cannot be undone.
+          </AlertDialogDescription>
+        </AlertDialogHeader>
+        <AlertDialogFooter>
+          <AlertDialogCancel>Cancel</AlertDialogCancel>
+          <AlertDialogAction onClick={handleConfirmRemove} className="bg-destructive">Remove</AlertDialogAction>
+        </AlertDialogFooter>
+      </AlertDialogContent>
+    </AlertDialog>
+    </>
   );
 }
 

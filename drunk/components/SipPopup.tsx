@@ -53,20 +53,6 @@ export default function SipPopup({
     setSelectedIds(next);
   };
   // compute list of all other ids (exclude current player)
-  const allOtherIds = useMemo(() => others.filter((p) => p.id !== currentPlayer?.id).map((p) => p.id), [others, currentPlayer]);
-
-  const everyoneRef = React.useRef<HTMLInputElement | null>(null);
-
-  // derived boolean: everyoneChecked when every other player is selected and current player is not selected
-  const everyoneChecked = allOtherIds.length > 0 && allOtherIds.every((id) => selectedIds.has(id)) && !(currentPlayer && selectedIds.has(currentPlayer.id));
-
-  useEffect(() => {
-    if (!everyoneRef.current) return;
-    const allSelected = allOtherIds.length > 0 && allOtherIds.every((id) => selectedIds.has(id));
-    everyoneRef.current.checked = allSelected && !(currentPlayer && selectedIds.has(currentPlayer.id));
-    // do not use indeterminate state — when not all selected, ensure checkbox is unchecked
-    everyoneRef.current.indeterminate = false;
-  }, [selectedIds, allOtherIds, currentPlayer]);
   // keep slider state separate from typed input; start input blank so users can type immediately
   const [sipCount, setSipCount] = useState<number>(1);
   const [rawSip, setRawSip] = useState<string>("");
@@ -122,30 +108,7 @@ export default function SipPopup({
                     );
                   })()}
 
-                  {/* Everyone else goes under you */}
-                  {allOtherIds.length > 0 && (
-                    <label key="everyone" className={`flex items-center gap-2 p-2 border rounded ${everyoneChecked ? 'bg-primary/10' : ''}`}>
-                      <input
-                        ref={everyoneRef}
-                        type="checkbox"
-                        name="sip-recipient-everyone"
-                        onChange={(e) => {
-                          const checked = e.target.checked;
-                          const next = new Set(selectedIds);
-                          if (checked) {
-                            // add all others, remove current player if present
-                            allOtherIds.forEach((id) => next.add(id));
-                            if (currentPlayer) next.delete(currentPlayer.id);
-                          } else {
-                            // remove all others
-                            allOtherIds.forEach((id) => next.delete(id));
-                          }
-                          setSelectedIds(next);
-                        }}
-                      />
-                      <div className="flex-1">Everyone else</div>
-                    </label>
-                  )}
+                  {/* (removed "Everyone else" quick-select) */}
 
                   {/* render remaining players (skip first) */}
                   {others.slice(1).map((p) => (

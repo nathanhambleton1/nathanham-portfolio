@@ -110,11 +110,22 @@ export default function ActivityLog({
     const from = idToName(e.from_player_id);
     const to = idToName(e.to_player_id);
     if (e.kind === "money") {
+      // Special-case kick events early so we don't accidentally return the raw description below
+      const descLower = (e.description || '').toLowerCase();
+      if (e.type === 'kick' || descLower.startsWith('kicked:')) {
+        let removedName: string | null = null;
+        try {
+          const parts = (e.description || '').split(':');
+          if (parts.length >= 2 && parts[0].toLowerCase() === 'kicked') removedName = parts[1] || null;
+        } catch {}
+        const target = removedName || to || from || 'a player';
+        if (actor && actor !== 'Bank') return `${actor} removed ${target} from the game`;
+        return `${target} was removed from the game`;
+      }
       // Join/leave events: show description if present
       if ((e.type === "join" || e.type === "leave") && e.description) {
         return e.description;
       }
-
       // Zero-amount events with description: show the description plainly
       if ((e.amount || 0) === 0 && e.description) {
         // Special-case trade timer descriptions
@@ -130,6 +141,22 @@ export default function ActivityLog({
       }
 
       // Specific money event types
+      // Kicked players: description may be stored as `kicked:Name:playerId`
+      if (e.type === 'kick' || (e.description || '').toLowerCase().startsWith('kicked:')) {
+        // Prefer parsing description for the removed name, fallback to to/from ids
+        let removedName: string | null = null;
+        try {
+          const desc = (e.description || '').trim();
+          const parts = desc.split(':');
+          if (parts.length >= 2 && parts[0].toLowerCase() === 'kicked') {
+            removedName = parts[1] || null;
+          }
+        } catch {}
+        const target = removedName || to || from || 'a player';
+        if (actor && actor !== 'Bank') return `${actor} removed ${target} from the game`;
+        return `${target} was removed from the game`;
+      }
+
       if (e.type === "free_parking_collect")
         return `${to} collected $${(e.amount || 0).toLocaleString()} from Free Parking`;
 
