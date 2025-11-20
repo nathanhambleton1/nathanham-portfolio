@@ -25,7 +25,7 @@ export default function PayPopup({
   mode: "bank" | "players" | "tax" | null;
   currentPlayer: Player | null;
   players?: Player[];
-  onSubmit: (payments: { to: string | null; amount: number }[], opts?: { freeParking?: boolean }) => void;
+  onSubmit: (payments: { to: string | null; amount: number }[], opts?: { freeParking?: boolean; description?: string | null }) => void;
 }) {
   // Free parking is always used for tax mode
   const others = useMemo(() => {
@@ -45,6 +45,7 @@ export default function PayPopup({
   const [amountPer, setAmountPer] = useState<number>(mode === 'tax' ? 0 : 5);
   // keep the typed input separate from the slider value; start blank so users can type immediately
   const [rawAmount, setRawAmount] = useState<string>("");
+  const [comment, setComment] = useState<string>("");
 
   // Initialize popup state only when the dialog actually opens (avoid resets during polling updates)
   const prevOpenRef = React.useRef<boolean>(false);
@@ -94,7 +95,7 @@ export default function PayPopup({
       const ids = Array.from(selectedIds);
       payments = ids.map((id) => ({ to: id, amount: rounded }));
     }
-    onSubmit(payments, { freeParking: mode === "tax" });
+    onSubmit(payments, { freeParking: mode === "tax", description: comment?.trim() ? comment.trim() : null });
     onOpenChange(false);
   };
 
@@ -212,6 +213,16 @@ export default function PayPopup({
               </>
             )}
           </div>
+        </div>
+
+        <div className="mt-4 px-0">
+          <div className="text-sm font-medium">Note (optional)</div>
+          <Input
+            value={comment}
+            onChange={(e) => setComment(e.target.value)}
+            placeholder="Add a one-line note (optional)"
+            className="w-full"
+          />
         </div>
 
         <DialogFooter>

@@ -34,6 +34,7 @@ import {
 import { createClient } from '@supabase/supabase-js';
 import { useNavigate } from "react-router-dom";
 import { toast } from "../components/ui/use-toast";
+import { Toaster } from "../components/ui/toaster";
 
 // Initialize Supabase client
 const supabaseUrl = 'https://kcyrvubzhsphpxfsewii.supabase.co';
@@ -75,6 +76,96 @@ const Drunkopoly = () => {
   const [blockedPaymentMessage, setBlockedPaymentMessage] = useState<string | null>(null);
   const prevBalanceRef = useRef<number | null>(null);
   const navigate = useNavigate();
+  // Show brief notification when the current player receives a money event.
+  // Subscribe to the `game_events` view (same source ActivityLog uses) and show
+  // a toast containing the sender name + optional note.
+  useEffect(() => {
+    if (!game || !player) return;
+    let mounted = true;
+
+    const gameId = game.id;
+
+    const handlePayload = async (payload: any) => {
+      if (!mounted || !payload) return;
+      // Supabase payload may include `.new` or `.record` depending on runtime; handle both
+      const row = payload.new || payload.record || payload.payload || null;
+      if (!row) return;
+      try {
+        if (String(row.game_id) !== String(gameId)) return;
+        if (!row.to_player_id) return;
+        if (String(row.to_player_id) !== String(player.id)) return;
+        // Only notify for money events with positive amount
+        if ((row.kind && row.kind !== 'money') || Number(row.amount || 0) <= 0) return;
+
+        // Resolve actor name from local players list first
+        let actorName = undefined;
+        if (row.actor_player_id && playersList && playersList.length > 0) {
+          const found = playersList.find((p: any) => String(p.id) === String(row.actor_player_id));
+          if (found) actorName = found.name;
+        }
+
+        // Fallback: try to fetch actor name from DB if not found locally
+        if (!actorName && row.actor_player_id) {
+          try {
+            const { data: aRows } = await supabase.from('players').select('name').eq('id', row.actor_player_id).limit(1);
+            if (aRows && aRows.length > 0) actorName = aRows[0].name;
+          } catch (e) {
+            // ignore
+          }
+        }
+
+        const amountStr = `$${(Number(row.amount || 0)).toLocaleString()}`;
+        const title = actorName ? `${actorName} sent you ${amountStr}` : `Payment received ${amountStr}`;
+        const description = row.description || '';
+        toast({ title, description: description || undefined });
+      } catch (e) {
+        // ignore
+      }
+    };
+
+    const channel = supabase
+      .channel(`game-events-${gameId}`)
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'game_events' },
+        (payload: any) => {
+          console.debug('game_events payload', payload);
+          void handlePayload(payload);
+        }
+      )
+      .subscribe();
+
+    // Also subscribe directly to `money_events` as a robust fallback since
+    // some Supabase setups may not fire realtime for views reliably.
+    const moneyChannel = supabase
+      .channel(`money-events-${gameId}`)
+      .on(
+        'postgres_changes',
+        { event: 'INSERT', schema: 'public', table: 'money_events' },
+        (payload: any) => {
+          console.debug('money_events payload', payload);
+          // Normalize shape to look like a game_events row so handlePayload can reuse logic
+          const rec = payload.new || payload.record || payload.payload || null;
+          if (!rec) return;
+          const normalized = {
+            game_id: rec.game_id,
+            to_player_id: rec.to_player_id,
+            actor_player_id: rec.actor_player_id,
+            amount: rec.amount,
+            description: rec.description,
+            kind: 'money',
+          };
+          void handlePayload({ new: normalized });
+        }
+      )
+      .subscribe();
+
+    return () => {
+      mounted = false;
+      try { channel.unsubscribe(); } catch (e) { /* ignore */ }
+      try { moneyChannel.unsubscribe(); } catch (e) { /* ignore */ }
+    };
+  }, [game, player, playersList]);
 
   // If the URL contains an invite or code param, auto-fill and go to enter-name
   useEffect(() => {
@@ -1388,6 +1479,7 @@ const Drunkopoly = () => {
   // Step 3: Home (main game screen)
   return (
     <div className="min-h-screen bg-gradient-bg flex flex-col">
+      <Toaster />
       {/* Top bar */}
       <div className="flex items-center justify-between px-6 py-4 z-50">
         <div className="font-semibold text-lg text-foreground flex items-center gap-2">
