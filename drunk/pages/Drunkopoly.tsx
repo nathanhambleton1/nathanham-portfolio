@@ -39,7 +39,7 @@ const supabaseUrl = 'https://kcyrvubzhsphpxfsewii.supabase.co';
 const supabaseAnonKey = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImtjeXJ2dWJ6aHNwaHB4ZnNld2lpIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjMxODAwMTcsImV4cCI6MjA3ODc1NjAxN30.8psClrpif-F1DWj67u2tErnU8-4ZYjw5LvEfRK3oHkI';
 const supabase = createClient(supabaseUrl, supabaseAnonKey);
 
-type Screen = "join-create" | "enter-name" | "home";
+type Screen = "join-create" | "enter-name" | "confirm-settings" | "home";
 
 const Drunkopoly = () => {
   const STORAGE_KEY_CODE = "drunkopoly:gameCode";
@@ -52,6 +52,10 @@ const Drunkopoly = () => {
 
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // temporary settings used when creating a new game (strings so inputs can be cleared)
+  const [tempInitialBalance, setTempInitialBalance] = useState<string>("1500");
+  const [tempPassGoAmount, setTempPassGoAmount] = useState<string>("200");
+  const [tempFreeParkingBalance, setTempFreeParkingBalance] = useState<string>("0");
   const [game, setGame] = useState<any | null>(null);
   const [player, setPlayer] = useState<any | null>(null);
   const [playersList, setPlayersList] = useState<any[]>([]);
@@ -1060,62 +1064,10 @@ const Drunkopoly = () => {
                 setLoading(true);
                 try {
                   if (mode === "create") {
-                    // Create game
-                    const code = await createUniqueGameCode();
-                    const { data: newGame, error: createErr } = await supabase
-                      .from('games')
-                      .insert([{ code }])
-                      .select()
-                      .single();
-                    
-                    if (createErr) throw createErr;
-
-                    // Join as host
-                    const { data: allPlayers } = await supabase
-                      .from('players')
-                      .select('id', { count: 'exact' })
-                      .eq('game_id', newGame.id);
-                    
-                    const isFirstPlayer = !allPlayers || allPlayers.length === 0;
-                    
-                    const { data: newPlayer, error: joinErr } = await supabase
-                      .from('players')
-                      .insert([{
-                        game_id: newGame.id,
-                        name,
-                        balance: newGame.initial_balance ?? 0,
-                        is_commissioner: isFirstPlayer,
-                      }])
-                      .select()
-                      .single();
-                    
-                    if (joinErr) throw joinErr;
-
-                    // Set host
-                    if (isFirstPlayer) {
-                      await supabase
-                        .from('games')
-                        .update({ host_player_id: newPlayer.id })
-                        .eq('id', newGame.id);
-                    }
-
-                    // Log join
-                    await supabase.from('money_events').insert([{
-                      game_id: newGame.id,
-                      actor_player_id: newPlayer.id,
-                      from_player_id: null,
-                      to_player_id: newPlayer.id,
-                      amount: 0,
-                      type: 'join',
-                      description: `${newPlayer.name} joined the game`,
-                    }]);
-
-                    setGame(newGame);
-                    setPlayer(newPlayer);
-                    setGameCode(newGame.code);
-                    localStorage.setItem(STORAGE_KEY_CODE, newGame.code);
-                    localStorage.setItem(STORAGE_KEY_NAME, name);
-                    setScreen("home");
+                    // go to confirm settings step before creating the game
+                    setLoading(false);
+                    setScreen("confirm-settings");
+                    return;
                   } else {
                     // Join existing game
                     const { data: games, error: gErr } = await supabase
@@ -1225,6 +1177,138 @@ const Drunkopoly = () => {
     );
   }
 
+  // Step 2b: Confirm Settings (only for creating a new game)
+  if (screen === "confirm-settings") {
+    const isPositiveInteger = (s: string) => /^\d+$/.test(s) && Number(s) > 0;
+    const canCreate = isPositiveInteger(tempInitialBalance) && isPositiveInteger(tempPassGoAmount) && isPositiveInteger(tempFreeParkingBalance);
+
+    return (
+      <div className="min-h-screen bg-gradient-bg flex items-center justify-center">
+        <Card className="w-full max-w-md">
+          <CardHeader>
+            <CardTitle className="text-2xl mb-2">Confirm Game Settings</CardTitle>
+            <CardDescription>Set starting balances and game options before creating the game.</CardDescription>
+          </CardHeader>
+          <CardContent>
+            <form
+              className="space-y-4"
+              onSubmit={async (e) => {
+                e.preventDefault();
+                setError(null);
+
+                if (!canCreate) {
+                  setError('All values must be positive integers (no decimals)');
+                  return;
+                }
+
+                setLoading(true);
+                try {
+                  // Create game with provided settings
+                  const code = await createUniqueGameCode();
+                  const { data: newGame, error: createErr } = await supabase
+                    .from('games')
+                    .insert([{
+                      code,
+                      initial_balance: Number(tempInitialBalance || 0),
+                      pass_go_amount: Number(tempPassGoAmount || 0),
+                      free_parking_balance: Number(tempFreeParkingBalance || 0),
+                    }])
+                    .select()
+                    .single();
+
+                  if (createErr) throw createErr;
+
+                  // Create host player
+                  const { data: newPlayer, error: joinErr } = await supabase
+                    .from('players')
+                    .insert([{
+                      game_id: newGame.id,
+                      name,
+                      balance: Number(newGame.initial_balance ?? tempInitialBalance ?? 0),
+                      is_commissioner: true,
+                    }])
+                    .select()
+                    .single();
+
+                  if (joinErr) throw joinErr;
+
+                  // Set host on game record
+                  await supabase
+                    .from('games')
+                    .update({ host_player_id: newPlayer.id })
+                    .eq('id', newGame.id);
+
+                  // Log join
+                  await supabase.from('money_events').insert([{
+                    game_id: newGame.id,
+                    actor_player_id: newPlayer.id,
+                    from_player_id: null,
+                    to_player_id: newPlayer.id,
+                    amount: 0,
+                    type: 'join',
+                    description: `${newPlayer.name} joined the game`,
+                  }]);
+
+                  setGame(newGame);
+                  setPlayer(newPlayer);
+                  setGameCode(newGame.code);
+                  localStorage.setItem(STORAGE_KEY_CODE, newGame.code);
+                  localStorage.setItem(STORAGE_KEY_NAME, name);
+                  setScreen('home');
+                } catch (err: any) {
+                  console.error('Create with settings failed:', err);
+                  setError(err?.message || 'Failed to create game');
+                } finally {
+                  setLoading(false);
+                }
+              }}
+            >
+              <div className="grid grid-cols-1 gap-3">
+                <label className="text-sm text-muted-foreground">Starting Balance</label>
+                <Input
+                  type="number"
+                  min={0}
+                  value={tempInitialBalance}
+                  onChange={(e) => {
+                    const v = e.target.value;
+                    if (v === '' || /^[0-9]*$/.test(v)) setTempInitialBalance(v);
+                  }}
+                />
+
+                <label className="text-sm text-muted-foreground">Pass Go Amount</label>
+                <Input
+                  type="number"
+                  min={0}
+                  value={tempPassGoAmount}
+                  onChange={(e) => {
+                    const v = e.target.value;
+                    if (v === '' || /^[0-9]*$/.test(v)) setTempPassGoAmount(v);
+                  }}
+                />
+
+                <label className="text-sm text-muted-foreground">Free Parking Starting Pot</label>
+                <Input
+                  type="number"
+                  min={0}
+                  value={tempFreeParkingBalance}
+                  onChange={(e) => {
+                    const v = e.target.value;
+                    if (v === '' || /^[0-9]*$/.test(v)) setTempFreeParkingBalance(v);
+                  }}
+                />
+              </div>
+
+              <div className="flex gap-2 mt-4">
+                <Button type="submit" className="flex-1" disabled={!canCreate || loading}>{loading ? 'Creating...' : 'Create Game'}</Button>
+              </div>
+              {error && <div className="text-destructive text-sm mt-2">{error}</div>}
+            </form>
+          </CardContent>
+        </Card>
+      </div>
+    );
+  }
+
   // Step 3: Home (main game screen)
   return (
     <div className="min-h-screen bg-gradient-bg flex flex-col">
@@ -1291,20 +1375,18 @@ const Drunkopoly = () => {
           </div>
         </div>
 
-        {/* SIP section for commissioner */}
-        {player?.is_commissioner && (
-          <Section title="Sips">
-            <div className="grid grid-cols-1 gap-4 w-64">
-                <Button variant="secondary" className="py-6" onClick={() => setSipModalOpen(true)}>
-                  <UserPlus className="h-5 w-5" />
-                  Give Sips
-                </Button>
-              </div>
-          </Section>
-        )}
+        {/* SIP section*/}
+        <Section title="Sips">
+          <div className="grid grid-cols-1 gap-4 w-64">
+              <Button variant="secondary" className="py-6" onClick={() => setSipModalOpen(true)}>
+                <UserPlus className="h-5 w-5" />
+                Give Sips
+              </Button>
+            </div>
+        </Section>
 
         {/* Pay section */}
-        <Section title="Pay" className={player?.is_commissioner ? "mt-8" : ""}>
+        <Section title="Pay" className={"mt-8"}>
           <div className="grid grid-cols-2 gap-4 w-64">
             <Button
               variant="secondary"
