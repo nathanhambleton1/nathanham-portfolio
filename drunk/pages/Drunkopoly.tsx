@@ -1,11 +1,13 @@
 import { useEffect, useState, useRef } from "react";
 import PayPopup from "../components/PayPopup";
-import { UserPlus, DollarSign, Users, Percent, Crown, PiggyBank } from "lucide-react";
+import JailPopup from "../components/JailPopup";
+import { UserPlus, DollarSign, Users, Percent, Crown, PiggyBank, Clock } from "lucide-react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "../components/ui/dialog";
 import CollectPopup from "../components/CollectPopup";
 import SipPopup from "../components/SipPopup";
 import TradeTimerControl from "../components/TradeTimerControl";
 import TradeLockOverlay from "../components/TradeLockOverlay";
+import JailLockOverlay from "../components/JailLockOverlay";
 import ActivityLog from "../components/ActivityLog";
 import {
   Card,
@@ -56,6 +58,11 @@ const Drunkopoly = () => {
   const [payModalOpen, setPayModalOpen] = useState(false);
   const [payMode, setPayMode] = useState<"bank" | "players" | "tax" | null>(null);
   const [sipModalOpen, setSipModalOpen] = useState(false);
+  const [tradeTimerModalOpen, setTradeTimerModalOpen] = useState(false);
+  const [tradeTimerSelected, setTradeTimerSelected] = useState<number>(60);
+  const [jailModalOpen, setJailModalOpen] = useState(false);
+  const [payProcessing, setPayProcessing] = useState(false);
+  const [cardProcessing, setCardProcessing] = useState(false);
   const [freeParkingPot, setFreeParkingPot] = useState(0);
   const [collectModalOpen, setCollectModalOpen] = useState(false);
   const [collectMode, setCollectMode] = useState<'bank'|'pass_go'|'free_parking'|null>(null);
@@ -145,7 +152,7 @@ const Drunkopoly = () => {
       let meData: any[] = [];
 
       // Handle tax distribution
-      if (opts.mode === 'tax' && !opts.freeParking && payments.length === 1 && (payments[0].to == null)) {
+        if (opts.mode === 'tax' && !opts.freeParking && payments.length === 1 && (payments[0].to == null)) {
         const amountPer = Number(payments[0].amount || 0);
         const { data: allPlayers, error: apErr } = await supabase
           .from('players')
@@ -158,8 +165,13 @@ const Drunkopoly = () => {
         const inserts = [];
         for (const r of recipients) {
           const hasPending = (r.pending_sips || 0) > 0;
-          const amt = hasPending ? 0 : amountPer;
-          const desc = hasPending ? (opts.description || `Recipient has pending sips; no money was sent`) : (opts.description || null);
+          const isInJail = !!r.in_jail;
+          const amt = (hasPending || isInJail) ? 0 : amountPer;
+          let desc: string | null = null;
+          if (hasPending) desc = opts.description || `Recipient has pending sips; no money was sent`;
+          else if (isInJail) desc = opts.description || `Recipient is in jail; no money was sent`;
+          else desc = opts.description || null;
+
           inserts.push({
             game_id: game.id,
             actor_player_id: actor_player_id,
@@ -243,7 +255,8 @@ const Drunkopoly = () => {
 
           const recipient = rRows[0];
           const hasPending = (recipient.pending_sips || 0) > 0;
-          if (hasPending) {
+          const isInJail = !!recipient.in_jail;
+          if (hasPending || isInJail) {
             inserts.push({
               game_id: game.id,
               actor_player_id: actor_player_id,
@@ -251,7 +264,7 @@ const Drunkopoly = () => {
               to_player_id: p.to,
               amount: 0,
               type: opts.type || (opts.freeParking ? 'tax' : 'manual'),
-              description: opts.description || `Recipient has pending sips; no money was sent`,
+              description: hasPending ? (opts.description || `Recipient has pending sips; no money was sent`) : (opts.description || `Recipient is in jail; no money was sent`),
             });
             continue;
           }
@@ -585,6 +598,106 @@ const Drunkopoly = () => {
     } catch (err: any) {
       console.error('Start trade timer failed', err);
       alert(err.message || 'Failed to start timer');
+    }
+  };
+
+  // Send a player to jail
+  const sendPlayerToJail = async (targetPlayerId: string) => {
+    if (!game || !player) return;
+    try {
+      // Mark player as in jail and record who sent them
+      const { data: updated, error } = await supabase
+        .from('players')
+        .update({ in_jail: true, jail_started_by: player.id, jail_started_at: new Date().toISOString() })
+        .eq('id', targetPlayerId)
+        .select();
+
+      if (error) throw error;
+
+      // Log the event for activity
+      try {
+        await supabase.from('money_events').insert([{
+          game_id: game.id,
+          actor_player_id: player.id,
+          from_player_id: null,
+          to_player_id: targetPlayerId,
+          amount: 0,
+          type: 'jail',
+          description: `${player.name} sent ${(updated && updated[0] && updated[0].name) || targetPlayerId} to jail`,
+        }]);
+      } catch (e) {
+        // ignore logging errors
+      }
+
+      // Refresh players
+      const players = await fetchPlayers(game.code);
+      setPlayersList(players);
+      const updatedPlayer = players.find((p: any) => p.id === player.id);
+      if (updatedPlayer) setPlayer(updatedPlayer);
+    } catch (err: any) {
+      console.error('Send to jail failed', err);
+      alert(err.message || 'Failed to send to jail');
+    } finally {
+    }
+  };
+
+  const payToGetOut = async () => {
+    if (!game || !player) return;
+    setPayProcessing(true);
+    try {
+      // Deduct $50 from the jailed player (actor is the jailed player)
+      await processPayments(game.code, player.id, [{ to: null, amount: 50 }], { type: 'jail_payment' });
+
+      // Clear jail flag
+      await supabase.from('players').update({ in_jail: false, jail_started_by: null, jail_started_at: null }).eq('id', player.id);
+
+      // Refresh state
+      const players = await fetchPlayers(game.code);
+      setPlayersList(players);
+      const updatedPlayer = players.find((p: any) => p.id === player.id);
+      if (updatedPlayer) setPlayer(updatedPlayer);
+    } catch (err: any) {
+      console.error('Pay to get out failed', err);
+      alert(err.message || 'Failed to pay to get out of jail');
+    } finally {
+      setPayProcessing(false);
+    }
+  };
+
+  const useGetOutCard = async () => {
+    if (!game || !player) return;
+    setCardProcessing(true);
+    // optimistic update: clear jail locally so the overlay disappears immediately
+    const prevPlayer = player;
+    try {
+      const updatedLocal = { ...player, in_jail: false, has_get_out_of_jail_card: false, jail_started_by: null, jail_started_at: null };
+      setPlayer(updatedLocal);
+      setPlayersList((prev) => (prev || []).map((p) => (p.id === player.id ? { ...p, ...updatedLocal } : p)));
+
+      // persist change
+      const { error } = await supabase.from('players').update({ in_jail: false, has_get_out_of_jail_card: false, jail_started_by: null, jail_started_at: null }).eq('id', player.id);
+      if (error) throw error;
+
+      // Log usage event (best-effort)
+      try {
+        await supabase.from('money_events').insert([{
+          game_id: game.id,
+          actor_player_id: player.id,
+          from_player_id: null,
+          to_player_id: player.id,
+          amount: 0,
+          type: 'jail_card_used',
+          description: `${player.name} used a Get Out of Jail Free card`,
+        }]);
+      } catch (e) { /* ignore logging errors */ }
+    } catch (err: any) {
+      console.error('Use card failed', err);
+      alert(err.message || 'Failed to use card');
+      // revert optimistic state
+      setPlayer(prevPlayer);
+      setPlayersList((prev) => (prev || []).map((p) => (p.id === prevPlayer.id ? prevPlayer : p)));
+    } finally {
+      setCardProcessing(false);
     }
   };
 
@@ -1242,14 +1355,41 @@ const Drunkopoly = () => {
             try {
               const result = await processPayments(game.code, player.id, payments, { ...(opts || {}), mode: payMode });
               
-              // Check for blocked payments
+              // Check for blocked payments (pending sips / jailed recipients)
               const blocked = (result.money_events || []).filter((me: any) => (Number(me.amount || 0) === 0) && me.to_player_id);
               if (blocked.length > 0) {
-                const names = blocked.map((b: any) => {
-                  const found = (playersList || []).find((pl: any) => pl.id === b.to_player_id);
-                  return found ? found.name : b.to_player_id;
-                }).join(', ');
-                setBlockedPaymentMessage(`No money was sent to ${names} because they have pending sips. Congrats! 🎉`);
+                const byReason: Record<string, any[]> = {};
+                for (const b of blocked) {
+                  const desc = (b.description || '').toLowerCase();
+                  const key = desc.includes('pending sips') ? 'sips' : desc.includes('in jail') || desc.includes('jail') ? 'jail' : 'other';
+                  if (!byReason[key]) byReason[key] = [];
+                  byReason[key].push(b);
+                }
+
+                const parts: string[] = [];
+                if (byReason.sips) {
+                  const names = byReason.sips.map((b: any) => {
+                    const found = (playersList || []).find((pl: any) => pl.id === b.to_player_id);
+                    return found ? found.name : b.to_player_id;
+                  }).join(', ');
+                  parts.push(`No money was sent to ${names} because they have pending sips. Congrats! 🎉`);
+                }
+                if (byReason.jail) {
+                  const names = byReason.jail.map((b: any) => {
+                    const found = (playersList || []).find((pl: any) => pl.id === b.to_player_id);
+                    return found ? found.name : b.to_player_id;
+                  }).join(', ');
+                  parts.push(`No money was sent to ${names} because they are in jail. Congrats! 🎉`);
+                }
+                if (byReason.other) {
+                  const names = byReason.other.map((b: any) => {
+                    const found = (playersList || []).find((pl: any) => pl.id === b.to_player_id);
+                    return found ? found.name : b.to_player_id;
+                  }).join(', ');
+                  parts.push(`No money was sent to ${names}.`);
+                }
+
+                setBlockedPaymentMessage(parts.join(' '));
               }
 
               // Refresh state; AnimatedNumber will animate based on the changed `balance` value
@@ -1358,15 +1498,81 @@ const Drunkopoly = () => {
         
         {/* Actions section (trade timer) */}
         <Section title="Actions" className="mt-8">
-          <div className="w-64 flex items-center justify-center">
-            <TradeTimerControl
-              tradeLocked={!!game?.trade_locked}
-              currentSeconds={Number(game?.trade_timer_seconds ?? 60)}
-              onStart={(s) => startTradeTimer(s)}
-              onStop={() => stopTradeTimer()}
-            />
+          <div className="grid grid-cols-2 gap-4 w-64">
+            <Button
+              variant="secondary"
+              className="py-6"
+              onClick={() => {
+                setTradeTimerSelected(Number(game?.trade_timer_seconds ?? 60));
+                setTradeTimerModalOpen(true);
+              }}
+            >
+              <Clock className="h-5 w-5" />
+              Trade Timer
+            </Button>
+            <Button
+              variant="secondary"
+              className="py-6"
+              onClick={() => setJailModalOpen(true)}
+            >
+              <Users className="h-5 w-5" />
+              Jail
+            </Button>
           </div>
         </Section>
+
+        <Dialog open={tradeTimerModalOpen} onOpenChange={(v) => setTradeTimerModalOpen(v)}>
+          <DialogContent>
+            <div className="px-4">
+              <DialogHeader>
+                <DialogTitle>Trade Timer</DialogTitle>
+              </DialogHeader>
+              <div className="py-2">
+                <TradeTimerControl
+                  tradeLocked={!!game?.trade_locked}
+                  currentSeconds={Number(game?.trade_timer_seconds ?? 60)}
+                  selected={tradeTimerSelected}
+                  onSelect={(s) => setTradeTimerSelected(s)}
+                />
+              </div>
+              <DialogFooter>
+                <div className="flex gap-2 w-full justify-end">
+                  <Button variant="secondary" onClick={() => setTradeTimerModalOpen(false)}>Cancel</Button>
+                  {!game?.trade_locked ? (
+                    <Button onClick={() => { startTradeTimer(tradeTimerSelected); setTradeTimerModalOpen(false); }}>
+                      Start
+                    </Button>
+                  ) : (
+                    <Button variant="destructive" onClick={() => { stopTradeTimer(); setTradeTimerModalOpen(false); }}>
+                      Done
+                    </Button>
+                  )}
+                </div>
+              </DialogFooter>
+            </div>
+          </DialogContent>
+        </Dialog>
+
+        <JailPopup
+          open={jailModalOpen}
+          onOpenChange={(v) => setJailModalOpen(v)}
+          currentPlayer={player}
+          players={playersList}
+          onSubmit={async (targetId) => {
+            await sendPlayerToJail(targetId);
+          }}
+        />
+
+        <JailLockOverlay
+          open={!!player?.in_jail}
+          jailedByName={playersList?.find((p: any) => p.id === player?.jail_started_by)?.name ?? null}
+          hasGetOutCard={!!player?.has_get_out_of_jail_card}
+          currentBalance={player?.balance ?? 0}
+          payProcessing={payProcessing}
+          cardProcessing={cardProcessing}
+          onPayToGetOut={() => payToGetOut()}
+          onUseCard={() => useGetOutCard()}
+        />
 
         <TradeLockOverlay
           open={!!game?.trade_locked}

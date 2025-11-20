@@ -110,31 +110,51 @@ export default function ActivityLog({
     const from = idToName(e.from_player_id);
     const to = idToName(e.to_player_id);
     if (e.kind === "money") {
-      // Special handling for join/leave events
+      // Join/leave events: show description if present
       if ((e.type === "join" || e.type === "leave") && e.description) {
         return e.description;
       }
-      // If this is a zero-amount event with a description (e.g. blocked due to pending sips), surface that message
+
+      // Zero-amount events with description: show the description plainly
       if ((e.amount || 0) === 0 && e.description) {
-        // If this is a trade-timer action, show only the description (cleaner log)
+        // Special-case trade timer descriptions
         if (String(e.type).startsWith('trade_timer') || e.description.toLowerCase().includes('trade timer')) {
           return e.description;
         }
-        // Simplify blocked payment log for pending sips
+        // Pending sips
         if (e.description.toLowerCase().includes('pending sips')) {
           return `Payment blocked: recipient has pending sips.`;
         }
-        if (e.from_player_id && e.to_player_id) return `${actor} attempted to pay ${to} $0 — ${e.description}`;
-        if (!e.from_player_id && e.to_player_id) return `${actor} would have received $0 — ${e.description}`;
-        return `${actor} money event: ${e.type} $0 — ${e.description}`;
+        // Otherwise, just show the description (it's already human-readable)
+        return e.description;
       }
+
+      // Specific money event types
       if (e.type === "free_parking_collect")
-        return `${actor} collected $${(e.amount || 0).toLocaleString()} from Free Parking`;
+        return `${to} collected $${(e.amount || 0).toLocaleString()} from Free Parking`;
+
+      if (e.type === 'jail_card_used' || (e.description || '').toLowerCase().includes('get out of jail'))
+        return `${actor} used a Get Out of Jail Free card`;
+
+      if (e.type === 'jail') {
+        if (e.to_player_id) return `${actor} sent ${to} to jail`;
+        return e.description || `${actor} sent someone to jail`;
+      }
+
+      if (e.type === 'jail_payment') {
+        return `${actor} paid $${(e.amount || 0).toLocaleString()} to get out of jail`;
+      }
+
+      // Generic money transfers
       if (!e.from_player_id && e.to_player_id)
-        return `${actor} received $${(e.amount || 0).toLocaleString()} (${e.type})`;
+        return `${to} received $${(e.amount || 0).toLocaleString()}`;
       if (e.from_player_id && e.to_player_id)
-        return `${actor} paid $${(e.amount || 0).toLocaleString()} from ${from} to ${to} (${e.type})`;
-      return `${actor} money event: ${e.type} $${(e.amount || 0).toLocaleString()}`;
+        return `${from} paid ${to} $${(e.amount || 0).toLocaleString()}`;
+      if (e.from_player_id && !e.to_player_id)
+        return `${from} paid $${(e.amount || 0).toLocaleString()}`;
+
+      // Fallback: concise default
+      return `${actor} ${e.type} $${(e.amount || 0).toLocaleString()}`;
     }
     if (e.kind === "sip") {
       const fromName = idToName(e.actor_player_id);

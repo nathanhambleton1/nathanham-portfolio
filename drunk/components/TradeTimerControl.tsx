@@ -1,46 +1,36 @@
-import React, { useState } from 'react';
+import React from 'react';
+import { Button } from './ui/button';
 
 export default function TradeTimerControl({
   tradeLocked = false,
   currentSeconds = 60,
-  onStart,
-  onStop,
+  selected,
+  onSelect,
 }: {
   tradeLocked?: boolean;
   currentSeconds?: number;
-  onStart: (seconds: number) => void;
-  onStop: () => void;
+  selected?: number;
+  onSelect?: (s: number) => void;
 }) {
   const options = [60, 120, 180];
-  const [selected, setSelected] = useState<number>(currentSeconds || 60);
+  const sel = selected ?? currentSeconds ?? 60;
 
   return (
     <div className="flex items-center gap-3">
       <div className="inline-flex rounded-md border bg-card p-2">
         {options.map((s) => (
-          <button
+          <Button
             key={s}
-            className={`px-3 py-1 text-sm rounded ${selected === s ? 'bg-primary text-white' : 'bg-transparent'}`}
-            onClick={() => setSelected(s)}
+            variant={sel === s ? 'default' : 'ghost'}
+            size="sm"
+            className={`px-3 py-1 rounded ${sel === s ? 'bg-primary text-black' : ''}`}
+            onClick={() => onSelect && onSelect(s)}
             disabled={tradeLocked}
           >
             {s / 60}m
-          </button>
+          </Button>
         ))}
       </div>
-
-      {!tradeLocked ? (
-        <button
-          className="px-3 py-1 rounded bg-primary text-white text-sm"
-          onClick={() => onStart(selected)}
-        >
-          Start
-        </button>
-      ) : (
-        <button className="px-3 py-1 rounded bg-red-600 text-white text-sm" onClick={onStop}>
-          Done
-        </button>
-      )}
     </div>
   );
 }
