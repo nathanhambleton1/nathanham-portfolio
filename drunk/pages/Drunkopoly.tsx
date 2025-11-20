@@ -4,6 +4,8 @@ import { UserPlus, DollarSign, Users, Percent, Crown, PiggyBank } from "lucide-r
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "../components/ui/dialog";
 import CollectPopup from "../components/CollectPopup";
 import SipPopup from "../components/SipPopup";
+import TradeTimerControl from "../components/TradeTimerControl";
+import TradeLockOverlay from "../components/TradeLockOverlay";
 import ActivityLog from "../components/ActivityLog";
 import {
   Card,
@@ -541,6 +543,94 @@ const Drunkopoly = () => {
     }
   };
 
+  // Start trade timer
+  const startTradeTimer = async (seconds: number) => {
+    if (!game) return;
+    try {
+      const { data: updatedGames, error } = await supabase
+        .from('games')
+        .update({
+          trade_locked: true,
+          trade_started_by: player?.id ?? null,
+          trade_timer_seconds: seconds,
+          trade_timer_expires_at: new Date(Date.now() + seconds * 1000).toISOString(),
+          updated_at: new Date().toISOString(),
+        })
+        .eq('id', game.id)
+        .select()
+        .limit(1);
+
+      if (error) throw error;
+      if (updatedGames && updatedGames.length > 0) {
+        setGame(updatedGames[0]);
+      } else {
+        // refresh
+        const { data: gData } = await supabase.from('games').select('*').eq('id', game.id).single();
+        if (gData) setGame(gData);
+      }
+      // Log event to activity (money_events) so ActivityLog shows the timer start
+      try {
+        await supabase.from('money_events').insert([{
+          game_id: game.id,
+          actor_player_id: player?.id ?? null,
+          from_player_id: null,
+          to_player_id: null,
+          amount: 0,
+          type: 'trade_timer_start',
+          description: `Trade timer started for ${seconds} second${seconds !== 1 ? 's' : ''} by ${player?.name ?? 'unknown'}`,
+        }]);
+      } catch (logErr) {
+        console.warn('Failed to log trade timer start', logErr);
+      }
+    } catch (err: any) {
+      console.error('Start trade timer failed', err);
+      alert(err.message || 'Failed to start timer');
+    }
+  };
+
+  // Stop trade timer (Done)
+  const stopTradeTimer = async () => {
+    if (!game) return;
+    try {
+      const { data: updatedGames, error } = await supabase
+        .from('games')
+        .update({
+          trade_locked: false,
+          trade_started_by: null,
+          trade_timer_expires_at: null,
+          updated_at: new Date().toISOString(),
+        })
+        .eq('id', game.id)
+        .select()
+        .limit(1);
+
+      if (error) throw error;
+      if (updatedGames && updatedGames.length > 0) {
+        setGame(updatedGames[0]);
+      } else {
+        const { data: gData } = await supabase.from('games').select('*').eq('id', game.id).single();
+        if (gData) setGame(gData);
+      }
+      // Log event to activity (money_events) so ActivityLog shows the timer stop
+      try {
+        await supabase.from('money_events').insert([{
+          game_id: game.id,
+          actor_player_id: player?.id ?? null,
+          from_player_id: null,
+          to_player_id: null,
+          amount: 0,
+          type: 'trade_timer_stop',
+          description: `Trade timer stopped by ${player?.name ?? 'unknown'}`,
+        }]);
+      } catch (logErr) {
+        console.warn('Failed to log trade timer stop', logErr);
+      }
+    } catch (err: any) {
+      console.error('Stop trade timer failed', err);
+      alert(err.message || 'Failed to stop timer');
+    }
+  };
+
   // Auto-join on mount
   useEffect(() => {
     const savedCode = typeof window !== "undefined" ? localStorage.getItem(STORAGE_KEY_CODE) : null;
@@ -713,6 +803,44 @@ const Drunkopoly = () => {
       document.removeEventListener('visibilitychange', onVisibility);
     };
   }, [screen, game?.code, player?.id]);
+
+  // Realtime subscription: update `game` and `playersList` when rows change so everyone sees
+  // the trade lock overlay immediately when someone starts the timer.
+  useEffect(() => {
+    if (screen !== 'home' || !game) return;
+    const gameId = game.id;
+    let channel: any = null;
+    try {
+      channel = supabase
+        .channel(`public-games-${gameId}`)
+        .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'games', filter: `id=eq.${gameId}` }, (payload: any) => {
+          if (payload && payload.new) {
+            setGame(payload.new);
+          }
+        })
+        .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'players', filter: `game_id=eq.${gameId}` }, async (payload: any) => {
+          try {
+            const players = await fetchPlayers(game.code);
+            setPlayersList(players);
+            const updatedPlayer = players.find((p: any) => p.id === player?.id);
+            if (updatedPlayer) setPlayer(updatedPlayer);
+          } catch (e) {
+            // ignore
+          }
+        })
+        .subscribe();
+    } catch (e) {
+      console.warn('Supabase realtime subscribe failed', e);
+    }
+
+    return () => {
+      try {
+        if (channel) channel.unsubscribe();
+      } catch (e) {
+        try { (supabase as any).removeChannel?.(channel); } catch (ignored) {}
+      }
+    };
+  }, [screen, game?.id]);
 
   // Handle logout: fully clear session (localStorage + supabase auth) and reset state
   const handleLogoutOfGame = async () => {
@@ -1100,6 +1228,8 @@ const Drunkopoly = () => {
             </Button>
           </div>
         </Section>
+        
+        
 
         <PayPopup
           open={payModalOpen}
@@ -1199,6 +1329,8 @@ const Drunkopoly = () => {
           }}
         />
 
+        
+
         {/* Collect section */}
         <Section title="Collect" className="mt-8">
           <div className="grid grid-cols-2 gap-4 w-64">
@@ -1223,6 +1355,25 @@ const Drunkopoly = () => {
             </Button>
           </div>
         </Section>
+        
+        {/* Actions section (trade timer) */}
+        <Section title="Actions" className="mt-8">
+          <div className="w-64 flex items-center justify-center">
+            <TradeTimerControl
+              tradeLocked={!!game?.trade_locked}
+              currentSeconds={Number(game?.trade_timer_seconds ?? 60)}
+              onStart={(s) => startTradeTimer(s)}
+              onStop={() => stopTradeTimer()}
+            />
+          </div>
+        </Section>
+
+        <TradeLockOverlay
+          open={!!game?.trade_locked}
+          expiresAt={game?.trade_timer_expires_at}
+          startedByName={playersList?.find((p: any) => p.id === game?.trade_started_by)?.name ?? null}
+          onDone={() => stopTradeTimer()}
+        />
       </div>
       <ActivityLog gameCode={game?.code ?? gameCode} players={playersList} />
     </div>

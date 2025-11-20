@@ -116,6 +116,10 @@ export default function ActivityLog({
       }
       // If this is a zero-amount event with a description (e.g. blocked due to pending sips), surface that message
       if ((e.amount || 0) === 0 && e.description) {
+        // If this is a trade-timer action, show only the description (cleaner log)
+        if (String(e.type).startsWith('trade_timer') || e.description.toLowerCase().includes('trade timer')) {
+          return e.description;
+        }
         // Simplify blocked payment log for pending sips
         if (e.description.toLowerCase().includes('pending sips')) {
           return `Payment blocked: recipient has pending sips.`;
