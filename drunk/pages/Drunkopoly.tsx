@@ -68,6 +68,7 @@ const Drunkopoly = () => {
   const [jailModalOpen, setJailModalOpen] = useState(false);
   const [payProcessing, setPayProcessing] = useState(false);
   const [cardProcessing, setCardProcessing] = useState(false);
+  const [completingSips, setCompletingSips] = useState(false);
   const [freeParkingPot, setFreeParkingPot] = useState(0);
   const [collectModalOpen, setCollectModalOpen] = useState(false);
   const [collectMode, setCollectMode] = useState<'bank'|'pass_go'|'free_parking'|null>(null);
@@ -1367,13 +1368,15 @@ const Drunkopoly = () => {
                   <path strokeLinecap="round" strokeLinejoin="round" d="M7 10V8a5 5 0 0110 0v2" />
                 </svg>
                 <div className="text-2xl font-bold">You have {player.pending_sips} sip{player.pending_sips > 1 ? 's' : ''}</div>
-                <p className="mt-3 text-lg text-white/90">Please finish your sips to continue playing.</p>
+                <p className="mt-3 text-lg text-white/90">Finish your sips to continue playing.</p>
                 <p className="mt-1 text-sm text-white/70">You cannot collect money until you've finished.</p>
                 <div className="w-full mt-4">
                   <Button
                     className="w-full"
                     onClick={async () => {
+                      if (!game || !player) return;
                       try {
+                        setCompletingSips(true);
                         await completeSips(game.code, player.id);
                         // Refresh state
                         const players = await fetchPlayers(game.code);
@@ -1383,10 +1386,36 @@ const Drunkopoly = () => {
                       } catch (err: any) {
                         console.error('Complete sips error:', err);
                         alert(err.message || 'Failed to complete sips');
+                      } finally {
+                        setCompletingSips(false);
                       }
                     }}
+                    disabled={completingSips}
                   >
-                    Done
+                    {completingSips ? (
+                      <>
+                        Processing...
+                        <svg
+                          xmlns="http://www.w3.org/2000/svg"
+                          className="h-5 w-5 inline ml-2"
+                          viewBox="0 0 24 24"
+                          fill="none"
+                          stroke="currentColor"
+                          strokeWidth={2}
+                          style={{
+                            verticalAlign: 'middle',
+                            animation: 'spin 1s linear infinite'
+                          }}
+                        >
+                          <style>{`@keyframes spin { 100% { transform: rotate(360deg); } }`}</style>
+                          <circle cx="12" cy="12" r="10" strokeOpacity="0.25" />
+                          <path d="M22 12a10 10 0 00-10-10" strokeLinecap="round" />
+                        </svg>
+                      </>
+                    ) : (
+                      'Done'
+                    )}
+                    
                   </Button>
                 </div>
               </div>

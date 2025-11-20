@@ -15,7 +15,18 @@ export default function JailPopup({
   players?: any[];
   onSubmit: (targetPlayerId: string) => void;
 }) {
-  const list = useMemo(() => players || [], [players]);
+  const list = useMemo(() => {
+    if (!players) return [];
+    // Separate current player and others
+    const current = players.find(p => p.id === currentPlayer?.id);
+    const others = players.filter(p => p.id !== currentPlayer?.id).sort((a, b) => {
+      if (a.name && b.name) {
+        return a.name.localeCompare(b.name);
+      }
+      return 0;
+    });
+    return current ? [current, ...others] : others;
+  }, [players, currentPlayer]);
   const [selected, setSelected] = useState<string | null>(null);
 
   useEffect(() => {

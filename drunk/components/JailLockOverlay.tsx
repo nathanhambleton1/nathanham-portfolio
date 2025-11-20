@@ -48,7 +48,26 @@ export default function JailLockOverlay({
               className={`w-full px-4 py-3 rounded text-lg bg-white text-black transition-opacity duration-150 ${payProcessing ? 'opacity-70 cursor-wait' : 'cursor-pointer hover:opacity-95'}`}
               onClick={() => { if (!payProcessing) onPayToGetOut(); }}
             >
-              {payProcessing ? 'Processing…' : 'Pay $50 to get out'}
+              {payProcessing ? (
+                <span className="flex items-center justify-center gap-2">
+                  Processing…
+                  <svg
+                    xmlns="http://www.w3.org/2000/svg"
+                    className="h-5 w-5"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth={2}
+                    style={{
+                      animation: 'spin 1s linear infinite'
+                    }}
+                  >
+                    <style>{`@keyframes spin { 100% { transform: rotate(360deg); } }`}</style>
+                    <circle cx="12" cy="12" r="10" strokeOpacity="0.25" />
+                    <path d="M22 12a10 10 0 00-10-10" strokeLinecap="round" />
+                  </svg>
+                </span>
+              ) : 'Pay $50 to get out'}
             </button>
             <button
               type="button"
@@ -58,7 +77,26 @@ export default function JailLockOverlay({
               onClick={() => { if (!cardProcessing) onUseCard(); }}
               onKeyDown={(e) => { if ((e.key === 'Enter' || e.key === ' ') && !cardProcessing) { e.preventDefault(); onUseCard(); } }}
             >
-              {cardProcessing ? "Using card…" : "Use 'Get Out of Jail Free' card"}
+              {cardProcessing ? (
+                <span className="flex items-center justify-center gap-2">
+                  Using card…
+                  <svg
+                    xmlns="http://www.w3.org/2000/svg"
+                    className="h-5 w-5"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth={2}
+                    style={{
+                      animation: 'spin 1s linear infinite'
+                    }}
+                  >
+                    <style>{`@keyframes spin { 100% { transform: rotate(360deg); } }`}</style>
+                    <circle cx="12" cy="12" r="10" strokeOpacity="0.25" />
+                    <path d="M22 12a10 10 0 00-10-10" strokeLinecap="round" />
+                  </svg>
+                </span>
+              ) : "Use 'Get Out of Jail Free' card"}
             </button>
           </div>
         </div>
