@@ -41,11 +41,12 @@ const supabaseUrl = 'https://kcyrvubzhsphpxfsewii.supabase.co';
 const supabaseAnonKey = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImtjeXJ2dWJ6aHNwaHB4ZnNld2lpIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjMxODAwMTcsImV4cCI6MjA3ODc1NjAxN30.8psClrpif-F1DWj67u2tErnU8-4ZYjw5LvEfRK3oHkI';
 const supabase = createClient(supabaseUrl, supabaseAnonKey);
 
-type Screen = "join-create" | "enter-name" | "confirm-settings" | "home";
+type Screen = "join-create" | "enter-name" | "confirm-settings" | "select-existing-player" | "home";
 
 const Drunkopoly = () => {
   const STORAGE_KEY_CODE = "drunkopoly:gameCode";
   const STORAGE_KEY_NAME = "drunkopoly:name";
+  const STORAGE_KEY_RECENT = "drunkopoly:recentGames";
 
   const [screen, setScreen] = useState<Screen>("join-create");
   const [gameCode, setGameCode] = useState("");
@@ -60,6 +61,8 @@ const Drunkopoly = () => {
   const [tempFreeParkingBalance, setTempFreeParkingBalance] = useState<string>("0");
   const [game, setGame] = useState<any | null>(null);
   const [player, setPlayer] = useState<any | null>(null);
+  const [recentGames, setRecentGames] = useState<string[]>([]);
+  const [recentPlayers, setRecentPlayers] = useState<any[] | null>(null);
   const [playersList, setPlayersList] = useState<any[]>([]);
   const [payModalOpen, setPayModalOpen] = useState(false);
   const [payMode, setPayMode] = useState<"bank" | "players" | "tax" | null>(null);
@@ -80,92 +83,168 @@ const Drunkopoly = () => {
   // Subscribe to the `game_events` view (same source ActivityLog uses) and show
   // a toast containing the sender name + optional note.
   useEffect(() => {
+    // load recent games from localStorage
+    try {
+      const raw = typeof window !== "undefined" ? localStorage.getItem(STORAGE_KEY_RECENT) : null;
+      if (raw) {
+        const parsed = JSON.parse(raw || "[]");
+        if (Array.isArray(parsed)) setRecentGames(parsed.filter(Boolean).map((s: any) => String(s)));
+      }
+    } catch (e) {
+      // ignore
+    }
+  }, []);
+
+  const persistRecentGames = (list: string[]) => {
+    try {
+      if (typeof window !== "undefined") localStorage.setItem(STORAGE_KEY_RECENT, JSON.stringify(list));
+    } catch (e) { /* ignore */ }
+  };
+
+  const pushRecentGame = (code: string) => {
+    try {
+      if (!code) return;
+      const up = [code, ...recentGames.filter((c) => c !== code)].slice(0, 3);
+      setRecentGames(up);
+      persistRecentGames(up);
+    } catch (e) { /* ignore */ }
+  };
+
+  const handleRecentClick = async (code: string) => {
+    try {
+      setGameCode(code);
+      setMode('join');
+      const players = await fetchPlayers(code);
+      if (players && players.length > 0) {
+        setRecentPlayers(players);
+        setScreen('select-existing-player' as Screen);
+      } else {
+        setScreen('enter-name');
+      }
+    } catch (e) {
+      // fallback to enter name
+      setScreen('enter-name');
+    }
+  };
+
+  const signInAsExistingPlayer = async (p: any) => {
+    try {
+      // fetch game
+      const { data: games, error: gErr } = await supabase.from('games').select('*').eq('code', gameCode).limit(1);
+      if (gErr) throw gErr;
+      if (!games || games.length === 0) throw new Error('Game not found');
+      const g = games[0];
+
+      // mark online
+      await supabase.from('players').update({ is_online: true, last_seen_at: new Date().toISOString() }).eq('id', p.id);
+
+      setGame(g);
+      setPlayer(p);
+      setName(p.name);
+      setGameCode(g.code);
+      try { localStorage.setItem(STORAGE_KEY_CODE, g.code); localStorage.setItem(STORAGE_KEY_NAME, p.name); } catch (e) { /* ignore */ }
+      pushRecentGame(g.code);
+      setScreen('home');
+    } catch (err) {
+      console.error('Sign in existing player failed', err);
+      toast({ title: 'Sign in failed', description: (err as any)?.message || 'Unable to sign in' });
+    }
+  };
+
+  // Show a popup when THIS player receives a payment that has a message (description)
+  useEffect(() => {
     if (!game || !player) return;
-    let mounted = true;
 
     const gameId = game.id;
+    const playerId = player.id;
 
-    const handlePayload = async (payload: any) => {
-      if (!mounted || !payload) return;
-      // Supabase payload may include `.new` or `.record` depending on runtime; handle both
-      const row = payload.new || payload.record || payload.payload || null;
-      if (!row) return;
-      try {
-        if (String(row.game_id) !== String(gameId)) return;
-        if (!row.to_player_id) return;
-        if (String(row.to_player_id) !== String(player.id)) return;
-        // Only notify for money events with positive amount
-        if ((row.kind && row.kind !== 'money') || Number(row.amount || 0) <= 0) return;
-
-        // Resolve actor name from local players list first
-        let actorName = undefined;
-        if (row.actor_player_id && playersList && playersList.length > 0) {
-          const found = playersList.find((p: any) => String(p.id) === String(row.actor_player_id));
-          if (found) actorName = found.name;
-        }
-
-        // Fallback: try to fetch actor name from DB if not found locally
-        if (!actorName && row.actor_player_id) {
-          try {
-            const { data: aRows } = await supabase.from('players').select('name').eq('id', row.actor_player_id).limit(1);
-            if (aRows && aRows.length > 0) actorName = aRows[0].name;
-          } catch (e) {
-            // ignore
-          }
-        }
-
-        const amountStr = `$${(Number(row.amount || 0)).toLocaleString()}`;
-        const title = actorName ? `${actorName} sent you ${amountStr}` : `Payment received ${amountStr}`;
-        const description = row.description || '';
-        toast({ title, description: description || undefined });
-      } catch (e) {
-        // ignore
-      }
-    };
-
+    // Subscribe only to money_events INSERTs where this player is the recipient
     const channel = supabase
-      .channel(`game-events-${gameId}`)
+      .channel(`money-events-messages-${gameId}-${playerId}`)
       .on(
         'postgres_changes',
-        { event: '*', schema: 'public', table: 'game_events' },
-        (payload: any) => {
-          console.debug('game_events payload', payload);
-          void handlePayload(payload);
-        }
-      )
-      .subscribe();
+        {
+          event: 'INSERT',
+          schema: 'public',
+          table: 'money_events',
+          filter: `to_player_id=eq.${playerId}`,
+        },
+        async (payload: any) => {
+          console.debug('money_events message payload', payload);
 
-    // Also subscribe directly to `money_events` as a robust fallback since
-    // some Supabase setups may not fire realtime for views reliably.
-    const moneyChannel = supabase
-      .channel(`money-events-${gameId}`)
-      .on(
-        'postgres_changes',
-        { event: 'INSERT', schema: 'public', table: 'money_events' },
-        (payload: any) => {
-          console.debug('money_events payload', payload);
-          // Normalize shape to look like a game_events row so handlePayload can reuse logic
-          const rec = payload.new || payload.record || payload.payload || null;
-          if (!rec) return;
-          const normalized = {
-            game_id: rec.game_id,
-            to_player_id: rec.to_player_id,
-            actor_player_id: rec.actor_player_id,
-            amount: rec.amount,
-            description: rec.description,
-            kind: 'money',
-          };
-          void handlePayload({ new: normalized });
+          const row = payload.new;
+          if (!row) return;
+
+          // Only for this game
+          if (String(row.game_id) !== String(gameId)) return;
+
+          // Must be a real payment (you can drop this if you want messages even on amount 0)
+          const amount = Number(row.amount || 0);
+          if (amount <= 0) return;
+
+          // Only show if a note/description exists
+          const note = (row.description ?? '').trim();
+          if (!note) return;
+
+          // Figure out who sent it
+          let senderName: string | undefined;
+
+          // First try from local players list
+          if (playersList && playersList.length > 0) {
+            const fromLocal = playersList.find(
+              (p: any) =>
+                String(p.id) === String(row.from_player_id) ||
+                String(p.id) === String(row.actor_player_id)
+            );
+            if (fromLocal) senderName = fromLocal.name;
+          }
+
+          // Fallback: fetch from DB if we don't have them locally for some reason
+          if (!senderName && row.actor_player_id) {
+            try {
+              const { data: aRows } = await supabase
+                .from('players')
+                .select('name')
+                .eq('id', row.actor_player_id)
+                .limit(1);
+
+              if (aRows && aRows.length > 0) senderName = aRows[0].name;
+            } catch (e) {
+              console.warn('Failed to fetch sender name', e);
+            }
+          }
+
+          const title = senderName ? `Payment from ${senderName}` : 'Payment received';
+          const description = `$${amount.toLocaleString()} - ${note}`;
+
+          // Use the toast function directly
+          try {
+            toast({ 
+              title,
+              description,
+              duration: 5000, // Show for 5 seconds
+            });
+          } catch (toastError) {
+            console.warn('Toast failed to show:', toastError);
+            // Fallback: use browser alert if toast fails
+            alert(`${title}: $${amount.toLocaleString()} - ${note}`);
+          }
         }
       )
       .subscribe();
 
     return () => {
-      mounted = false;
-      try { channel.unsubscribe(); } catch (e) { /* ignore */ }
-      try { moneyChannel.unsubscribe(); } catch (e) { /* ignore */ }
+      try {
+        channel.unsubscribe();
+      } catch (e) {
+        try {
+          (supabase as any).removeChannel?.(channel);
+        } catch {
+          /* ignore */
+        }
+      }
     };
-  }, [game, player, playersList]);
+  }, [game?.id, player?.id, playersList, toast]); // Added toast to dependencies
 
   // If the URL contains an invite or code param, auto-fill and go to enter-name
   useEffect(() => {
@@ -1200,6 +1279,18 @@ const Drunkopoly = () => {
               >
                 Create Game
               </Button>
+              {recentGames && recentGames.length > 0 && (
+                <div className="mt-6">
+                  <div className="text-sm text-muted-foreground mb-2">Recent games</div>
+                  <div className="flex gap-2">
+                    {recentGames.map((c) => (
+                      <Button key={c} variant="ghost" onClick={() => handleRecentClick(c)}>
+                        {c}
+                      </Button>
+                    ))}
+                  </div>
+                </div>
+              )}
             </div>
           </CardContent>
         </Card>
@@ -1208,6 +1299,30 @@ const Drunkopoly = () => {
   }
 
   // Step 2: Enter Name
+  if (screen === 'select-existing-player' && recentPlayers) {
+    return (
+      <div className="min-h-screen bg-gradient-bg flex items-center justify-center">
+        <Card className="w-full max-w-md">
+          <CardHeader>
+            <CardTitle className="text-2xl mb-2">Select Your Name</CardTitle>
+            <CardDescription>Choose which player you are in game {gameCode}.</CardDescription>
+          </CardHeader>
+          <CardContent>
+            <div className="flex flex-col gap-3">
+              {recentPlayers.map((p: any) => (
+                <Button key={p.id} className="w-full text-left" onClick={() => signInAsExistingPlayer(p)}>
+                  {p.name}
+                </Button>
+              ))}
+              <div className="pt-4">
+                <Button variant="secondary" className="w-full" onClick={() => setScreen('enter-name')}>Not me / Use different name</Button>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+      </div>
+    );
+  }
   if (screen === "enter-name") {
     return (
       <div className="min-h-screen bg-gradient-bg flex items-center justify-center">
@@ -1313,6 +1428,7 @@ const Drunkopoly = () => {
                     setGameCode(game.code);
                     localStorage.setItem(STORAGE_KEY_CODE, game.code);
                     localStorage.setItem(STORAGE_KEY_NAME, name);
+                    pushRecentGame(game.code);
                     setScreen("home");
                   }
                 } catch (err: any) {
@@ -1421,6 +1537,7 @@ const Drunkopoly = () => {
                   setGameCode(newGame.code);
                   localStorage.setItem(STORAGE_KEY_CODE, newGame.code);
                   localStorage.setItem(STORAGE_KEY_NAME, name);
+                  pushRecentGame(newGame.code);
                   setScreen('home');
                 } catch (err: any) {
                   console.error('Create with settings failed:', err);
