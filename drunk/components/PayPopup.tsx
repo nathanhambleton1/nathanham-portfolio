@@ -52,11 +52,11 @@ export default function PayPopup({
   if (!mode) return null;
 
   // For tax, always 1 payment (to bank or free parking), not per player
-  const roundUpToFive = (v: number) => Math.max(0, Math.ceil(v / 5) * 5);
+  const roundToFive = (v: number) => Math.max(0, Math.round(v / 5) * 5);
   const count = selectedIds.size || (mode === "bank" ? 1 : 0);
   // If the user has typed an amount, use that (rounded). Otherwise fall back to slider `amountPer`.
   const rawAmountNum = rawAmount.trim() !== "" ? Number(rawAmount) || 0 : NaN;
-  const roundedLive = !Number.isNaN(rawAmountNum) ? roundUpToFive(rawAmountNum) : amountPer;
+  const roundedLive = !Number.isNaN(rawAmountNum) ? Math.min(200, roundToFive(rawAmountNum)) : amountPer;
   const total = mode === "tax"
     ? roundedLive
     : (mode === "bank" ? roundedLive : roundedLive * count);
@@ -71,8 +71,8 @@ export default function PayPopup({
   const handleSubmit = () => {
     if (!currentPlayer) return;
     // Use typed value if present, otherwise fall back to slider
-    const rounded = rawAmount.trim() !== "" ? roundUpToFive(Number(rawAmount)) : amountPer;
-    setAmountPer(rounded);
+    const rounded = rawAmount.trim() !== "" ? Math.min(200, roundToFive(Number(rawAmount))) : amountPer;
+    setAmountPer(Math.min(rounded, visibleSliderMax));
     setRawAmount(String(rounded));
     let payments: { to: string | null; amount: number }[] = [];
     if (mode === "bank") {
@@ -87,7 +87,7 @@ export default function PayPopup({
     onOpenChange(false);
   };
 
-  const maxForSlider = Math.max((currentPlayer?.balance ?? 0), 200);
+  const visibleSliderMax = 100;
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -144,12 +144,12 @@ export default function PayPopup({
             <input
               type="range"
               min={0}
-              max={maxForSlider}
+              max={visibleSliderMax}
               step={5}
               value={amountPer}
               onChange={(e) => {
-                const v = roundUpToFive(Number(e.target.value));
-                setAmountPer(v);
+                const v = Number(e.target.value);
+                setAmountPer(Math.max(0, Math.round(v / 5) * 5));
               }}
               className="w-full"
             />
@@ -160,18 +160,19 @@ export default function PayPopup({
                   setRawAmount(e.target.value);
                 }}
                 onBlur={() => {
-                  // On blur, if user entered something, round and sync slider to that value
+                  // On blur, if user entered something, round and sync slider (slider capped at visible max)
                   if (rawAmount.trim() !== "") {
-                    const rounded = roundUpToFive(Number(rawAmount));
-                    setAmountPer(rounded);
+                    const rounded = Math.min(200, roundToFive(Number(rawAmount)));
+                    setAmountPer(Math.min(rounded, visibleSliderMax));
                     setRawAmount(String(rounded));
                   }
                 }}
                 className="w-32"
                 type="number"
                 min={0}
+                max={200}
               />
-              <div className="text-sm text-muted-foreground">will round up to nearest 5</div>
+              <div className="text-sm text-muted-foreground">will round to nearest $5</div>
             </div>
           </div>
         </div>

@@ -29,7 +29,8 @@ export default function CollectPopup({
   const [rawAmount, setRawAmount] = useState<string>("");
   const [amount, setAmount] = useState<number>(0);
   const [doubled, setDoubled] = useState(false);
-  const roundUpToFive = (v: number) => Math.max(0, Math.ceil(v / 5) * 5);
+  const roundToFive = (v: number) => Math.max(0, Math.round(v / 5) * 5);
+  const visibleSliderMax = 100;
 
   // Initialize popup state only when the dialog actually opens (avoid resets during polling updates)
   const prevOpenRef = React.useRef<boolean>(false);
@@ -41,11 +42,11 @@ export default function CollectPopup({
       setDoubled(false);
       if (mode === 'pass_go' && game) {
         setRawAmount("");
-        setAmount(game.pass_go_amount || 200);
+        setAmount(Math.min(visibleSliderMax, game.pass_go_amount || 200));
       }
       if (mode === 'free_parking' && game) {
         setRawAmount("");
-        setAmount(game.free_parking_balance || 0);
+        setAmount(Math.min(visibleSliderMax, game.free_parking_balance || 0));
       }
     }
     prevOpenRef.current = open;
@@ -55,7 +56,7 @@ export default function CollectPopup({
   if (!mode) return null;
 
   const rawAmountNum = rawAmount.trim() !== "" ? Number(rawAmount) || 0 : NaN;
-  const roundedLive = !Number.isNaN(rawAmountNum) ? roundUpToFive(rawAmountNum) : amount;
+  const roundedLive = !Number.isNaN(rawAmountNum) ? Math.min(200, roundToFive(rawAmountNum)) : amount;
 
   const handleSubmit = () => {
     if (!currentPlayer) return;
@@ -94,12 +95,12 @@ export default function CollectPopup({
               <input
                 type="range"
                 min={0}
-                max={2000}
+                max={visibleSliderMax}
                 step={5}
                 value={amount}
                 onChange={(e) => {
-                  const v = roundUpToFive(Number(e.target.value));
-                  setAmount(v);
+                  const v = Number(e.target.value);
+                  setAmount(Math.max(0, Math.round(v / 5) * 5));
                 }}
                 className="w-full"
               />
@@ -111,16 +112,17 @@ export default function CollectPopup({
                   }}
                   onBlur={() => {
                     if (rawAmount.trim() !== "") {
-                      const rounded = roundUpToFive(Number(rawAmount));
-                      setAmount(rounded);
+                      const rounded = Math.min(200, roundToFive(Number(rawAmount)));
+                      setAmount(Math.min(rounded, visibleSliderMax));
                       setRawAmount(String(rounded));
                     }
                   }}
                   className="w-32"
                   type="number"
                   min={0}
+                  max={200}
                 />
-                <div className="text-sm text-muted-foreground">will round up to nearest 5</div>
+                <div className="text-sm text-muted-foreground">will round to nearest $5</div>
               </div>
             </div>
           )}
