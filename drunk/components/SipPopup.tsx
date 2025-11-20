@@ -24,30 +24,74 @@ export default function SipPopup({
   onOpenChange: (v: boolean) => void;
   currentPlayer: Player | null;
   players?: Player[];
-  onSubmit: (to: string, sip_count: number) => void;
+  onSubmit: (to: string | string[], sip_count: number) => void;
   allowSelf?: boolean;
 }) {
-  // include all players as possible recipients — don't limit selection anymore
-  const others = useMemo(() => players, [players]);
+  // build recipient list: include current player first, then the rest alphabetically
+  const others = useMemo(() => {
+    const list = [...players];
+    let self: Player | null = null;
+    const filtered = list.filter((p) => {
+      if (currentPlayer && p.id === currentPlayer.id) {
+        self = p;
+        return false;
+      }
+      return true;
+    });
+    filtered.sort((a, b) => a.name.localeCompare(b.name));
+    const out: Player[] = [];
+    if (self) out.push(self);
+    out.push(...filtered);
+    return out;
+  }, [players, currentPlayer]);
 
-  const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const toggleSelected = (id: string) => {
+    const next = new Set(selectedIds);
+    if (next.has(id)) next.delete(id);
+    else next.add(id);
+    setSelectedIds(next);
+  };
+  // compute list of all other ids (exclude current player)
+  const allOtherIds = useMemo(() => others.filter((p) => p.id !== currentPlayer?.id).map((p) => p.id), [others, currentPlayer]);
+
+  const everyoneRef = React.useRef<HTMLInputElement | null>(null);
+
+  // derived boolean: everyoneChecked when every other player is selected and current player is not selected
+  const everyoneChecked = allOtherIds.length > 0 && allOtherIds.every((id) => selectedIds.has(id)) && !(currentPlayer && selectedIds.has(currentPlayer.id));
+
+  useEffect(() => {
+    if (!everyoneRef.current) return;
+    const allSelected = allOtherIds.length > 0 && allOtherIds.every((id) => selectedIds.has(id));
+    everyoneRef.current.checked = allSelected && !(currentPlayer && selectedIds.has(currentPlayer.id));
+    // do not use indeterminate state — when not all selected, ensure checkbox is unchecked
+    everyoneRef.current.indeterminate = false;
+  }, [selectedIds, allOtherIds, currentPlayer]);
+  // keep slider state separate from typed input; start input blank so users can type immediately
   const [sipCount, setSipCount] = useState<number>(1);
+  const [rawSip, setRawSip] = useState<string>("");
 
   // reset when opened
   const prevOpen = React.useRef(false);
   useEffect(() => {
     if (!prevOpen.current && open) {
-      setSelectedId(null);
+      setSelectedIds(new Set());
       setSipCount(1);
+      setRawSip("");
     }
     prevOpen.current = open;
   }, [open]);
 
   if (!open) return null;
 
+  // effective count: if user typed a value, use that (rounded), otherwise use slider
+  const typedNum = rawSip.trim() !== "" ? Number(rawSip) || 0 : NaN;
+  const effectiveCount = !Number.isNaN(typedNum) ? Math.max(1, Math.round(typedNum)) : sipCount;
+
   const handleSubmit = () => {
-    if (!selectedId) return;
-    onSubmit(selectedId, Math.max(1, Math.round(sipCount)));
+    if (!selectedIds || selectedIds.size === 0) return;
+    const finalCount = rawSip.trim() !== "" ? Math.max(1, Math.round(Number(rawSip) || 1)) : sipCount;
+    onSubmit(Array.from(selectedIds), finalCount);
     onOpenChange(false);
   };
 
@@ -56,7 +100,7 @@ export default function SipPopup({
       <DialogContent>
         <DialogHeader>
           <DialogTitle>Give Sips</DialogTitle>
-          <DialogDescription>Select a player and how many sips to assign.</DialogDescription>
+          <DialogDescription>Select one or more players and how many sips to assign.</DialogDescription>
         </DialogHeader>
 
         <div className="space-y-4">
@@ -64,25 +108,67 @@ export default function SipPopup({
             <div className="text-sm font-medium">Choose recipient</div>
             <div className="grid gap-2">
               {others.length === 0 && <div className="text-sm text-muted-foreground">No players</div>}
-              {others.map((p) => (
-                <label key={p.id} className={`flex items-center gap-2 p-2 border rounded ${selectedId === p.id ? 'bg-primary/10' : ''}`}>
-                  <input type="radio" name="sip-recipient" checked={selectedId === p.id} onChange={() => setSelectedId(p.id)} />
-                  <div className="flex-1">{p.name}{p.id === currentPlayer?.id ? ' (you)' : ''}</div>
-                  <div className="text-sm text-muted-foreground">{(p.pending_sips || 0) > 0 ? `${p.pending_sips} pending` : ''}</div>
-                </label>
-              ))}
+              {others.length > 0 && (
+                <>
+                  {/* render current player first (others built to put self first) */}
+                  {(() => {
+                    const first = others[0];
+                    return (
+                      <label key={first.id} className={`flex items-center gap-2 p-2 border rounded ${selectedIds.has(first.id) ? 'bg-primary/10' : ''}`}>
+                        <input type="checkbox" name="sip-recipient" checked={selectedIds.has(first.id)} onChange={() => toggleSelected(first.id)} />
+                        <div className="flex-1">{first.name}{first.id === currentPlayer?.id ? ' (you)' : ''}</div>
+                        <div className="text-sm text-muted-foreground">{(first.pending_sips || 0) > 0 ? `${first.pending_sips} pending` : ''}</div>
+                      </label>
+                    );
+                  })()}
+
+                  {/* Everyone else goes under you */}
+                  {allOtherIds.length > 0 && (
+                    <label key="everyone" className={`flex items-center gap-2 p-2 border rounded ${everyoneChecked ? 'bg-primary/10' : ''}`}>
+                      <input
+                        ref={everyoneRef}
+                        type="checkbox"
+                        name="sip-recipient-everyone"
+                        onChange={(e) => {
+                          const checked = e.target.checked;
+                          const next = new Set(selectedIds);
+                          if (checked) {
+                            // add all others, remove current player if present
+                            allOtherIds.forEach((id) => next.add(id));
+                            if (currentPlayer) next.delete(currentPlayer.id);
+                          } else {
+                            // remove all others
+                            allOtherIds.forEach((id) => next.delete(id));
+                          }
+                          setSelectedIds(next);
+                        }}
+                      />
+                      <div className="flex-1">Everyone else</div>
+                    </label>
+                  )}
+
+                  {/* render remaining players (skip first) */}
+                  {others.slice(1).map((p) => (
+                    <label key={p.id} className={`flex items-center gap-2 p-2 border rounded ${selectedIds.has(p.id) ? 'bg-primary/10' : ''}`}>
+                      <input type="checkbox" name="sip-recipient" checked={selectedIds.has(p.id)} onChange={() => toggleSelected(p.id)} />
+                      <div className="flex-1">{p.name}{p.id === currentPlayer?.id ? ' (you)' : ''}</div>
+                      <div className="text-sm text-muted-foreground">{(p.pending_sips || 0) > 0 ? `${p.pending_sips} pending` : ''}</div>
+                    </label>
+                  ))}
+                </>
+              )}
             </div>
           </div>
 
           <div className="space-y-1">
             <div className="flex items-center justify-between">
               <div className="text-sm font-medium">Sips</div>
-              <div className="text-sm text-muted-foreground">{sipCount}</div>
+              <div className="text-sm text-muted-foreground">{effectiveCount}</div>
             </div>
             <input
               type="range"
               min={1}
-              max={20}
+              max={10}
               step={1}
               value={sipCount}
               onChange={(e) => setSipCount(Number(e.target.value))}
@@ -90,8 +176,15 @@ export default function SipPopup({
             />
             <div className="flex items-center gap-2">
               <Input
-                value={String(sipCount)}
-                onChange={(e) => setSipCount(Math.max(1, Number(e.target.value || 1)))}
+                value={rawSip}
+                onChange={(e) => setRawSip(e.target.value)}
+                onBlur={() => {
+                  if (rawSip.trim() !== "") {
+                    const n = Math.max(1, Math.round(Number(rawSip) || 1));
+                    setSipCount(n);
+                    setRawSip(String(n));
+                  }
+                }}
                 className="w-32"
                 type="number"
                 min={1}
@@ -102,10 +195,10 @@ export default function SipPopup({
         </div>
 
         <DialogFooter>
-          <div className="flex gap-2 w-full justify-end">
-            <Button variant="secondary" onClick={() => onOpenChange(false)}>Cancel</Button>
-            <Button onClick={handleSubmit} className="bg-primary" disabled={!selectedId}>Give</Button>
-          </div>
+            <div className="flex gap-2 w-full justify-end">
+              <Button variant="secondary" onClick={() => onOpenChange(false)}>Cancel</Button>
+              <Button onClick={handleSubmit} className="bg-primary" disabled={!(selectedIds && selectedIds.size > 0)}>Give</Button>
+            </div>
         </DialogFooter>
       </DialogContent>
     </Dialog>

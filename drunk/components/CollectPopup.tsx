@@ -25,7 +25,8 @@ export default function CollectPopup({
   game: any | null;
   onCollect: (opts: any) => void;
 }) {
-  const [rawAmount, setRawAmount] = useState<string>("0");
+  // typed input starts blank so users can click and type immediately
+  const [rawAmount, setRawAmount] = useState<string>("");
   const [amount, setAmount] = useState<number>(0);
   const [doubled, setDoubled] = useState(false);
   const roundUpToFive = (v: number) => Math.max(0, Math.ceil(v / 5) * 5);
@@ -35,15 +36,15 @@ export default function CollectPopup({
   useEffect(() => {
     const prev = prevOpenRef.current;
     if (!prev && open) {
-      setRawAmount("0");
+      setRawAmount("");
       setAmount(0);
       setDoubled(false);
       if (mode === 'pass_go' && game) {
-        setRawAmount(String(game.pass_go_amount || 200));
+        setRawAmount("");
         setAmount(game.pass_go_amount || 200);
       }
       if (mode === 'free_parking' && game) {
-        setRawAmount(String(game.free_parking_balance || 0));
+        setRawAmount("");
         setAmount(game.free_parking_balance || 0);
       }
     }
@@ -53,8 +54,8 @@ export default function CollectPopup({
 
   if (!mode) return null;
 
-  const rawAmountNum = Number(rawAmount) || 0;
-  const roundedLive = roundUpToFive(rawAmountNum);
+  const rawAmountNum = rawAmount.trim() !== "" ? Number(rawAmount) || 0 : NaN;
+  const roundedLive = !Number.isNaN(rawAmountNum) ? roundUpToFive(rawAmountNum) : amount;
 
   const handleSubmit = () => {
     if (!currentPlayer) return;
@@ -95,10 +96,10 @@ export default function CollectPopup({
                 min={0}
                 max={2000}
                 step={5}
-                value={roundedLive}
+                value={amount}
                 onChange={(e) => {
-                  setRawAmount(e.target.value);
-                  setAmount(roundUpToFive(Number(e.target.value)));
+                  const v = roundUpToFive(Number(e.target.value));
+                  setAmount(v);
                 }}
                 className="w-full"
               />
@@ -109,9 +110,11 @@ export default function CollectPopup({
                     setRawAmount(e.target.value);
                   }}
                   onBlur={() => {
-                    const rounded = roundUpToFive(Number(rawAmount));
-                    setAmount(rounded);
-                    setRawAmount(String(rounded));
+                    if (rawAmount.trim() !== "") {
+                      const rounded = roundUpToFive(Number(rawAmount));
+                      setAmount(rounded);
+                      setRawAmount(String(rounded));
+                    }
                   }}
                   className="w-32"
                   type="number"

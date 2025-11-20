@@ -33,7 +33,8 @@ export default function PayPopup({
 
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [amountPer, setAmountPer] = useState<number>(5);
-  const [rawAmount, setRawAmount] = useState<string>("5");
+  // keep the typed input separate from the slider value; start blank so users can type immediately
+  const [rawAmount, setRawAmount] = useState<string>("");
 
   // Initialize popup state only when the dialog actually opens (avoid resets during polling updates)
   const prevOpenRef = React.useRef<boolean>(false);
@@ -43,6 +44,7 @@ export default function PayPopup({
       setSelectedIds(new Set()); // Always start with no selection
       setFreeParking(false);
       setAmountPer(5);
+      setRawAmount("");
     }
     prevOpenRef.current = open;
   }, [open]);
@@ -52,8 +54,9 @@ export default function PayPopup({
   // For tax, always 1 payment (to bank or free parking), not per player
   const roundUpToFive = (v: number) => Math.max(0, Math.ceil(v / 5) * 5);
   const count = selectedIds.size || (mode === "bank" ? 1 : 0);
-  const rawAmountNum = Number(rawAmount) || 0;
-  const roundedLive = roundUpToFive(rawAmountNum);
+  // If the user has typed an amount, use that (rounded). Otherwise fall back to slider `amountPer`.
+  const rawAmountNum = rawAmount.trim() !== "" ? Number(rawAmount) || 0 : NaN;
+  const roundedLive = !Number.isNaN(rawAmountNum) ? roundUpToFive(rawAmountNum) : amountPer;
   const total = mode === "tax"
     ? roundedLive
     : (mode === "bank" ? roundedLive : roundedLive * count);
@@ -67,8 +70,8 @@ export default function PayPopup({
 
   const handleSubmit = () => {
     if (!currentPlayer) return;
-    // Round up to nearest 5 on submit
-    const rounded = roundUpToFive(Number(rawAmount));
+    // Use typed value if present, otherwise fall back to slider
+    const rounded = rawAmount.trim() !== "" ? roundUpToFive(Number(rawAmount)) : amountPer;
     setAmountPer(rounded);
     setRawAmount(String(rounded));
     let payments: { to: string | null; amount: number }[] = [];
@@ -143,10 +146,10 @@ export default function PayPopup({
               min={0}
               max={maxForSlider}
               step={5}
-              value={roundUpToFive(Number(rawAmount))}
+              value={amountPer}
               onChange={(e) => {
-                setRawAmount(e.target.value);
-                setAmountPer(roundUpToFive(Number(e.target.value)));
+                const v = roundUpToFive(Number(e.target.value));
+                setAmountPer(v);
               }}
               className="w-full"
             />
@@ -154,14 +157,15 @@ export default function PayPopup({
               <Input
                 value={rawAmount}
                 onChange={(e) => {
-                  // Allow any number input
                   setRawAmount(e.target.value);
                 }}
                 onBlur={() => {
-                  // On blur, round up
-                  const rounded = roundUpToFive(Number(rawAmount));
-                  setAmountPer(rounded);
-                  setRawAmount(String(rounded));
+                  // On blur, if user entered something, round and sync slider to that value
+                  if (rawAmount.trim() !== "") {
+                    const rounded = roundUpToFive(Number(rawAmount));
+                    setAmountPer(rounded);
+                    setRawAmount(String(rounded));
+                  }
                 }}
                 className="w-32"
                 type="number"
@@ -177,10 +181,10 @@ export default function PayPopup({
             <Button variant="secondary" onClick={() => onOpenChange(false)}>Cancel</Button>
             <Button 
               onClick={handleSubmit} 
-              className={`bg-primary${(Number(rawAmount) > (currentPlayer?.balance ?? 0)) ? ' opacity-60 cursor-not-allowed' : ''}`}
+              className={`bg-primary${(roundedLive > (currentPlayer?.balance ?? 0)) ? ' opacity-60 cursor-not-allowed' : ''}`}
               disabled={
                 (mode === 'players' && selectedIds.size === 0) ||
-                (Number(rawAmount) > (currentPlayer?.balance ?? 0))
+                (roundedLive > (currentPlayer?.balance ?? 0))
               }
             >
               Pay

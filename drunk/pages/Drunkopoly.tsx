@@ -1568,7 +1568,13 @@ const Drunkopoly = () => {
           onSubmit={async (to, sip_count) => {
             if (!game || !player) return;
             try {
-              await assignSips(game.code, player.id, to, sip_count);
+              if (Array.isArray(to)) {
+                for (const t of to) {
+                  await assignSips(game.code, player.id, t, sip_count);
+                }
+              } else {
+                await assignSips(game.code, player.id, to, sip_count);
+              }
               // Refresh state
               const players = await fetchPlayers(game.code);
               setPlayersList(players);
