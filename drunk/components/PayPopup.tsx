@@ -61,11 +61,12 @@ export default function PayPopup({
   if (!mode) return null;
 
   // For tax, always 1 payment (to bank or free parking), not per player
-  const roundToFive = (v: number) => Math.max(0, Math.round(v / 5) * 5);
+  // Round up to the nearest $5 (always upward), never below 0
+  const roundToFive = (v: number) => Math.max(0, Math.ceil(v / 5) * 5);
   const count = selectedIds.size || (mode === "bank" ? 1 : 0);
   // If the user has typed an amount, use that (rounded). Otherwise fall back to slider `amountPer`.
   const rawAmountNum = rawAmount.trim() !== "" ? Number(rawAmount) || 0 : NaN;
-  const roundedLive = !Number.isNaN(rawAmountNum) ? Math.min(200, roundToFive(rawAmountNum)) : amountPer;
+  const roundedLive = !Number.isNaN(rawAmountNum) ? roundToFive(rawAmountNum) : amountPer;
   // For tax mode, if nothing is selected, total should be $0
   const total = mode === "tax"
     ? (amountPer === 0 ? 0 : roundedLive)
@@ -81,7 +82,7 @@ export default function PayPopup({
   const handleSubmit = () => {
     if (!currentPlayer) return;
     // Use typed value if present, otherwise fall back to slider
-    const rounded = rawAmount.trim() !== "" ? Math.min(200, roundToFive(Number(rawAmount))) : amountPer;
+    const rounded = rawAmount.trim() !== "" ? roundToFive(Number(rawAmount)) : amountPer;
     setAmountPer(Math.min(rounded, visibleSliderMax));
     setRawAmount(String(rounded));
     let payments: { to: string | null; amount: number }[] = [];
@@ -97,7 +98,8 @@ export default function PayPopup({
     onOpenChange(false);
   };
 
-  const visibleSliderMax = 100;
+  // Slider should be either 100 or the player's balance if it is lower than 100
+  const visibleSliderMax = Math.min(100, Math.max(0, Number(currentPlayer?.balance ?? 100)));
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -173,6 +175,9 @@ export default function PayPopup({
                   value={amountPer}
                   onChange={(e) => {
                     const v = Number(e.target.value);
+                    // If the user moves the slider after typing a manual amount,
+                    // clear the manual input so the slider regains control.
+                    if (rawAmount.trim() !== "") setRawAmount("");
                     setAmountPer(Math.max(0, Math.round(v / 5) * 5));
                   }}
                   aria-label="Payment amount"
@@ -182,12 +187,18 @@ export default function PayPopup({
                   <Input
                     value={rawAmount}
                     onChange={(e) => {
-                      setRawAmount(e.target.value);
+                      const v = e.target.value;
+                      setRawAmount(v);
+                      const num = v.trim() !== '' ? Number(v) : NaN;
+                      if (!Number.isNaN(num)) {
+                        const rounded = roundToFive(num);
+                        setAmountPer(Math.min(rounded, visibleSliderMax));
+                      }
                     }}
                     onBlur={() => {
                       // On blur, if user entered something, round and sync slider (slider capped at visible max)
                       if (rawAmount.trim() !== "") {
-                        const rounded = Math.min(200, roundToFive(Number(rawAmount)));
+                        const rounded = roundToFive(Number(rawAmount));
                         setAmountPer(Math.min(rounded, visibleSliderMax));
                         setRawAmount(String(rounded));
                       }
@@ -195,9 +206,8 @@ export default function PayPopup({
                     className="w-32"
                     type="number"
                     min={0}
-                    max={200}
                   />
-                  <div className="text-sm text-muted-foreground">will round to nearest $5</div>
+                  <div className="text-sm text-muted-foreground">Rounds up to $5</div>
                 </div>
               </>
             )}

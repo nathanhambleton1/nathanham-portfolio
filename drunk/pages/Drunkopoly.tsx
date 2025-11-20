@@ -529,6 +529,34 @@ const Drunkopoly = () => {
         .update({ pending_sips: newPending })
         .eq('id', to_player_id);
 
+      // Best-effort: also log this assignment to `money_events` so ActivityLog
+      // will have a persistent record (assignment) even after the sip_events
+      // row is later updated to cleared. This lets us show two separate
+      // activity entries: the original assignment (pending) and a later
+      // completion entry.
+      try {
+        // Fetch actor name for a nicer description
+        const { data: actorRows } = await supabase
+          .from('players')
+          .select('id,name')
+          .eq('id', actor_player_id)
+          .eq('game_id', game.id)
+          .limit(1);
+        const actor = actorRows && actorRows.length ? actorRows[0] : { name: actor_player_id };
+
+        await supabase.from('money_events').insert([{
+          game_id: game.id,
+          actor_player_id: actor_player_id,
+          from_player_id: actor_player_id,
+          to_player_id: to_player_id,
+          amount: 0,
+          type: 'sip_assigned',
+          description: `${actor.name || actor_player_id} assigned ${sip_count} sip${sip_count !== 1 ? 's' : ''} to ${recipient.name || to_player_id}`,
+        }]);
+      } catch (logErr) {
+        console.warn('Failed to log sip assignment', logErr);
+      }
+
       return { ok: true, sip_event: Array.isArray(inserted) ? inserted[0] : inserted };
     } catch (err) {
       console.error('Assign sips error:', err);
@@ -582,6 +610,23 @@ const Drunkopoly = () => {
         .from('players')
         .update({ pending_sips: 0, total_sips: newTotalSips })
         .eq('id', actor_player_id);
+
+      // Log completion to money_events so ActivityLog shows a separate "completed" entry
+      try {
+        if ((totalCompleted || 0) > 0) {
+          await supabase.from('money_events').insert([{
+            game_id: game.id,
+            actor_player_id: actor_player_id,
+            from_player_id: null,
+            to_player_id: actor_player_id,
+            amount: 0,
+            type: 'sip_completed',
+            description: `${playerRow.name || actor_player_id} completed ${totalCompleted} sip${totalCompleted !== 1 ? 's' : ''}`,
+          }]);
+        }
+      } catch (logErr) {
+        console.warn('Failed to log sip completion', logErr);
+      }
 
       return { ok: true, cleared: updated ? updated.length : 0, total_completed: totalCompleted, new_total_sips: newTotalSips };
     } catch (err) {
@@ -679,8 +724,8 @@ const Drunkopoly = () => {
     if (!game || !player) return;
     setPayProcessing(true);
     try {
-      // Deduct $50 from the jailed player (actor is the jailed player)
-      await processPayments(game.code, player.id, [{ to: null, amount: 50 }], { type: 'jail_payment' });
+      // Deduct $50 from the jailed player and send it to Free Parking
+      await processPayments(game.code, player.id, [{ to: null, amount: 50 }], { type: 'jail_payment', freeParking: true });
 
       // Clear jail flag
       await supabase.from('players').update({ in_jail: false, jail_started_by: null, jail_started_at: null }).eq('id', player.id);
@@ -1753,7 +1798,24 @@ function Section({
 function AnimatedNumber({ value }: { value: number }) {
   const [display, setDisplay] = useState<number>(value ?? 0);
   const prevRef = useRef<number>(value ?? 0);
+  const audioRef = useRef<HTMLAudioElement | null>(null);
   const [bump, setBump] = useState<'up' | 'down' | 'neutral'>('neutral');
+  const timeoutRef = useRef<number | null>(null);
+
+  // initialize audio once
+  useEffect(() => {
+    try {
+      if (!audioRef.current) {
+        const a = new Audio('/money.mp3');
+        a.preload = 'auto';
+        a.volume = 0.85;
+        audioRef.current = a;
+      }
+    } catch (e) {
+      // ignore audio init errors
+      console.warn('Audio init failed', e);
+    }
+  }, []);
 
   useEffect(() => {
     const start = prevRef.current ?? 0;
@@ -1762,13 +1824,29 @@ function AnimatedNumber({ value }: { value: number }) {
 
     setBump(end > start ? 'up' : 'down');
 
+    // If increase: play sound now and delay animation so audio starts
+    const delayMs = 500;
+    if (end > start) {
+      try {
+        const a = audioRef.current;
+        if (a) {
+          a.currentTime = 0;
+          const p = a.play();
+          if (p && typeof p.then === 'function') p.catch(() => {});
+        }
+      } catch (e) {
+        // ignore
+      }
+    }
+
     const duration = 700;
-    const startTime = performance.now();
     let raf = 0;
+    let startTime = 0;
 
     const easeOut = (t: number) => 1 - Math.pow(1 - t, 3);
 
     const step = (now: number) => {
+      if (!startTime) startTime = now;
       const t = Math.min(1, (now - startTime) / duration);
       const eased = easeOut(t);
       const curr = start + (end - start) * eased;
@@ -1781,8 +1859,18 @@ function AnimatedNumber({ value }: { value: number }) {
       }
     };
 
-    raf = requestAnimationFrame(step);
-    return () => cancelAnimationFrame(raf);
+    // start animation after delayMs (so audio starts ~delayMs before)
+    timeoutRef.current = window.setTimeout(() => {
+      raf = requestAnimationFrame(step);
+    }, delayMs);
+
+    return () => {
+      if (timeoutRef.current) {
+        clearTimeout(timeoutRef.current);
+        timeoutRef.current = null;
+      }
+      if (raf) cancelAnimationFrame(raf);
+    };
   }, [value]);
 
   // bump only driven by internal value changes

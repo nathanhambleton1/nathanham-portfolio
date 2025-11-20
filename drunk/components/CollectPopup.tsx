@@ -29,7 +29,8 @@ export default function CollectPopup({
   const [rawAmount, setRawAmount] = useState<string>("");
   const [amount, setAmount] = useState<number>(0);
   const [doubled, setDoubled] = useState(false);
-  const roundToFive = (v: number) => Math.max(0, Math.round(v / 5) * 5);
+  // Round up to the nearest $5 (always upward), never below 0
+  const roundToFive = (v: number) => Math.max(0, Math.ceil(v / 5) * 5);
   const visibleSliderMax = 100;
 
   // Initialize popup state only when the dialog actually opens (avoid resets during polling updates)
@@ -56,15 +57,19 @@ export default function CollectPopup({
   if (!mode) return null;
 
   const rawAmountNum = rawAmount.trim() !== "" ? Number(rawAmount) || 0 : NaN;
-  const roundedLive = !Number.isNaN(rawAmountNum) ? Math.min(200, roundToFive(rawAmountNum)) : amount;
+  // Do not clamp typed input to $200 — only the slider is limited.
+  const roundedLive = !Number.isNaN(rawAmountNum) ? roundToFive(rawAmountNum) : amount;
 
   const handleSubmit = () => {
     if (!currentPlayer) return;
     if (mode === 'bank') {
-      if (roundedLive <= 0) return alert('Enter a valid amount');
-      setAmount(roundedLive);
-      setRawAmount(String(roundedLive));
-      onCollect({ type: 'bank', amount: roundedLive });
+      // Use typed value if present, otherwise fall back to slider
+      const rounded = rawAmount.trim() !== "" ? roundToFive(Number(rawAmount)) : amount;
+      if (rounded <= 0) return alert('Enter a valid amount');
+      // Sync slider display but do not clamp the actual collected amount
+      setAmount(Math.min(rounded, visibleSliderMax));
+      setRawAmount(String(rounded));
+      onCollect({ type: 'bank', amount: rounded });
     } else if (mode === 'pass_go') {
       onCollect({ type: 'pass_go', doubled });
     } else if (mode === 'free_parking') {
@@ -100,6 +105,9 @@ export default function CollectPopup({
                 value={amount}
                 onChange={(e) => {
                   const v = Number(e.target.value);
+                  // If the user moves the slider after typing a manual amount,
+                  // clear the manual input so the slider regains control.
+                  if (rawAmount.trim() !== "") setRawAmount("");
                   setAmount(Math.max(0, Math.round(v / 5) * 5));
                 }}
                 aria-label="Collect amount"
@@ -109,11 +117,17 @@ export default function CollectPopup({
                 <Input
                   value={rawAmount}
                   onChange={(e) => {
-                    setRawAmount(e.target.value);
+                    const v = e.target.value;
+                    setRawAmount(v);
+                    const num = v.trim() !== '' ? Number(v) : NaN;
+                    if (!Number.isNaN(num)) {
+                      const rounded = roundToFive(num);
+                      setAmount(Math.min(rounded, visibleSliderMax));
+                    }
                   }}
                   onBlur={() => {
                     if (rawAmount.trim() !== "") {
-                      const rounded = Math.min(200, roundToFive(Number(rawAmount)));
+                      const rounded = roundToFive(Number(rawAmount));
                       setAmount(Math.min(rounded, visibleSliderMax));
                       setRawAmount(String(rounded));
                     }
@@ -121,9 +135,8 @@ export default function CollectPopup({
                   className="w-32"
                   type="number"
                   min={0}
-                  max={200}
                 />
-                <div className="text-sm text-muted-foreground">will round to nearest $5</div>
+                <div className="text-sm text-muted-foreground">Rounds up to $5</div>
               </div>
             </div>
           )}

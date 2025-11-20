@@ -56,7 +56,7 @@ export default function ActivityLog({
           .select('*')
           .eq('game_id', gameId)
           .order('created_at', { ascending: false })
-          .limit(200);
+          .limit(110);
         
         if (!mounted) return;
         
@@ -165,6 +165,37 @@ export default function ActivityLog({
   };
 
   const visibleEvents = expanded ? events : events.slice(0, 5);
+  // Deduplicate: when we log a sip assignment we now insert a `money` event
+  // of type `sip_assigned`. The `game_events` view may also include the
+  // original `sip` row which gets updated later; to avoid showing the same
+  // assignment twice, filter out `sip` kind rows that have a closely-timed
+  // `sip_assigned` money event with the same actor and recipient.
+  const bucket = (ts?: string | null) => {
+    if (!ts) return null;
+    const t = new Date(ts).getTime();
+    // 5 second buckets
+    return Math.floor(t / 5000);
+  };
+
+  const sipAssignedBuckets = new Set<string>();
+  for (const ev of events) {
+    if (ev.kind === 'money' && String(ev.type) === 'sip_assigned') {
+      const b = bucket(ev.created_at);
+      if (b !== null) sipAssignedBuckets.add(`${ev.actor_player_id}::${ev.to_player_id}::${b}`);
+      else sipAssignedBuckets.add(`${ev.actor_player_id}::${ev.to_player_id}::no-ts`);
+    }
+  }
+
+  const filteredEvents = events.filter((ev) => {
+    if (ev.kind === 'sip') {
+      const b = bucket(ev.created_at);
+      const key = b !== null ? `${ev.actor_player_id}::${ev.to_player_id}::${b}` : `${ev.actor_player_id}::${ev.to_player_id}::no-ts`;
+      if (sipAssignedBuckets.has(key)) return false;
+    }
+    return true;
+  });
+
+  const visibleFilteredEvents = expanded ? filteredEvents : filteredEvents.slice(0, 5);
 
   return (
     <>
@@ -177,10 +208,10 @@ export default function ActivityLog({
           </div>
           <div>
             <ul className="space-y-1 text-[10px] sm:text-xs">
-              {events.length === 0 && (
+              {filteredEvents.length === 0 && (
                 <li className="text-[10px] text-muted-foreground">No activity yet</li>
               )}
-              {visibleEvents.map((ev) => (
+              {visibleFilteredEvents.map((ev) => (
                 <li key={ev.id} className="text-foreground/90 flex items-start gap-2">
                   <span className="text-muted-foreground min-w-[44px] text-[9px] sm:text-[10px]">
                     {new Date(ev.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
@@ -190,14 +221,14 @@ export default function ActivityLog({
               ))}
             </ul>
 
-            {events.length > 10 && (
+            {filteredEvents.length > 10 && (
               <div className="mt-2 flex items-center">
                 <button
                   className="text-[10px] text-primary underline hover:no-underline"
                   onClick={() => setExpanded((s) => !s)}
                   aria-expanded={expanded}
                 >
-                  {expanded ? 'Show less' : `Show ${events.length - 10} more`}
+                  {expanded ? 'Show less' : `Show ${filteredEvents.length - 10} more`}
                 </button>
               </div>
             )}
