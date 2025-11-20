@@ -1,7 +1,7 @@
 import { useEffect, useState, useRef } from "react";
 import PayPopup from "../components/PayPopup";
 import JailPopup from "../components/JailPopup";
-import { UserPlus, DollarSign, Users, Percent, Crown, PiggyBank, Clock } from "lucide-react";
+import { UserPlus, DollarSign, Users, Percent, Crown, PiggyBank, Clock, Copy } from "lucide-react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "../components/ui/dialog";
 import CollectPopup from "../components/CollectPopup";
 import SipPopup from "../components/SipPopup";
@@ -33,6 +33,7 @@ import {
 } from "../components/ui/alert-dialog";
 import { createClient } from '@supabase/supabase-js';
 import { useNavigate } from "react-router-dom";
+import { toast } from "../components/ui/use-toast";
 
 // Initialize Supabase client
 const supabaseUrl = 'https://kcyrvubzhsphpxfsewii.supabase.co';
@@ -73,6 +74,34 @@ const Drunkopoly = () => {
   const [blockedPaymentMessage, setBlockedPaymentMessage] = useState<string | null>(null);
   const prevBalanceRef = useRef<number | null>(null);
   const navigate = useNavigate();
+
+  // If the URL contains an invite or code param, auto-fill and go to enter-name
+  useEffect(() => {
+    try {
+      const params = new URLSearchParams(window.location.search);
+      const invite = params.get('invite') || params.get('code');
+      if (invite) {
+        // Clear any previously cached session so invite always forces join flow
+        try {
+          localStorage.removeItem(STORAGE_KEY_CODE);
+          localStorage.removeItem(STORAGE_KEY_NAME);
+        } catch (e) {
+          // ignore
+        }
+        setGameCode(invite.toUpperCase());
+        setMode('join');
+        setScreen('enter-name');
+        // remove query params from URL to keep it clean
+        try {
+          navigate(window.location.pathname, { replace: true });
+        } catch (e) {
+          // ignore navigate errors
+        }
+      }
+    } catch (err) {
+      // ignore
+    }
+  }, []);
 
   // Generate unique game code
   const generateCode = (len = 6) => {
@@ -1179,8 +1208,9 @@ const Drunkopoly = () => {
 
   // Step 2b: Confirm Settings (only for creating a new game)
   if (screen === "confirm-settings") {
-    const isPositiveInteger = (s: string) => /^\d+$/.test(s) && Number(s) > 0;
-    const canCreate = isPositiveInteger(tempInitialBalance) && isPositiveInteger(tempPassGoAmount) && isPositiveInteger(tempFreeParkingBalance);
+    // allow non-negative integers (0 and positive integers), no decimals
+    const isNonNegativeInteger = (s: string) => /^\d+$/.test(s) && Number(s) >= 0;
+    const canCreate = isNonNegativeInteger(tempInitialBalance) && isNonNegativeInteger(tempPassGoAmount) && isNonNegativeInteger(tempFreeParkingBalance);
 
     return (
       <div className="min-h-screen bg-gradient-bg flex items-center justify-center">
@@ -1197,7 +1227,7 @@ const Drunkopoly = () => {
                 setError(null);
 
                 if (!canCreate) {
-                  setError('All values must be positive integers (no decimals)');
+                  setError('All values must be non-negative integers (no decimals)');
                   return;
                 }
 
@@ -1759,6 +1789,36 @@ function AnimatedNumber({ value }: { value: number }) {
 }
 
 function GameCodePopover({ code, onLogout }: { code: string; onLogout?: () => void }) {
+  const handleCopyInvite = async () => {
+    try {
+      const base = window.location.origin + window.location.pathname;
+      const inviteUrl = `${base}?invite=${encodeURIComponent(code)}`;
+      if (navigator.clipboard && navigator.clipboard.writeText) {
+        await navigator.clipboard.writeText(inviteUrl);
+      } else {
+        const ta = document.createElement('textarea');
+        ta.value = inviteUrl;
+        ta.style.position = 'fixed';
+        ta.style.left = '-9999px';
+        document.body.appendChild(ta);
+        ta.select();
+        document.execCommand('copy');
+        document.body.removeChild(ta);
+      }
+      try {
+        toast({ title: 'Invite link copied', description: 'Paste it to share the game.' });
+      } catch (e) {
+        // ignore toast errors
+      }
+    } catch (err) {
+      try {
+        toast({ title: 'Unable to copy', description: 'Copying invite link failed.' });
+      } catch (e) {
+        // ignore
+      }
+    }
+  };
+
   return (
     <Popover>
       <PopoverTrigger asChild>
@@ -1771,8 +1831,11 @@ function GameCodePopover({ code, onLogout }: { code: string; onLogout?: () => vo
       </PopoverTrigger>
       <PopoverContent align="end" className="w-56">
         <div className="flex flex-col gap-2">
-          <div className="font-mono text-lg font-bold text-center">{code}</div>
-          <Button variant="secondary" className="w-full mt-2" onClick={onLogout}>
+          <Button variant="secondary" className="w-full mt-1" onClick={handleCopyInvite}>
+            <Copy size={16} />
+            Invite Link
+          </Button>
+          <Button variant="destructive" className="w-full mt-1 ring-2 ring-red-500/10 shadow-sm shadow-red-500/20" onClick={onLogout}>
             Log Out
           </Button>
         </div>
