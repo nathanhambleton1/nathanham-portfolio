@@ -102,7 +102,8 @@ export default function CollectPopup({
                   const v = Number(e.target.value);
                   setAmount(Math.max(0, Math.round(v / 5) * 5));
                 }}
-                className="w-full"
+                aria-label="Collect amount"
+                className="w-full touch-range"
               />
               <div className="flex items-center gap-2">
                 <Input

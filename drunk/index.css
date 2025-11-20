@@ -65,3 +65,64 @@ All colors MUST be HSL.
     @apply bg-background text-foreground;
   }
 }
+
+/* Touch-friendly range (larger track + thumb for mobile) */
+.touch-range {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 100%;
+  background: transparent;
+  height: 2.25rem; /* gives extra hit area on smaller screens */
+  padding: 0.25rem 0;
+}
+
+.touch-range:focus {
+  outline: none;
+}
+
+.touch-range::-webkit-slider-runnable-track {
+  height: 12px;
+  background: hsl(var(--muted) / 0.9);
+  border-radius: 9999px;
+}
+
+.touch-range::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  height: 28px;
+  width: 28px;
+  margin-top: -8px; /* centers thumb relative to track */
+  border-radius: 9999px;
+  background: hsl(var(--primary));
+  box-shadow: 0 4px 10px rgba(0,0,0,0.18);
+  border: 3px solid hsl(var(--card));
+}
+
+.touch-range::-moz-range-track {
+  height: 12px;
+  background: hsl(var(--muted) / 0.9);
+  border-radius: 9999px;
+}
+
+.touch-range::-moz-range-thumb {
+  height: 28px;
+  width: 28px;
+  border-radius: 9999px;
+  background: hsl(var(--primary));
+  border: 3px solid hsl(var(--card));
+  box-shadow: 0 4px 10px rgba(0,0,0,0.18);
+}
+
+.touch-range::-ms-track {
+  height: 12px;
+  background: transparent;
+  border-color: transparent;
+}
+
+.touch-range::-ms-thumb {
+  height: 28px;
+  width: 28px;
+  border-radius: 9999px;
+  background: hsl(var(--primary));
+  border: 3px solid hsl(var(--card));
+}

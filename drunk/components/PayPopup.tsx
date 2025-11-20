@@ -175,7 +175,8 @@ export default function PayPopup({
                     const v = Number(e.target.value);
                     setAmountPer(Math.max(0, Math.round(v / 5) * 5));
                   }}
-                  className="w-full"
+                  aria-label="Payment amount"
+                  className="w-full touch-range"
                 />
                 <div className="flex items-center gap-2">
                   <Input

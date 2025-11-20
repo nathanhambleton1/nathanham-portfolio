@@ -172,7 +172,8 @@ export default function SipPopup({
               step={1}
               value={sipCount}
               onChange={(e) => setSipCount(Number(e.target.value))}
-              className="w-full"
+              aria-label="Sip count"
+              className="w-full touch-range"
             />
             <div className="flex items-center gap-2">
               <Input
