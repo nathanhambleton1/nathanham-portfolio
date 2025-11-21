@@ -226,12 +226,43 @@ export default function ActivityLog({
 
   return (
     <>
+      <style>{`@keyframes nhp-live-pulse { 0% { transform: scale(1); opacity: 0.85; } 70% { transform: scale(2); opacity: 0; } 100% { transform: scale(2); opacity: 0; } } @keyframes nhp-live-scale { 0% { transform: scale(0.8); box-shadow: 0 0 6px rgba(16,185,129,0.4); } 50% { transform: scale(1.2); box-shadow: 0 0 12px rgba(16,185,129,0.95); } 100% { transform: scale(0.8); box-shadow: 0 0 6px rgba(16,185,129,0.4); } }`}</style>
       <div style={{ height: 40 }} aria-hidden="true" />
       <footer className="activity-log w-full bg-white/95 border-t border-border" style={{ boxShadow: '0 -2px 8px 0 rgba(0,0,0,0.03)' }}>
         <div className="max-w-4xl mx-auto px-4 sm:px-6 pt-8 pb-3">
           <div className="flex items-center gap-2 mb-1">
             <div className="font-semibold text-xs sm:text-sm">Activity</div>
-            <div className="ml-auto text-[10px] sm:text-xs text-muted-foreground">Live</div>
+            <div className="ml-auto flex items-center gap-2 text-[10px] sm:text-xs text-muted-foreground">
+              <span
+                style={{
+                  position: 'relative',
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  width: 8,
+                  height: 30,
+                  verticalAlign: 'middle',
+                  overflow: 'visible',
+                }}
+                aria-hidden="true"
+              >
+                <span
+                  style={{
+                    position: 'relative',
+                    display: 'inline-block',
+                    width: 6,
+                    height: 6,
+                    borderRadius: 9999,
+                    backgroundColor: '#10B981',
+                    boxShadow: '0 0 6px rgba(16,185,129,0.6)',
+                    animation: 'nhp-live-scale 1200ms ease-in-out infinite',
+                    transformOrigin: 'center',
+                    zIndex: 1,
+                  }}
+                />
+              </span>
+              <span>Live</span>
+            </div>
           </div>
           <div>
             <ul className="space-y-1 text-[10px] sm:text-xs">
