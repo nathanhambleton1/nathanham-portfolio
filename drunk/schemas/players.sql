@@ -11,6 +11,13 @@ create table public.players (
   created_at timestamptz not null default now()
 );
 
+-- Messenger columns
+-- has_new_messenger: boolean to indicate new messenger
+-- messenger_data: text to hold message data
+ALTER TABLE public.players
+ADD COLUMN has_new_messenger BOOLEAN NOT NULL DEFAULT FALSE,
+ADD COLUMN messenger_data TEXT;
+
 -- Each game cannot have duplicate names
 create unique index players_game_name_key
   on public.players (game_id, name);

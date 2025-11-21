@@ -64,6 +64,7 @@ const Drunkopoly = () => {
   const [recentGames, setRecentGames] = useState<string[]>([]);
   const [recentPlayers, setRecentPlayers] = useState<any[] | null>(null);
   const [playersList, setPlayersList] = useState<any[]>([]);
+  const alertedMessengerRef = useRef<Map<string, string | null>>(new Map());
   const [removedNoticeOpen, setRemovedNoticeOpen] = useState(false);
   const [removedNoticeMsg, setRemovedNoticeMsg] = useState<string | null>(null);
   const [payModalOpen, setPayModalOpen] = useState(false);
@@ -356,6 +357,16 @@ const Drunkopoly = () => {
             .from('players')
             .update({ balance: newBal })
             .eq('id', ins.to_player_id);
+          // If a description/message was provided, mark recipient with new messenger data
+          try {
+            const formatted = opts.description ? `[from:${actor.name}] ${opts.description}` : null;
+            await supabase
+              .from('players')
+              .update({ has_new_messenger: !!opts.description, messenger_data: formatted })
+              .eq('id', ins.to_player_id);
+          } catch (mErr) {
+            console.warn('Failed to set messenger data for player', ins.to_player_id, mErr);
+          }
         }
       } else {
         // Normal payments
@@ -453,6 +464,16 @@ const Drunkopoly = () => {
             .from('players')
             .update({ balance: newBal })
             .eq('id', ins.to_player_id);
+          // If a description/message was provided, mark recipient with new messenger data
+          try {
+            const formatted = opts.description ? `[from:${actor.name}] ${opts.description}` : null;
+            await supabase
+              .from('players')
+              .update({ has_new_messenger: !!opts.description, messenger_data: formatted })
+              .eq('id', ins.to_player_id);
+          } catch (mErr) {
+            console.warn('Failed to set messenger data for player', ins.to_player_id, mErr);
+          }
         }
       }
 
@@ -1082,7 +1103,49 @@ const Drunkopoly = () => {
           const updatedPlayer = players.find((p: any) => p.id === player.id);
           if (updatedPlayer) {
             // Update player; AnimatedNumber will animate when `balance` changes
-            setPlayer(updatedPlayer);
+            // If player has a new messenger flag, alert once and clear the flag in the DB
+            if (updatedPlayer.has_new_messenger) {
+              try {
+                const md = updatedPlayer.messenger_data || '';
+                // Only alert if the message content differs from the last alerted content for this player
+                const last = alertedMessengerRef.current.get(updatedPlayer.id) ?? null;
+                if (last !== md) {
+                  try {
+                    // Expecting format: [from:USERNAME] message
+                    const m = md.match(/^\[from:([^\]]+)\]\s*(.*)$/);
+                    if (m) {
+                      const sender = m[1];
+                      const msg = m[2] || 'You have a new message.';
+                      toast({ title: `New message from ${sender}`, description: msg });
+                    } else {
+                      toast({ title: 'New message', description: md || 'You have a new message.' });
+                    }
+                  } catch (tErr) {
+                    try { toast({ title: 'New message', description: updatedPlayer.messenger_data || 'You have a new message.' }); } catch {}
+                  }
+                  alertedMessengerRef.current.set(updatedPlayer.id, md);
+                }
+
+                // Clear the flag and messenger data in the database so it's not repeatedly shown
+                try {
+                  await supabase.from('players').update({ has_new_messenger: false, messenger_data: null }).eq('id', updatedPlayer.id);
+                } catch (mErr) {
+                  console.warn('Failed to clear has_new_messenger/messenger_data for player', updatedPlayer.id, mErr);
+                }
+
+                // Reflect cleared flag and cleared message locally
+                setPlayer({ ...updatedPlayer, has_new_messenger: false, messenger_data: null });
+                // Remove the last-alerted message for this player so future identical messages will still show
+                alertedMessengerRef.current.delete(updatedPlayer.id);
+                // Also update players list locally
+                setPlayersList((prev) => prev.map(p => p.id === updatedPlayer.id ? { ...p, has_new_messenger: false, messenger_data: null } : p));
+              } catch (e) {
+                // Fall back to setting player normally
+                setPlayer(updatedPlayer);
+              }
+            } else {
+              setPlayer(updatedPlayer);
+            }
             prevBalanceRef.current = Number(updatedPlayer.balance ?? 0);
           }
         }

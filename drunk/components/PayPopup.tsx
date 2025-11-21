@@ -45,6 +45,7 @@ export default function PayPopup({
   const [amountPer, setAmountPer] = useState<number>(mode === 'tax' ? 0 : 5);
   // keep the typed input separate from the slider value; start blank so users can type immediately
   const [rawAmount, setRawAmount] = useState<string>("");
+  const [message, setMessage] = useState<string>("");
 
   // Initialize popup state only when the dialog actually opens (avoid resets during polling updates)
   const prevOpenRef = React.useRef<boolean>(false);
@@ -54,6 +55,7 @@ export default function PayPopup({
       setSelectedIds(new Set()); // Always start with no selection
       setAmountPer(mode === 'tax' ? 0 : 5);
       setRawAmount("");
+      setMessage("");
     }
     prevOpenRef.current = open;
   }, [open]);
@@ -94,7 +96,7 @@ export default function PayPopup({
       const ids = Array.from(selectedIds);
       payments = ids.map((id) => ({ to: id, amount: rounded }));
     }
-    onSubmit(payments, { freeParking: mode === "tax" });
+    onSubmit(payments, { freeParking: mode === "tax", description: message || null });
     onOpenChange(false);
   };
 
@@ -212,6 +214,19 @@ export default function PayPopup({
               </>
             )}
           </div>
+        </div>
+
+        {/* Optional message for recipients */}
+        <div className="mt-4">
+          <div className="text-sm font-medium">Leave a message (optional)</div>
+          <Input
+            value={message}
+            onChange={(e: any) => setMessage(e.target.value)}
+            className="w-full mt-2 h-10 rounded bg-muted border border-input px-3"
+            placeholder="Write a short message"
+            maxLength={200}
+            type="text"
+          />
         </div>
 
         <DialogFooter>
