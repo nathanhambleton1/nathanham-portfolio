@@ -1,44 +1,28 @@
 #include <Arduino.h>
+#include "../lib/startup.h"
+#include "../lib/comm_manager.h"
+#include "../lib/processing.h"
 #include "../lib/ports.h"
-#include "../lib/esp_comm.h"
-#include "../lib/wifi_config.h"
 
+// Keep setup() small: initialize pins, serial, and communication.
+void setup() {
+  startup_initSerial(115200);
+  startup_initPins();
+
+  // Initialize the ESP communication using Serial1 when available
 #ifdef Serial1
-ESPComm esp(Serial1, 115200);
+  commInit(Serial1);
 #else
-// Fallback to Serial if Serial1 is not available — update to the correct UART if needed
-ESPComm esp(Serial, 115200);
+  commInit(Serial);
 #endif
 
-void setup() {
-  // Debug console
-  Serial.begin(115200);
-
-  // Initialize V_DETECT pins as inputs
-  pinMode(V_DETECT_1, INPUT);
-  pinMode(V_DETECT_2, INPUT);
-  pinMode(V_DETECT_3, INPUT);
-  pinMode(V_DETECT_4, INPUT);
-
-  // Initialize LEDs as outputs
-  pinMode(IOT_LINK_LED, OUTPUT);
-  pinMode(IOT_RUN_LED, OUTPUT);
-
-  // Initialize button pins as inputs
-  pinMode(BTN_1, INPUT_PULLUP);
-  pinMode(BTN_2, INPUT_PULLUP);
-  pinMode(BTN_3, INPUT_PULLUP);
-  pinMode(BTN_4, INPUT_PULLUP);
-
-  // Start ESP serial and attempt to connect to WiFi
-  esp.begin();
   delay(200);
   Serial.println("Testing ESP connection...");
-  if (!esp.test()) {
+  if (!commTest()) {
     Serial.println("ESP not responding to AT commands (check wiring/baud)");
   } else {
     Serial.println("ESP OK — attempting WiFi connect");
-    if (esp.connectWiFi(WIFI_SSID, WIFI_PASS)) {
+    if (commConnectWiFi()) {
       Serial.println("WiFi connected");
     } else {
       Serial.println("WiFi connect failed");
@@ -63,20 +47,19 @@ void loop() {
   digitalWrite(IOT_LINK_LED, btn1);
   digitalWrite(IOT_RUN_LED, btn2);
 
-  // Build a small JSON payload (manual, lightweight)
-  String payload = "{";
-  payload += String("\"v1\":") + v1 + String(",");
-  payload += String("\"v2\":") + v2 + String(",");
-  payload += String("\"v3\":") + v3 + String(",");
-  payload += String("\"v4\":") + v4 + String(",");
-  payload += String("\"btn\":{") + String("\"b1\":") + (btn1?"1":"0") + String(",") + String("\"b2\":") + (btn2?"1":"0") + String(",") + String("\"b3\":") + (btn3?"1":"0") + String(",") + String("\"b4\":") + (btn4?"1":"0") + String("}}\n");
+  // Build telemetry payload and send
+  String payload = process_buildTelemetry(v1, v2, v3, v4, btn1, btn2, btn3, btn4);
+  String body = String("{\"type\":\"sensors\",\"payload\":") + payload + String("}");
+  bool sent = commSendTelemetry(body);
+  if (sent) Serial.println("Telemetry posted to Supabase");
+  else Serial.println("Telemetry post failed");
 
-  // Send telemetry to dashboard via ESP module
-  bool sent = esp.sendTCP(DASHBOARD_HOST, DASHBOARD_PORT, payload);
-  if (sent) {
-    Serial.println("Telemetry sent");
-  } else {
-    Serial.println("Telemetry send failed");
+  // Poll for commands occasionally
+  static uint32_t lastCmdPoll = 0;
+  uint32_t now = millis();
+  if (now - lastCmdPoll > 5000) {
+    commPollCommands();
+    lastCmdPoll = now;
   }
 
   delay(1000);

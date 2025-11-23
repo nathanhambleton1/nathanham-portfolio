@@ -1,4 +1,6 @@
 import { useEffect, useRef, useState } from "react";
+import { sendCommand, subscribeTelemetry } from "../lib/deviceCommands";
+import { supabase } from "../lib/supabase";
 
 const Dev = () => {
     // Placeholder for Voltage In and 4 sensor values
@@ -18,8 +20,86 @@ const Dev = () => {
   const wsRef = useRef<WebSocket | null>(null);
 
   useEffect(() => {
+    let isMounted = true;
+    let lastSeenId = 0;
+
+    function handleTelemetryRow(row: any) {
+      try {
+        pushLog(`Telemetry: ${JSON.stringify(row)}`);
+        if (!row) return;
+        if (row.id && row.id > lastSeenId) lastSeenId = row.id;
+        if (row.payload) {
+          const p = row.payload;
+          setLastSensor(String(row.type ?? JSON.stringify(p)));
+
+          if (row.type === 'sensors') {
+            const v1 = Number(p.v1 ?? p.v0 ?? p[0] ?? 0);
+            const v2 = Number(p.v2 ?? p.v1 ?? p[1] ?? 0);
+            const v3 = Number(p.v3 ?? p.v2 ?? p[2] ?? 0);
+            const v4 = Number(p.v4 ?? p.v3 ?? p[3] ?? 0);
+            setSensorValues([v1, v2, v3, v4].map((n) => Number(n) || 0));
+
+            const vinVal = Number(p.vin ?? p.v1 ?? v1);
+            if (!Number.isNaN(vinVal) && vinVal !== 0) setVin(vinVal);
+
+            const btn = p.btn ?? {};
+            const parseBool = (x: any) => x === true || x === 'true' || x === 1 || x === '1';
+            const b1 = parseBool(btn.b1 ?? btn[0]);
+            const b2 = parseBool(btn.b2 ?? btn[1]);
+            setSwitchStates([b1, b2]);
+          }
+
+          else if (row.type === 'command') {
+            const cmd = p.cmd ?? p.command ?? null;
+            const cmdPayload = p.payload ?? p.data ?? {};
+            if (cmd === 'set_iot_led' && cmdPayload && (cmdPayload.index !== undefined)) {
+              const idx = Number(cmdPayload.index) || 0;
+              const state = cmdPayload.state === true || cmdPayload.state === 'true' || cmdPayload.state === 1 || cmdPayload.state === '1';
+              setIotLeds((arr) => arr.map((v, i) => (i === idx ? state : v)));
+            }
+            if (cmd === 'set_board_led' && cmdPayload && (cmdPayload.index !== undefined)) {
+              const idx = Number(cmdPayload.index) || 0;
+              const state = cmdPayload.state === true || cmdPayload.state === 'true' || cmdPayload.state === 1 || cmdPayload.state === '1';
+              setLedArray((arr) => arr.map((v, i) => (i === idx ? state : v)));
+            }
+          }
+        }
+      } catch (e) {
+        // ignore
+      }
+    }
+
+    // Subscribe to realtime inserts
+    const unsub = subscribeTelemetry((row: any) => {
+      if (!isMounted) return;
+      handleTelemetryRow(row);
+    });
+
+    // Poll latest telemetry every 500ms to ensure dashboard stays up-to-date
+    const poll = setInterval(async () => {
+      try {
+        const { data, error } = await supabase
+          .from('telemetry')
+          .select('*')
+          .order('id', { ascending: false })
+          .limit(1);
+        if (error) return;
+        if (data && data.length) {
+          const row = data[0];
+          if (row && row.id && row.id > lastSeenId) {
+            handleTelemetryRow(row);
+          }
+        }
+      } catch (e) {
+        // ignore polling errors
+      }
+    }, 500);
+
     return () => {
+      isMounted = false;
       if (wsRef.current) wsRef.current.close();
+      if (unsub) unsub();
+      clearInterval(poll);
     };
   }, []);
 
@@ -102,7 +182,17 @@ const Dev = () => {
                     className={`h-10 w-20 rounded font-semibold shadow border transition mb-2 ${isOn
                       ? 'bg-red-600 text-white border-red-700'
                       : 'bg-black text-white border-white hover:bg-gray-900'}`}
-                    onClick={() => setLedArray(arr => arr.map((v, i) => i === idx ? !v : v))}
+                    onClick={async () => {
+                      const newState = !isOn;
+                      // optimistic UI update
+                      setLedArray(arr => arr.map((v, i) => i === idx ? newState : v));
+                      try {
+                        const res = await sendCommand('set_board_led', { index: idx, state: newState }, deviceId);
+                        pushLog('Sent Supabase command: ' + JSON.stringify({ index: idx, state: newState, res }));
+                      } catch (e) {
+                        pushLog('Supabase send error for board LED');
+                      }
+                    }}
                   >
                     LED {idx + 1}
                   </button>
@@ -120,7 +210,16 @@ const Dev = () => {
                       className={`h-10 w-20 rounded font-semibold shadow border transition mb-2 ${isOn
                         ? 'bg-red-600 text-white border-red-700'
                         : 'bg-black text-white border-white hover:bg-gray-900'}`}
-                      onClick={() => setIotLeds(arr => arr.map((v, i) => i === idx ? !v : v))}
+                      onClick={async () => {
+                        const newState = !isOn;
+                        setIotLeds((arr) => arr.map((v, i) => (i === idx ? newState : v)));
+                        try {
+                          const res = await sendCommand('set_iot_led', { index: idx, state: newState }, deviceId);
+                          pushLog('Sent Supabase command: ' + JSON.stringify({ index: idx, state: newState, res }));
+                        } catch (e) {
+                          pushLog('Supabase send error');
+                        }
+                      }}
                     >
                       LED {idx + 1}
                     </button>
@@ -149,6 +248,8 @@ const Dev = () => {
               ))}
             </div>
           </div>
+
+          
 
           {/* Display for Voltage In and 4 sensor values */}
           <div className="bg-card p-4 rounded-lg shadow">

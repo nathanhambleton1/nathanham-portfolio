@@ -10,6 +10,9 @@ public:
   bool test(uint32_t timeout = 2000);
   bool connectWiFi(const char* ssid, const char* pass, uint32_t timeout = 20000);
   bool sendTCP(const char* host, uint16_t port, const String &payload, uint32_t timeout = 10000);
+  bool sendHTTPS(const char* host, uint16_t port, const String &payload, uint32_t timeout = 10000);
+  // Read raw response buffer (wrapper for internal reader)
+  String readRawResponse(uint32_t timeout = 2000);
 
 private:
   HardwareSerial* serialPort;

@@ -24,6 +24,10 @@ String ESPComm::readResponse(uint32_t timeout) {
   return resp;
 }
 
+String ESPComm::readRawResponse(uint32_t timeout) {
+  return readResponse(timeout);
+}
+
 bool ESPComm::sendCommandExpect(const String &cmd, const char* expect, uint32_t timeout) {
   if (!serialPort) return false;
   // send command
@@ -81,6 +85,33 @@ bool ESPComm::sendTCP(const char* host, uint16_t port, const String &payload, ui
   }
 
   // try to close
+  sendCommandExpect("AT+CIPCLOSE", "OK", 2000);
+  return false;
+}
+
+bool ESPComm::sendHTTPS(const char* host, uint16_t port, const String &payload, uint32_t timeout) {
+  if (!serialPort) return false;
+  // Start SSL connection (many AT firmwares accept "SSL" as the protocol)
+  String startCmd = String("AT+CIPSTART=\"SSL\",\"") + host + "\"," + String(port);
+  if (!sendCommandExpect(startCmd, "OK", 5000)) {
+    // sometimes we still get a prompt or ALREADY CONNECT; proceed cautiously
+  }
+
+  uint16_t len = payload.length();
+  String sendCmd = String("AT+CIPSEND=") + String(len);
+  if (!sendCommandExpect(sendCmd, ">", 5000)) {
+    return false;
+  }
+
+  serialPort->print(payload);
+  serialPort->flush();
+
+  String r = readResponse(timeout);
+  if (r.indexOf("SEND OK") >= 0) {
+    sendCommandExpect("AT+CIPCLOSE", "OK", 2000);
+    return true;
+  }
+
   sendCommandExpect("AT+CIPCLOSE", "OK", 2000);
   return false;
 }
