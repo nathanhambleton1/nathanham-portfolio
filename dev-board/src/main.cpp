@@ -2,6 +2,7 @@
 #include "../lib/startup.h"
 #include "../lib/comm_manager.h"
 #include "../lib/processing.h"
+#include "../lib/supabase_config.h"
 #include "../lib/ports.h"
 
 // Keep setup() small: initialize pins, serial, and communication.
@@ -53,6 +54,10 @@ void loop() {
   bool sent = commSendTelemetry(body);
   if (sent) Serial.println("Telemetry posted to Supabase");
   else Serial.println("Telemetry post failed");
+
+  // Upsert device status row (lightweight heartbeat)
+  // `DEVICE_ID` is defined in supabase_config.h
+  commUpsertDeviceStatus(String(DEVICE_ID), String("{}"));
 
   // Poll for commands occasionally
   static uint32_t lastCmdPoll = 0;

@@ -11,5 +11,10 @@
 // REST paths
 #define SUPABASE_TELEMETRY_PATH "/rest/v1/telemetry"
 #define SUPABASE_COMMANDS_PATH "/rest/v1/commands"
+// Status table path
+#define SUPABASE_STATUS_PATH "/rest/v1/device_status"
+
+// Device identifier for this firmware (single-device setup)
+#define DEVICE_ID "device-001"
 
 #endif // SUPABASE_CONFIG_H

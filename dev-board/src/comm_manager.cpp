@@ -35,6 +35,36 @@ static String buildPostRequest(const char *path, const String &body) {
   return req;
 }
 
+// Build a POST request that includes a Prefer header for upsert/merge
+static String buildPostRequestPrefer(const char *path, const String &body, const char* preferHeader) {
+  String req = String("POST ") + path + " HTTP/1.1\r\n";
+  req += String("Host: ") + SUPABASE_HOST + "\r\n";
+  req += String("apikey: ") + SUPABASE_ANON_KEY + "\r\n";
+  req += String("Authorization: Bearer ") + SUPABASE_ANON_KEY + "\r\n";
+  req += "Content-Type: application/json\r\n";
+  if (preferHeader && preferHeader[0]) {
+    req += String(preferHeader) + "\r\n";
+  }
+  req += String("Content-Length: ") + String(body.length()) + "\r\n";
+  req += "\r\n";
+  req += body;
+  return req;
+}
+
+// Upsert device status using Prefer: resolution=merge-duplicates
+bool commUpsertDeviceStatus(const String &deviceId, const String &infoJson) {
+  if (!esp) return false;
+  String body = String("{") + "\"device_id\":\"" + deviceId + "\"";
+  if (infoJson.length()) {
+    body += String(",\"info\":") + infoJson;
+  }
+  body += String("}");
+
+  const char* prefer = "Prefer: resolution=merge-duplicates";
+  String req = buildPostRequestPrefer(SUPABASE_STATUS_PATH, body, prefer);
+  return esp->sendHTTPS(SUPABASE_HOST, 443, req);
+}
+
 bool commSendTelemetry(const String &body) {
   if (!esp) return false;
   String req = buildPostRequest(SUPABASE_TELEMETRY_PATH, body);

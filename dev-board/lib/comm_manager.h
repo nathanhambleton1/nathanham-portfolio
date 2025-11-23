@@ -15,6 +15,9 @@ bool commConnectWiFi(uint32_t timeout = 20000);
 // Send a prebuilt telemetry JSON body to Supabase (returns success)
 bool commSendTelemetry(const String &body);
 
+// Upsert a device row in `device_status`. `infoJson` is optional JSON object text (e.g. "{}")
+bool commUpsertDeviceStatus(const String &deviceId, const String &infoJson);
+
 // Poll commands and process them (non-blocking-ish)
 void commPollCommands();
 

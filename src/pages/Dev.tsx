@@ -7,7 +7,8 @@ const Dev = () => {
     const [vin, setVin] = useState(12.0);
     const [sensorValues, setSensorValues] = useState([0.0, 0.0, 0.0, 0.0]);
   const [connected, setConnected] = useState(false);
-  const [deviceId, setDeviceId] = useState("device-001");
+  // last telemetry timestamp (ms since epoch) used as heartbeat
+  const [lastTelemetryAt, setLastTelemetryAt] = useState<number | null>(null);
   const [log, setLog] = useState<string[]>([]);
   const [lastSensor, setLastSensor] = useState<string | null>(null);
   const [ledState, setLedState] = useState(0);
@@ -28,6 +29,13 @@ const Dev = () => {
         pushLog(`Telemetry: ${JSON.stringify(row)}`);
         if (!row) return;
         if (row.id && row.id > lastSeenId) lastSeenId = row.id;
+        // update heartbeat timestamp when telemetry arrives
+        try {
+          const ts = row.created_at ? Date.parse(row.created_at) : Date.now();
+          setLastTelemetryAt(ts);
+        } catch (e) {
+          setLastTelemetryAt(Date.now());
+        }
         if (row.payload) {
           const p = row.payload;
           setLastSensor(String(row.type ?? JSON.stringify(p)));
@@ -88,11 +96,52 @@ const Dev = () => {
           const row = data[0];
           if (row && row.id && row.id > lastSeenId) {
             handleTelemetryRow(row);
+          } else if (row) {
+            // still update heartbeat timestamp if same id appears (ensure connected state accurate)
+            try {
+              const ts = row.created_at ? Date.parse(row.created_at) : Date.now();
+              setLastTelemetryAt(ts);
+            } catch (e) {
+              setLastTelemetryAt(Date.now());
+            }
           }
+        }
+        // Also poll the device_status table (single-row per device). Prefer last_seen if available.
+        try {
+          const { data: ds, error: dserr } = await supabase
+            .from('device_status')
+            .select('last_seen')
+            .order('last_seen', { ascending: false })
+            .limit(1);
+          if (!dserr && ds && ds.length) {
+            const row = ds[0] as any;
+            if (row && row.last_seen) {
+              try {
+                const ts = Date.parse(row.last_seen);
+                setLastTelemetryAt(ts);
+              } catch (e) {
+                // ignore parse errors
+              }
+            }
+          }
+        } catch (e) {
+          // ignore device_status polling errors
         }
       } catch (e) {
         // ignore polling errors
       }
+    }, 500);
+
+    // Ticker to update `connected` state from lastTelemetryAt
+    const connTicker = setInterval(() => {
+      if (!isMounted) return;
+      if (!lastTelemetryAt) {
+        setConnected(false);
+        return;
+      }
+      const age = Date.now() - lastTelemetryAt;
+      // consider connected if we've received telemetry within the last 3.5s
+      setConnected(age < 3500);
     }, 500);
 
     return () => {
@@ -100,6 +149,7 @@ const Dev = () => {
       if (wsRef.current) wsRef.current.close();
       if (unsub) unsub();
       clearInterval(poll);
+      clearInterval(connTicker);
     };
   }, []);
 
@@ -107,41 +157,29 @@ const Dev = () => {
     setLog((l) => [...l.slice(-199), item]);
   }
 
-  function connect() {
-    if (wsRef.current) return;
-    const url = (location.protocol === "https:" ? "wss://" : "ws://") + location.host + "/dev/ws";
-    pushLog(`Connecting ${url}`);
-    const ws = new WebSocket(url);
-    ws.onopen = () => {
-      pushLog("WS open");
-      ws.send(JSON.stringify({ type: "identify", role: "dashboard", id: "web-" + (Math.random() * 1000 | 0) }));
-      setConnected(true);
-    };
-    ws.onmessage = (ev) => {
-      try {
-        const d = JSON.parse(ev.data as string);
-        pushLog("RX: " + JSON.stringify(d));
-        if (d.type === "event" && d.payload) {
-          setLastSensor(String(d.payload));
-        }
-      } catch (e) {
-        pushLog("RX (raw): " + String(ev.data));
-      }
-    };
-    ws.onclose = () => {
-      pushLog("WS closed");
-      setConnected(false);
-      wsRef.current = null;
-    };
-    ws.onerror = (e) => pushLog("WS error");
-    wsRef.current = ws;
+  function formatTimeAgo(ts: number | null) {
+    if (!ts) return '—';
+    const age = Math.max(0, Date.now() - ts);
+    const sec = Math.floor(age / 1000);
+    if (sec < 5) return 'just now';
+    if (sec < 60) return `${sec} sec${sec === 1 ? '' : 's'} ago`;
+    const min = Math.floor(sec / 60);
+    if (min < 60) return `${min} min${min === 1 ? '' : 's'} ago`;
+    const hr = Math.floor(min / 60);
+    if (hr < 24) return `${hr} hr${hr === 1 ? '' : 's'} ago`;
+    const days = Math.floor(hr / 24);
+    if (days < 7) return `${days} day${days === 1 ? '' : 's'} ago`;
+    const weeks = Math.floor(days / 7);
+    if (weeks < 4) return `${weeks} week${weeks === 1 ? '' : 's'} ago`;
+    const months = Math.floor(days / 30);
+    if (months < 12) return `${months} month${months === 1 ? '' : 's'} ago`;
+    const years = Math.floor(days / 365);
+    return `${years} year${years === 1 ? '' : 's'} ago`;
   }
 
-  function disconnect() {
-    wsRef.current?.close();
-    wsRef.current = null;
-    setConnected(false);
-  }
+  // Websocket helpers left available if needed, but dashboard determines
+  // connection from telemetry heartbeat (lastTelemetryAt) rather than manual
+  // connect/disconnect controls.
 
   function sendCmd(cmd: object) {
     if (!wsRef.current || wsRef.current.readyState !== WebSocket.OPEN) {
@@ -159,15 +197,16 @@ const Dev = () => {
         <p className="text-sm text-muted-foreground">Control and view sensors for your connected devices.</p>
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-        <div className="col-span-2 space-y-4">
+      <div className="grid grid-cols-1 md:grid-cols-1 gap-6">
+        <div className="space-y-4">
           <div className="bg-card p-4 rounded-lg shadow">
             <div className="flex flex-col gap-2">
-              <label className="text-sm text-muted-foreground mb-1">Device ID</label>
+              <label className="text-sm text-muted-foreground mb-1">Connection</label>
               <div className="flex items-center gap-2">
-                <input className="flex-1 input bg-card text-foreground border border-white rounded px-3 py-2 h-10" value={deviceId} onChange={(e) => setDeviceId(e.target.value)} />
-                <button className="h-10 px-4 rounded bg-white text-gray-800 font-semibold shadow border border-gray-300 hover:bg-gray-100 transition" onClick={connect} disabled={connected}>Connect</button>
-                <button className="h-10 px-4 rounded bg-black text-white font-semibold shadow border border-white hover:bg-gray-900 transition" onClick={disconnect} disabled={!connected}>Disconnect</button>
+                <div className="flex-1 px-3 py-2 h-10 flex items-center">
+                  <div className={`font-semibold ${connected ? 'text-green-500' : 'text-red-400'}`}>{connected ? 'Connected' : 'Disconnected'}</div>
+                  <div className="ml-auto text-xs text-muted-foreground">Last seen: {formatTimeAgo(lastTelemetryAt)}</div>
+                </div>
               </div>
             </div>
           </div>
@@ -187,7 +226,7 @@ const Dev = () => {
                       // optimistic UI update
                       setLedArray(arr => arr.map((v, i) => i === idx ? newState : v));
                       try {
-                        const res = await sendCommand('set_board_led', { index: idx, state: newState }, deviceId);
+                        const res = await sendCommand('set_board_led', { index: idx, state: newState });
                         pushLog('Sent Supabase command: ' + JSON.stringify({ index: idx, state: newState, res }));
                       } catch (e) {
                         pushLog('Supabase send error for board LED');
@@ -214,7 +253,7 @@ const Dev = () => {
                         const newState = !isOn;
                         setIotLeds((arr) => arr.map((v, i) => (i === idx ? newState : v)));
                         try {
-                          const res = await sendCommand('set_iot_led', { index: idx, state: newState }, deviceId);
+                          const res = await sendCommand('set_iot_led', { index: idx, state: newState });
                           pushLog('Sent Supabase command: ' + JSON.stringify({ index: idx, state: newState, res }));
                         } catch (e) {
                           pushLog('Supabase send error');
@@ -276,17 +315,7 @@ const Dev = () => {
           </div>
         </div>
 
-        <aside className="space-y-4">
-          <div className="bg-card p-4 rounded-lg shadow">
-            <div className="text-sm text-muted-foreground">Connection</div>
-            <div className="font-medium">{connected ? 'Connected' : 'Disconnected'}</div>
-          </div>
-
-          <div className="bg-card p-4 rounded-lg shadow">
-            <div className="text-sm text-muted-foreground">Last Sensor</div>
-            <div className="font-medium">{lastSensor ?? '—'}</div>
-          </div>
-        </aside>
+        
       </div>
     </div>
   );
