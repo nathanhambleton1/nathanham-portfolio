@@ -10,6 +10,8 @@ import { toast } from "sonner";
 const PowerHour = () => {
   const [isRunning, setIsRunning] = useState(false);
   const [elapsedSeconds, setElapsedSeconds] = useState(0);
+  // interval between sips in seconds (default 60 = 1:00)
+  const [intervalSeconds, setIntervalSeconds] = useState(60);
   const [soundEnabled, setSoundEnabled] = useState(true);
   const [isComplete, setIsComplete] = useState(false);
 
@@ -19,39 +21,98 @@ const PowerHour = () => {
   const audioCtxRef = useRef<AudioContext | null>(null);
   const beepBufferRef = useRef<AudioBuffer | null>(null);
   const gainNodeRef = useRef<GainNode | null>(null);
+  // refs for scheduling sips (works with fixed or random intervals)
   const previousMinute = useRef(0);
+  const nextSipAtRef = useRef<number>(60);
+  const lastSipAtRef = useRef<number>(0);
+  const currentIntervalRef = useRef<number>(60);
+  const sipCountRef = useRef<number>(0);
+  const [sipCount, setSipCount] = useState(0);
+  const [randomMode, setRandomMode] = useState(false);
 
-  const currentMinute = Math.floor(elapsedSeconds / 60) + 1;
-  const progress = ((elapsedSeconds % 60) / 60) * 100;
+  const formatInterval = (secs: number) => {
+    const m = Math.floor(secs / 60);
+    const s = secs % 60;
+    return `${String(m)}:${String(s).padStart(2, "0")}`;
+  };
+  const formatTime = (secs: number) => {
+    const s = Math.max(0, Math.floor(secs));
+    const m = Math.floor(s / 60);
+    const rem = s % 60;
+    return `${String(m).padStart(2, "0")}:${String(rem).padStart(2, "0")}`;
+  };
+  const currentSip = sipCount + (elapsedSeconds < nextSipAtRef.current ? 1 : 0);
+  const currentInterval = currentIntervalRef.current || intervalSeconds;
+  const progress = Math.max(0, Math.min(100, ((elapsedSeconds - lastSipAtRef.current) / currentInterval) * 100));
   const displayMinutes = Math.floor(elapsedSeconds / 60);
   const displaySeconds = elapsedSeconds % 60;
+
+  const secondsUntilNext = Math.max(0, Math.ceil((nextSipAtRef.current || currentInterval) - elapsedSeconds));
+  const totalRemaining = Math.max(0, 3600 - elapsedSeconds);
+
+  const minRandom = 30;
+  const maxRandom = 120;
+  const randBetween = (min: number, max: number) => Math.floor(Math.random() * (max - min + 1)) + min;
+  const totalSips = randomMode ? undefined : Math.floor(3600 / intervalSeconds);
 
   useEffect(() => {
     let interval: NodeJS.Timeout;
 
-    if (isRunning && elapsedSeconds < 3600) {
+    const totalDuration = 3600; // always run for one hour
+
+    if (isRunning && elapsedSeconds < totalDuration) {
       interval = setInterval(() => {
         setElapsedSeconds((prev) => {
           const newSeconds = prev + 1;
-          const newMinute = Math.floor(newSeconds / 60);
 
-          // Check if we've hit a new minute
-          if (newMinute > previousMinute.current && newMinute <= 60) {
-            previousMinute.current = newMinute;
+          // If we haven't scheduled nextSipAt yet (fresh start), ensure it's set
+          if (!nextSipAtRef.current) {
+            const firstInterval = randomMode ? randBetween(minRandom, maxRandom) : intervalSeconds;
+            currentIntervalRef.current = firstInterval;
+            nextSipAtRef.current = firstInterval;
+          }
+
+          // Check if we've reached or passed the next scheduled sip
+          if (newSeconds >= nextSipAtRef.current && newSeconds <= totalDuration) {
+            // increment sip counters
+            sipCountRef.current += 1;
+            setSipCount(sipCountRef.current);
+
+            // play beep + toast
             playBeep();
-            toast.success(`Minute ${newMinute}!`, {
+            toast.success(`Sip ${sipCountRef.current}!`, {
               description: "Take a sip! 🍺",
+            });
+
+            // move last sip time and schedule next sip
+            lastSipAtRef.current = nextSipAtRef.current;
+            if (randomMode) {
+              const nextInterval = randBetween(minRandom, maxRandom);
+              currentIntervalRef.current = nextInterval;
+              nextSipAtRef.current = lastSipAtRef.current + nextInterval;
+            } else {
+              currentIntervalRef.current = intervalSeconds;
+              nextSipAtRef.current = lastSipAtRef.current + intervalSeconds;
+            }
+          }
+
+          // If we've reached the end of the hour
+          if (newSeconds >= totalDuration && !isComplete) {
+            setIsRunning(false);
+            setIsComplete(true);
+            toast.success("Power Hour Complete! 🎉", {
+              description: `You made it through ${sipCountRef.current} sips!`,
             });
           }
 
           return newSeconds;
         });
       }, 1000);
-    } else if (elapsedSeconds >= 3600 && !isComplete) {
+    } else if (elapsedSeconds >= totalDuration && !isComplete) {
       setIsRunning(false);
       setIsComplete(true);
       toast.success("Power Hour Complete! 🎉", {
-        description: "You made it through all 60 minutes!",
+        description: `You made it through ${sipCountRef.current} sips!`,
       });
     }
 
@@ -180,6 +241,12 @@ const PowerHour = () => {
     setElapsedSeconds(0);
     setIsComplete(false);
     previousMinute.current = 0;
+    // reset scheduling refs and sip counters
+    nextSipAtRef.current = randomMode ? randBetween(minRandom, maxRandom) : intervalSeconds;
+    lastSipAtRef.current = 0;
+    currentIntervalRef.current = randomMode ? nextSipAtRef.current : intervalSeconds;
+    sipCountRef.current = 0;
+    setSipCount(0);
   };
 
   return (
@@ -195,28 +262,82 @@ const PowerHour = () => {
 
         <div className="text-center mb-8">
           <h1 className="text-4xl font-bold mb-2 text-foreground">Power Hour</h1>
-          <p className="text-muted-foreground">Take a sip every minute for 60 minutes</p>
+          {randomMode ? (
+            <p className="text-muted-foreground">Take a sip at random intervals (0:30–2:00) for 1 hour</p>
+          ) : (
+            <p className="text-muted-foreground">Take a sip every {formatInterval(intervalSeconds)} for {totalSips} sips</p>
+          )}
         </div>
 
         <Card className="bg-gradient-card border-border p-8 mb-6">
+          {/* Interval Selector */}
+          <div className="flex items-center justify-center gap-3 mb-6">
+            {([60, 90, 120] as number[]).map((secs) => (
+              <Button
+                key={secs}
+                onClick={() => {
+                  if (isRunning) return;
+                  setRandomMode(false);
+                  setIntervalSeconds(secs);
+                  setElapsedSeconds(0);
+                  setIsComplete(false);
+                  previousMinute.current = 0;
+                  // reset scheduling refs
+                  nextSipAtRef.current = secs;
+                  lastSipAtRef.current = 0;
+                  currentIntervalRef.current = secs;
+                  sipCountRef.current = 0;
+                  setSipCount(0);
+                }}
+                variant={intervalSeconds === secs && !randomMode ? undefined : "outline"}
+                className={`px-4 py-2 ${isRunning ? "opacity-50 cursor-not-allowed" : ""}`}
+                disabled={isRunning}
+              >
+                {formatInterval(secs)}
+              </Button>
+            ))}
+
+            <Button
+              key="random"
+              onClick={() => {
+                if (isRunning) return;
+                setRandomMode(true);
+                setElapsedSeconds(0);
+                setIsComplete(false);
+                previousMinute.current = 0;
+                const first = randBetween(minRandom, maxRandom);
+                nextSipAtRef.current = first;
+                lastSipAtRef.current = 0;
+                currentIntervalRef.current = first;
+                sipCountRef.current = 0;
+                setSipCount(0);
+              }}
+              variant={randomMode ? undefined : "outline"}
+              className={`px-4 py-2 ${isRunning ? "opacity-50 cursor-not-allowed" : ""}`}
+              disabled={isRunning}
+            >
+              Random
+            </Button>
+          </div>
+
           {/* Timer Display */}
           <div className="text-center mb-8">
             {isComplete ? (
-              <div className="animate-pulse-glow">
-                <p className="text-6xl font-bold text-primary mb-2">Complete! 🎉</p>
-                <p className="text-xl text-muted-foreground">You made it through all 60 minutes!</p>
-              </div>
-            ) : (
-              <>
-                <p className="text-4xl font-bold text-primary mb-2">
-                  Minute {currentMinute} / 60
-                </p>
-                <p className="text-3xl text-foreground font-mono">
-                  {String(displayMinutes).padStart(2, "0")}:
-                  {String(displaySeconds).padStart(2, "0")}
-                </p>
-              </>
-            )}
+                <div className="animate-pulse-glow">
+                  <p className="text-6xl font-bold text-primary mb-2">Complete! 🎉</p>
+                  <p className="text-xl text-muted-foreground">You made it through {sipCount} sips!</p>
+                </div>
+              ) : (
+                  <>
+                    <p className="text-sm text-muted-foreground mb-2">Total remaining: {formatTime(totalRemaining)}</p>
+                    <p className="text-lg font-medium text-primary mb-2">
+                      {totalSips ? `Sip ${currentSip} / ${totalSips}` : `Sip ${currentSip}`}
+                    </p>
+                    <p className="text-6xl text-foreground font-mono font-bold">
+                      {formatTime(secondsUntilNext)}
+                    </p>
+                  </>
+                )}
           </div>
 
           {/* Progress Bar */}
@@ -274,10 +395,6 @@ const PowerHour = () => {
             </Label>
           </div>
         </Card>
-
-        <div className="text-center text-sm text-muted-foreground">
-          <p>Pro tip: Have your drinks ready before starting!</p>
-        </div>
       </div>
     </div>
   );
