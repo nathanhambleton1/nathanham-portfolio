@@ -21,6 +21,9 @@ const PowerHour = () => {
   const audioCtxRef = useRef<AudioContext | null>(null);
   const beepBufferRef = useRef<AudioBuffer | null>(null);
   const gainNodeRef = useRef<GainNode | null>(null);
+  // Wake lock / keep-awake refs
+  const wakeLockRef = useRef<any>(null);
+  const videoFallbackRef = useRef<HTMLVideoElement | null>(null);
   // refs for scheduling sips (works with fixed or random intervals)
   const previousMinute = useRef(0);
   const nextSipAtRef = useRef<number>(60);
@@ -29,6 +32,7 @@ const PowerHour = () => {
   const sipCountRef = useRef<number>(0);
   const [sipCount, setSipCount] = useState(0);
   const [randomMode, setRandomMode] = useState(false);
+  const [preventSleep, setPreventSleep] = useState(false);
 
   const formatInterval = (secs: number) => {
     const m = Math.floor(secs / 60);
@@ -119,42 +123,184 @@ const PowerHour = () => {
     return () => clearInterval(interval);
   }, [isRunning, elapsedSeconds, isComplete, soundEnabled, audioUnlocked]);
 
-  const playBeep = () => {
-    if (!soundEnabled) return;
-
-    // Prefer Web Audio API buffer playback (may mix on many platforms).
-    const ctx = audioCtxRef.current;
-    const buffer = beepBufferRef.current;
-    if (ctx && buffer) {
-      try {
-        // Create a one-shot buffer source
-        const src = ctx.createBufferSource();
-        src.buffer = buffer;
-        // connect to gain if present
-        if (gainNodeRef.current) src.connect(gainNodeRef.current);
-        else src.connect(ctx.destination);
-        // start immediately
-        src.start();
-      } catch (err) {
-        console.warn("WebAudio beep play failed:", err);
-        // fallback to audio element
-        playAudioElementFallback();
+  // Manage wake lock when preference or running state changes
+  useEffect(() => {
+    let visHandler: (() => void) | null = null;
+    const handleVisibility = async () => {
+      if (document.visibilityState === "visible") {
+        // try to re-acquire if needed
+        if (preventSleep && isRunning && !wakeLockRef.current) {
+          await acquireWakeLock();
+        }
+      } else {
+        // some UA's release wake locks on hidden; we don't need to do anything here
       }
-      return;
+    };
+
+    if (preventSleep && isRunning) {
+      void acquireWakeLock();
+      visHandler = () => { void handleVisibility(); };
+      document.addEventListener("visibilitychange", visHandler);
+    } else {
+      void releaseWakeLock();
     }
 
-    // Fallback: play the audio element
-    playAudioElementFallback();
+    return () => {
+      if (visHandler) document.removeEventListener("visibilitychange", visHandler);
+    };
+  }, [preventSleep, isRunning]);
+
+  // Cleanup on unmount
+  useEffect(() => {
+    return () => {
+      void releaseWakeLock();
+    };
+  }, []);
+
+  const playBeep = () => {
+    if (!soundEnabled) return;
+    // Attempt to use WebAudio if available and ready, otherwise fallback
+    (async () => {
+      // Ensure audio systems are ready (resume suspended contexts, etc.)
+      await ensureAudioReady();
+
+      const ctx = audioCtxRef.current;
+      const buffer = beepBufferRef.current;
+      if (ctx && buffer) {
+        try {
+          if (ctx.state === "suspended") {
+            try {
+              await ctx.resume();
+            } catch (e) {
+              console.warn("Failed to resume AudioContext before beep:", e);
+            }
+          }
+
+          const src = ctx.createBufferSource();
+          src.buffer = buffer;
+          if (gainNodeRef.current) src.connect(gainNodeRef.current);
+          else src.connect(ctx.destination);
+          src.start();
+          return;
+        } catch (err) {
+          console.warn("WebAudio beep play failed:", err);
+          // fallback to audio element
+          await playAudioElementFallback();
+          return;
+        }
+      }
+
+      // Fallback: play the audio element
+      await playAudioElementFallback();
+    })();
   };
 
   const playAudioElementFallback = () => {
-    if (!audioRef.current) return;
+    // Return a Promise so callers can await retries
+    return new Promise<void>((resolve) => {
+      if (!audioRef.current) return resolve();
+      const el = audioRef.current;
+      try {
+        el.pause();
+        el.currentTime = 0;
+        // Some platforms require `load()` before play after source change
+        try {
+          el.load();
+        } catch {}
+
+        const p = el.play();
+        if (p && typeof p.then === "function") {
+          p
+            .then(() => {
+              // immediately pause so we don't overlap if this was only an unlock
+              // but do not pause if the user expects to hear the beep now (we just played it)
+              // small delay to ensure the beeper finishes when appropriate
+              resolve();
+            })
+            .catch((err) => {
+              console.warn("Beep play failed (fallback):", err);
+              // Try a quick unlock attempt: play/pause
+              tryUnlockAudioElement();
+              resolve();
+            });
+        } else {
+          resolve();
+        }
+      } catch (error) {
+        console.error("Error playing beep element:", error);
+        resolve();
+      }
+    });
+  };
+
+  // Ensure audio context / element are in a usable state. Called on user gestures and before attempting playback.
+  const ensureAudioReady = async () => {
+    // If a Web Audio context exists and is suspended, try resuming it
     try {
-      audioRef.current.currentTime = 0;
-      const playPromise = audioRef.current.play();
-      if (playPromise) playPromise.catch((err) => console.warn("Beep play failed:", err));
-    } catch (error) {
-      console.error("Error playing beep element:", error);
+      const Ctx = (window.AudioContext || (window as any).webkitAudioContext) as
+        | typeof AudioContext
+        | undefined;
+
+      if (!audioCtxRef.current && Ctx) {
+        audioCtxRef.current = new Ctx();
+        gainNodeRef.current = audioCtxRef.current.createGain();
+        gainNodeRef.current.gain.value = 1.0;
+        gainNodeRef.current.connect(audioCtxRef.current.destination);
+      }
+
+      if (audioCtxRef.current) {
+        if (audioCtxRef.current.state === "suspended") {
+          try {
+            await audioCtxRef.current.resume();
+            setAudioUnlocked(true);
+          } catch (err) {
+            console.warn("Failed to resume audio context:", err);
+          }
+        }
+
+        // If we don't have the buffer loaded yet, try to fetch/decode it (non-blocking)
+        if (!beepBufferRef.current) {
+          try {
+            const base = (import.meta as any).env?.BASE_URL ?? "/";
+            const url = `${base}beep.mp3`;
+            const res = await fetch(url);
+            const arr = await res.arrayBuffer();
+            const decoded = await audioCtxRef.current.decodeAudioData(arr.slice(0));
+            beepBufferRef.current = decoded;
+            setAudioUnlocked(true);
+          } catch (err) {
+            console.warn("Failed to load beep buffer in ensureAudioReady:", err);
+          }
+        }
+      }
+    } catch (err) {
+      console.warn("ensureAudioReady error:", err);
+    }
+
+    // Always attempt to unlock the audio element as well
+    try {
+      if (audioRef.current) {
+        const el = audioRef.current;
+        // If element is paused, try a quick muted play/pause to unlock
+        if (el.paused) {
+          try {
+            const originallyMuted = el.muted;
+            const originallyVolume = el.volume;
+            el.muted = true;
+            el.volume = 0;
+            await el.play();
+            el.pause();
+            el.currentTime = 0;
+            el.muted = originallyMuted;
+            el.volume = originallyVolume;
+            setAudioUnlocked(true);
+          } catch (err) {
+            // ignore: unlock may fail without gesture
+          }
+        }
+      }
+    } catch (err) {
+      // ignore
     }
   };
 
@@ -206,25 +352,129 @@ const PowerHour = () => {
   };
 
   const tryUnlockAudioElement = () => {
+    // Try to unlock the audio element using a silent (muted) quick play/pause.
+    // This is less likely to steal audio focus from background music players.
     if (!audioRef.current) return;
     const el = audioRef.current;
-    el.currentTime = 0;
-    const playPromise = el.play();
-    if (playPromise) {
-      playPromise
-        .then(() => {
-          el.pause();
-          el.currentTime = 0;
-          setAudioUnlocked(true);
-        })
-        .catch((err) => {
-          console.warn("Initial audio unlock failed:", err);
-        });
+    try {
+      const originallyMuted = el.muted;
+      const originallyVolume = el.volume;
+      // Mute and set volume very low to avoid interrupting other audio
+      el.muted = true;
+      el.volume = 0;
+      el.currentTime = 0;
+      const p = el.play();
+      if (p && typeof p.then === "function") {
+        p
+          .then(() => {
+            el.pause();
+            el.currentTime = 0;
+            // restore volume/mute
+            el.muted = originallyMuted;
+            el.volume = originallyVolume;
+            setAudioUnlocked(true);
+          })
+          .catch((err) => {
+            // restore and log
+            el.muted = originallyMuted;
+            el.volume = originallyVolume;
+            console.warn("Initial audio unlock failed (muted attempt):", err);
+          });
+      }
+    } catch (err) {
+      console.warn("tryUnlockAudioElement error:", err);
     }
   };
 
-  const handleStart = () => {
+  // Acquire a screen wake lock if available; otherwise try a silent video fallback.
+  const acquireWakeLock = async () => {
+    if (!preventSleep) return;
+    try {
+      if ((navigator as any).wakeLock && typeof (navigator as any).wakeLock.request === "function") {
+        try {
+          wakeLockRef.current = await (navigator as any).wakeLock.request("screen");
+          wakeLockRef.current?.addEventListener?.("release", () => {
+            wakeLockRef.current = null;
+          });
+          return;
+        } catch (err) {
+          console.warn("WakeLock request failed:", err);
+        }
+      }
+    } catch (err) {
+      console.warn("WakeLock API check error:", err);
+    }
+
+    // Fallback: try to play a tiny muted looping video to keep the screen awake (user must have allowed gesture)
+    try {
+      if (!videoFallbackRef.current) {
+        const base = (import.meta as any).env?.BASE_URL ?? "/";
+        const url = `${base}silence.mp4`;
+        const v = document.createElement("video");
+        v.src = url;
+        v.muted = true;
+        v.loop = true;
+        (v as any).playsInline = true;
+        v.style.position = "fixed";
+        v.style.left = "0";
+        v.style.top = "0";
+        v.style.width = "0px";
+        v.style.height = "0px";
+        v.style.opacity = "0";
+        document.body.appendChild(v);
+        videoFallbackRef.current = v;
+        try {
+          await v.play();
+        } catch (err) {
+          console.warn("Silent video fallback failed to play:", err);
+        }
+      }
+    } catch (err) {
+      console.warn("Failed to start video fallback for wake lock:", err);
+    }
+  };
+
+  const releaseWakeLock = async () => {
+    try {
+      if (wakeLockRef.current) {
+        try {
+          await wakeLockRef.current.release();
+        } catch (err) {
+          try {
+            wakeLockRef.current = null;
+          } catch {}
+        }
+        wakeLockRef.current = null;
+      }
+    } catch (err) {
+      console.warn("Error releasing wake lock:", err);
+    }
+
+    try {
+      if (videoFallbackRef.current) {
+        try {
+          videoFallbackRef.current.pause();
+        } catch {}
+        try {
+          if (videoFallbackRef.current.parentNode) videoFallbackRef.current.parentNode.removeChild(videoFallbackRef.current);
+        } catch {}
+        videoFallbackRef.current.src = "";
+        videoFallbackRef.current = null;
+      }
+    } catch (err) {
+      // ignore
+    }
+  };
+
+
+  const handleStart = async () => {
+    // Ensure audio is ready on each explicit start/resume (helps after source changes)
+    await ensureAudioReady();
     setIsRunning(true);
+    // Acquire wake lock if user opted in
+    if (preventSleep) {
+      await acquireWakeLock();
+    }
     if (elapsedSeconds === 0) {
       previousMinute.current = 0;
       // Play a confirmation beep when the session first starts
@@ -234,10 +484,14 @@ const PowerHour = () => {
 
   const handlePause = () => {
     setIsRunning(false);
+    // release wake lock while paused
+    void releaseWakeLock();
   };
 
   const handleReset = () => {
     setIsRunning(false);
+    // release wake lock when resetting
+    void releaseWakeLock();
     setElapsedSeconds(0);
     setIsComplete(false);
     previousMinute.current = 0;
@@ -256,6 +510,7 @@ const PowerHour = () => {
         ref={audioRef}
         src={`${(import.meta as any).env?.BASE_URL ?? '/'}beep.mp3`}
         preload="auto"
+        playsInline
       />
 
       <div className="container max-w-2xl mx-auto px-4 py-8 flex flex-col items-center justify-center">
@@ -392,6 +647,19 @@ const PowerHour = () => {
             />
             <Label htmlFor="sound-toggle" className="text-base cursor-pointer">
               Sound: {soundEnabled ? "On" : "Off"}
+            </Label>
+          </div>
+          {/* Prevent Sleep Toggle */}
+          <div className="flex items-center justify-center gap-3 pt-4">
+            <Switch
+              id="prevent-sleep"
+              checked={preventSleep}
+              onCheckedChange={(v) => {
+                setPreventSleep(Boolean(v));
+              }}
+            />
+            <Label htmlFor="prevent-sleep" className="text-base cursor-pointer">
+              Prevent Sleep: {preventSleep ? "On" : "Off"}
             </Label>
           </div>
         </Card>
