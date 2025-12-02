@@ -24,7 +24,7 @@ const PowerHour = () => {
   const [elapsedSeconds, setElapsedSeconds] = useState(0);
   // interval between sips in seconds (default 60 = 1:00)
   const [intervalSeconds, setIntervalSeconds] = useState(60);
-  const [soundEnabled, setSoundEnabled] = useState(true);
+  const [soundEnabled, setSoundEnabled] = useState(false);
   const [isComplete, setIsComplete] = useState(false);
 
   const audioRef = useRef<HTMLAudioElement | null>(null);
@@ -697,18 +697,20 @@ const PowerHour = () => {
           </div>
           {/* Spacer for gap */}
           <div className="py-2" />
-          {/* Short sound hint with info icon */}
-          <div className="flex flex-col items-center justify-center pt-8">
-            <span className="flex items-center gap-2 text-sm text-muted-foreground">
-              {/* Info/hint icon (SVG) */}
-              <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 text-blue-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
-                <circle cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="2" fill="none" />
-                <path strokeLinecap="round" strokeLinejoin="round" d="M12 16v-4" />
-                <circle cx="12" cy="8" r="1" fill="currentColor" />
-              </svg>
-              No sound? Turn on your ringer.
-            </span>
-          </div>
+          {/* Short sound hint with info icon, only shown if sound is enabled */}
+          {soundEnabled && (
+            <div className="flex flex-col items-center justify-center pt-8">
+              <span className="flex items-center gap-2 text-sm text-muted-foreground">
+                {/* Info/hint icon (SVG) */}
+                <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 text-blue-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
+                  <circle cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="2" fill="none" />
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M12 16v-4" />
+                  <circle cx="12" cy="8" r="1" fill="currentColor" />
+                </svg>
+                No sound? Turn on your ringer.
+              </span>
+            </div>
+          )}
         </Card>
       </div>
     </div>
