@@ -150,7 +150,10 @@ export default function SipPopup({
                   }
                 }}
                 className="w-32"
-                type="number"
+                type="tel"
+                inputMode="numeric"
+                pattern="[0-9]*"
+                placeholder="e.g. 2"
                 min={1}
               />
               <div className="text-sm text-muted-foreground">Total Sips</div>

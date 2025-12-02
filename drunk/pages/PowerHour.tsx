@@ -1,3 +1,15 @@
+// TypeScript interfaces for Wake Lock API
+interface WakeLockSentinel extends EventTarget {
+  release: () => Promise<void>;
+  type: 'screen' | 'system';
+  addEventListener: (type: 'release', listener: () => void) => void;
+}
+
+interface Navigator {
+  wakeLock?: {
+    request: (type: 'screen') => Promise<WakeLockSentinel>;
+  };
+}
 import { useState, useEffect, useRef } from "react";
 import { BackButton } from "../components/BackButton";
 import { Button } from "../components/ui/button";
@@ -22,7 +34,7 @@ const PowerHour = () => {
   const beepBufferRef = useRef<AudioBuffer | null>(null);
   const gainNodeRef = useRef<GainNode | null>(null);
   // Wake lock / keep-awake refs
-  const wakeLockRef = useRef<any>(null);
+  const wakeLockRef = useRef<WakeLockSentinel | null>(null);
   const videoFallbackRef = useRef<HTMLVideoElement | null>(null);
   // refs for scheduling sips (works with fixed or random intervals)
   const previousMinute = useRef(0);
@@ -32,7 +44,7 @@ const PowerHour = () => {
   const sipCountRef = useRef<number>(0);
   const [sipCount, setSipCount] = useState(0);
   const [randomMode, setRandomMode] = useState(false);
-  const [preventSleep, setPreventSleep] = useState(false);
+  // Wake lock is enabled automatically (always on)
 
   const formatInterval = (secs: number) => {
     const m = Math.floor(secs / 60);
@@ -60,12 +72,17 @@ const PowerHour = () => {
   const totalSips = randomMode ? undefined : Math.floor(3600 / intervalSeconds);
 
   useEffect(() => {
-    let interval: NodeJS.Timeout;
+    let animationFrameId: number;
+    let lastTime = Date.now();
+    const totalDuration = 3600;
 
-    const totalDuration = 3600; // always run for one hour
+    const updateTimer = () => {
+      const now = Date.now();
+      const delta = now - lastTime;
 
-    if (isRunning && elapsedSeconds < totalDuration) {
-      interval = setInterval(() => {
+      if (delta >= 1000) { // Update every second
+        lastTime = now - (delta % 1000); // Compensate for drift
+
         setElapsedSeconds((prev) => {
           const newSeconds = prev + 1;
 
@@ -78,17 +95,13 @@ const PowerHour = () => {
 
           // Check if we've reached or passed the next scheduled sip
           if (newSeconds >= nextSipAtRef.current && newSeconds <= totalDuration) {
-            // increment sip counters
             sipCountRef.current += 1;
             setSipCount(sipCountRef.current);
-
-            // play beep + toast
             playBeep();
             toast.success(`Sip ${sipCountRef.current}!`, {
               description: "Take a sip! 🍺",
             });
 
-            // move last sip time and schedule next sip
             lastSipAtRef.current = nextSipAtRef.current;
             if (randomMode) {
               const nextInterval = randBetween(minRandom, maxRandom);
@@ -111,44 +124,43 @@ const PowerHour = () => {
 
           return newSeconds;
         });
-      }, 1000);
-    } else if (elapsedSeconds >= totalDuration && !isComplete) {
-      setIsRunning(false);
-      setIsComplete(true);
-      toast.success("Power Hour Complete! 🎉", {
-        description: `You made it through ${sipCountRef.current} sips!`,
-      });
-    }
+      }
 
-    return () => clearInterval(interval);
-  }, [isRunning, elapsedSeconds, isComplete, soundEnabled, audioUnlocked]);
-
-  // Manage wake lock when preference or running state changes
-  useEffect(() => {
-    let visHandler: (() => void) | null = null;
-    const handleVisibility = async () => {
-      if (document.visibilityState === "visible") {
-        // try to re-acquire if needed
-        if (preventSleep && isRunning && !wakeLockRef.current) {
-          await acquireWakeLock();
-        }
-      } else {
-        // some UA's release wake locks on hidden; we don't need to do anything here
+      if (isRunning && elapsedSeconds < totalDuration) {
+        animationFrameId = requestAnimationFrame(updateTimer);
       }
     };
 
-    if (preventSleep && isRunning) {
-      void acquireWakeLock();
-      visHandler = () => { void handleVisibility(); };
-      document.addEventListener("visibilitychange", visHandler);
-    } else {
-      void releaseWakeLock();
+    if (isRunning && elapsedSeconds < totalDuration) {
+      animationFrameId = requestAnimationFrame(updateTimer);
     }
 
     return () => {
-      if (visHandler) document.removeEventListener("visibilitychange", visHandler);
+      if (animationFrameId) {
+        cancelAnimationFrame(animationFrameId);
+      }
     };
-  }, [preventSleep, isRunning]);
+  }, [isRunning, elapsedSeconds, isComplete, soundEnabled, audioUnlocked]);
+
+  // Manage wake lock when preference or running state changes
+  // Acquire wake lock on mount and re-acquire on visibility change.
+  useEffect(() => {
+    const handleVisibilityChange = async () => {
+      if (document.visibilityState === 'visible') {
+        console.log('Tab visible - reacquiring wake lock');
+        await acquireWakeLock();
+      }
+    };
+
+    // Try to acquire immediately when the component mounts
+    void acquireWakeLock();
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+
+    return () => {
+      void releaseWakeLock();
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+    };
+  }, []);
 
   // Cleanup on unmount
   useEffect(() => {
@@ -388,81 +400,121 @@ const PowerHour = () => {
 
   // Acquire a screen wake lock if available; otherwise try a silent video fallback.
   const acquireWakeLock = async () => {
-    if (!preventSleep) return;
+    // Attempt to acquire wake lock regardless of app state (always-on behavior)
+    
     try {
-      if ((navigator as any).wakeLock && typeof (navigator as any).wakeLock.request === "function") {
+      // First, try to release any existing lock
+      await releaseWakeLock();
+      
+      // Check if Wake Lock API is supported
+      if ('wakeLock' in navigator) {
         try {
-          wakeLockRef.current = await (navigator as any).wakeLock.request("screen");
-          wakeLockRef.current?.addEventListener?.("release", () => {
+          wakeLockRef.current = await navigator.wakeLock.request('screen');
+          
+          // Listen for release events
+          wakeLockRef.current.addEventListener('release', () => {
+            console.log('Wake Lock was released');
             wakeLockRef.current = null;
           });
+          
+          console.log('Wake Lock is active');
           return;
-        } catch (err) {
-          console.warn("WakeLock request failed:", err);
+        } catch (err: any) {
+          console.warn(`Wake Lock request failed: ${err.name}, ${err.message}`);
         }
       }
+      
+      // Fallback: Use a no-sleep canvas technique (works in most browsers)
+      startCanvasFallback();
+      
     } catch (err) {
-      console.warn("WakeLock API check error:", err);
+      console.warn('Failed to acquire wake lock:', err);
+      startCanvasFallback();
     }
+  };
 
-    // Fallback: try to play a tiny muted looping video to keep the screen awake (user must have allowed gesture)
+  const startCanvasFallback = () => {
     try {
-      if (!videoFallbackRef.current) {
-        const base = (import.meta as any).env?.BASE_URL ?? "/";
-        const url = `${base}silence.mp4`;
-        const v = document.createElement("video");
-        v.src = url;
-        v.muted = true;
-        v.loop = true;
-        (v as any).playsInline = true;
-        v.style.position = "fixed";
-        v.style.left = "0";
-        v.style.top = "0";
-        v.style.width = "0px";
-        v.style.height = "0px";
-        v.style.opacity = "0";
-        document.body.appendChild(v);
-        videoFallbackRef.current = v;
-        try {
-          await v.play();
-        } catch (err) {
-          console.warn("Silent video fallback failed to play:", err);
-        }
+      // Create a hidden canvas that continuously animates
+      const canvas = document.createElement('canvas');
+      canvas.width = 1;
+      canvas.height = 1;
+      canvas.style.position = 'fixed';
+      canvas.style.top = '0';
+      canvas.style.left = '0';
+      canvas.style.opacity = '0';
+      canvas.style.pointerEvents = 'none';
+      canvas.id = 'wake-lock-canvas';
+      
+      if (!document.getElementById('wake-lock-canvas')) {
+        document.body.appendChild(canvas);
       }
+      
+      const ctx = canvas.getContext('2d');
+      if (!ctx) return;
+      
+      // Simple animation that runs continuously
+      let frameId: number | null = null;
+      const animate = () => {
+        // Very light drawing that won't affect performance
+        ctx.clearRect(0, 0, 1, 1);
+        ctx.fillStyle = 'rgba(0,0,0,0.01)';
+        ctx.fillRect(0, 0, 1, 1);
+
+        // Request next frame - this keeps the screen awake
+        frameId = requestAnimationFrame(animate);
+        // Store the frame ID so we can cancel it later
+        (canvas as any)._wakeLockFrameId = frameId;
+      };
+
+      animate();
+      
     } catch (err) {
-      console.warn("Failed to start video fallback for wake lock:", err);
+      console.warn('Canvas fallback failed:', err);
+      startVisibilityFallback();
     }
+  };
+
+  // Another fallback: Use visibility API to reset timer on visibility change
+  const startVisibilityFallback = () => {
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === 'visible') {
+        // Tab is now visible again
+        console.log('Tab became visible - ensuring timer integrity');
+      }
+    };
+    
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+    
+    // Store reference to remove later
+    (document as any)._visibilityHandler = handleVisibilityChange;
   };
 
   const releaseWakeLock = async () => {
     try {
+      // Release the Wake Lock API if it exists
       if (wakeLockRef.current) {
-        try {
-          await wakeLockRef.current.release();
-        } catch (err) {
-          try {
-            wakeLockRef.current = null;
-          } catch {}
-        }
+        await wakeLockRef.current.release();
         wakeLockRef.current = null;
       }
-    } catch (err) {
-      console.warn("Error releasing wake lock:", err);
-    }
-
-    try {
-      if (videoFallbackRef.current) {
-        try {
-          videoFallbackRef.current.pause();
-        } catch {}
-        try {
-          if (videoFallbackRef.current.parentNode) videoFallbackRef.current.parentNode.removeChild(videoFallbackRef.current);
-        } catch {}
-        videoFallbackRef.current.src = "";
-        videoFallbackRef.current = null;
+      
+      // Clean up canvas fallback
+      const canvas = document.getElementById('wake-lock-canvas');
+      if (canvas && (canvas as any)._wakeLockFrameId) {
+        cancelAnimationFrame((canvas as any)._wakeLockFrameId);
       }
+      if (canvas && canvas.parentNode) {
+        canvas.parentNode.removeChild(canvas);
+      }
+      
+      // Clean up visibility fallback
+      if ((document as any)._visibilityHandler) {
+        document.removeEventListener('visibilitychange', (document as any)._visibilityHandler);
+        delete (document as any)._visibilityHandler;
+      }
+      
     } catch (err) {
-      // ignore
+      console.warn('Error releasing wake lock:', err);
     }
   };
 
@@ -471,10 +523,7 @@ const PowerHour = () => {
     // Ensure audio is ready on each explicit start/resume (helps after source changes)
     await ensureAudioReady();
     setIsRunning(true);
-    // Acquire wake lock if user opted in
-    if (preventSleep) {
-      await acquireWakeLock();
-    }
+    // Wake lock is managed automatically on mount/visibility; no manual action needed here
     if (elapsedSeconds === 0) {
       previousMinute.current = 0;
       // Play a confirmation beep when the session first starts
@@ -484,14 +533,11 @@ const PowerHour = () => {
 
   const handlePause = () => {
     setIsRunning(false);
-    // release wake lock while paused
-    void releaseWakeLock();
   };
 
   const handleReset = () => {
     setIsRunning(false);
-    // release wake lock when resetting
-    void releaseWakeLock();
+    // keep wake lock active (managed on mount/unmount)
     setElapsedSeconds(0);
     setIsComplete(false);
     previousMinute.current = 0;
@@ -649,18 +695,19 @@ const PowerHour = () => {
               Sound: {soundEnabled ? "On" : "Off"}
             </Label>
           </div>
-          {/* Prevent Sleep Toggle */}
-          <div className="flex items-center justify-center gap-3 pt-4">
-            <Switch
-              id="prevent-sleep"
-              checked={preventSleep}
-              onCheckedChange={(v) => {
-                setPreventSleep(Boolean(v));
-              }}
-            />
-            <Label htmlFor="prevent-sleep" className="text-base cursor-pointer">
-              Prevent Sleep: {preventSleep ? "On" : "Off"}
-            </Label>
+          {/* Spacer for gap */}
+          <div className="py-2" />
+          {/* Short sound hint with info icon */}
+          <div className="flex flex-col items-center justify-center pt-8">
+            <span className="flex items-center gap-2 text-sm text-muted-foreground">
+              {/* Info/hint icon (SVG) */}
+              <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 text-blue-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
+                <circle cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="2" fill="none" />
+                <path strokeLinecap="round" strokeLinejoin="round" d="M12 16v-4" />
+                <circle cx="12" cy="8" r="1" fill="currentColor" />
+              </svg>
+              No sound? Turn on your ringer.
+            </span>
           </div>
         </Card>
       </div>

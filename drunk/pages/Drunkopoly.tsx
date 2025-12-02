@@ -1409,7 +1409,7 @@ const Drunkopoly = () => {
                   <div className="text-sm text-muted-foreground mb-2">Recent games</div>
                   <div className="flex gap-2">
                     {recentGames.map((c) => (
-                      <Button key={c} variant="ghost" onClick={() => handleRecentClick(c)}>
+                      <Button key={c} variant="outline" className="px-3" onClick={() => handleRecentClick(c)}>
                         {c}
                       </Button>
                     ))}
@@ -1849,10 +1849,10 @@ const Drunkopoly = () => {
 
         {/* Pay section */}
         <Section title="Pay" className={"mt-8"}>
-          <div className="grid grid-cols-2 gap-4 w-64">
+          <div className="grid grid-cols-1 gap-4 w-64">
             <Button
               variant="secondary"
-              className="py-6"
+              className="w-full py-6"
               onClick={() => {
                 setPayMode("bank");
                 setPayModalOpen(true);
@@ -1863,7 +1863,7 @@ const Drunkopoly = () => {
             </Button>
             <Button
               variant="secondary"
-              className="py-6"
+              className="w-full py-6"
               onClick={() => {
                 setPayMode("players");
                 setPayModalOpen(true);
@@ -1874,7 +1874,7 @@ const Drunkopoly = () => {
             </Button>
             <Button
               variant="secondary"
-              className="py-6"
+              className="w-full py-6"
               onClick={() => {
                 setPayMode("tax");
                 setPayModalOpen(true);
@@ -2023,18 +2023,18 @@ const Drunkopoly = () => {
 
         {/* Collect section */}
         <Section title="Collect" className="mt-8">
-          <div className="grid grid-cols-2 gap-4 w-64">
-            <Button variant="secondary" className="py-6" onClick={() => { setCollectMode('bank'); setCollectModalOpen(true); }}>
+          <div className="grid grid-cols-1 gap-4 w-64">
+            <Button variant="secondary" className="w-full py-6" onClick={() => { setCollectMode('bank'); setCollectModalOpen(true); }}>
               <DollarSign className="h-5 w-5" />
               Bank
             </Button>
-            <Button variant="secondary" className="py-6" onClick={() => { setCollectMode('pass_go'); setCollectModalOpen(true); }}>
+            <Button variant="secondary" className="w-full py-6" onClick={() => { setCollectMode('pass_go'); setCollectModalOpen(true); }}>
               <Crown className="h-5 w-5" />
               Pass Go
             </Button>
             <Button 
               variant="secondary" 
-              className="py-6" 
+              className="w-full py-6" 
               onClick={() => { 
                 setCollectMode('free_parking'); 
                 setCollectModalOpen(true); 
@@ -2048,10 +2048,10 @@ const Drunkopoly = () => {
         
         {/* Actions section (trade timer) */}
         <Section title="Actions" className="mt-8">
-          <div className="grid grid-cols-2 gap-4 w-64">
+          <div className="grid grid-cols-1 gap-4 w-64">
             <Button
               variant="secondary"
-              className="py-6"
+              className="w-full py-6"
               onClick={() => {
                 setTradeTimerSelected(Number(game?.trade_timer_seconds ?? 60));
                 setTradeTimerModalOpen(true);
@@ -2062,7 +2062,7 @@ const Drunkopoly = () => {
             </Button>
             <Button
               variant="secondary"
-              className="py-6"
+              className="w-full py-6"
               onClick={() => setJailModalOpen(true)}
             >
               <Users className="h-5 w-5" />

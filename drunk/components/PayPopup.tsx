@@ -206,7 +206,10 @@ export default function PayPopup({
                       }
                     }}
                     className="w-32"
-                    type="number"
+                    type="tel"
+                    inputMode="numeric"
+                    pattern="[0-9]*"
+                    placeholder="e.g. 50"
                     min={0}
                   />
                   <div className="text-sm text-muted-foreground">Rounds up to $5</div>
@@ -216,18 +219,20 @@ export default function PayPopup({
           </div>
         </div>
 
-        {/* Optional message for recipients */}
-        <div className="mt-4">
-          <div className="text-sm font-medium">Leave a message (optional)</div>
-          <Input
-            value={message}
-            onChange={(e: any) => setMessage(e.target.value)}
-            className="w-full mt-2 h-10 rounded bg-muted border border-input px-3"
-            placeholder="Write a short message"
-            maxLength={200}
-            type="text"
-          />
-        </div>
+        {/* Optional message for recipients — only show when paying players */}
+        {mode === 'players' && (
+          <div className="mt-4">
+            <div className="text-sm font-medium">Leave a message (optional)</div>
+            <Input
+              value={message}
+              onChange={(e: any) => setMessage(e.target.value)}
+              className="w-full mt-2 h-10 rounded bg-muted border border-input px-3"
+              placeholder="Write a short message"
+              maxLength={200}
+              type="text"
+            />
+          </div>
+        )}
 
         <DialogFooter>
           <div className="flex gap-2 w-full justify-end">

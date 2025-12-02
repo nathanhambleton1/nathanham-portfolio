@@ -133,7 +133,10 @@ export default function CollectPopup({
                     }
                   }}
                   className="w-32"
-                  type="number"
+                  type="tel"
+                  inputMode="numeric"
+                  pattern="[0-9]*"
+                  placeholder="e.g. 50"
                   min={0}
                 />
                 <div className="text-sm text-muted-foreground">Rounds up to $5</div>
