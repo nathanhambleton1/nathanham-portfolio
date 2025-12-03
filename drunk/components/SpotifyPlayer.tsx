@@ -187,12 +187,12 @@ export const SpotifyPlayer = () => {
         )}
 
         {/* Controls */}
-        <div className="flex items-center justify-center gap-2">
+        <div className="flex items-center justify-center">
           <Button
             onClick={skipPrevious}
             variant="ghost"
             size="sm"
-            className="h-8 w-8 p-0"
+            className="h-8 w-8 p-0 mr-6"
             disabled={!currentTrack}
           >
             <SkipBack className="w-4 h-4" />
@@ -211,7 +211,7 @@ export const SpotifyPlayer = () => {
             onClick={skipNext}
             variant="ghost"
             size="sm"
-            className="h-8 w-8 p-0"
+            className="h-8 w-8 p-0 ml-6"
             disabled={!currentTrack}
           >
             <SkipForward className="w-4 h-4" />

@@ -64,6 +64,71 @@ export const useSpotify = () => {
   const playerRef = useRef<any>(null);
   const deviceIdRef = useRef<string | null>(null);
   const tokenValidatedRef = useRef<boolean>(false);
+  const pollingIntervalRef = useRef<NodeJS.Timeout | null>(null);
+
+  // Fetch current playback state from Spotify API
+  const fetchPlaybackState = useCallback(async (token: string): Promise<void> => {
+    try {
+      const response = await fetch('https://api.spotify.com/v1/me/player', {
+        headers: { 'Authorization': `Bearer ${token}` },
+      });
+
+      if (response.status === 204) {
+        // No active playback
+        setState(prev => ({
+          ...prev,
+          currentTrack: null,
+          isPlaying: false,
+          position: 0,
+        }));
+        return;
+      }
+
+      if (!response.ok) {
+        if (response.status === 401) {
+          // Token expired
+          localStorage.removeItem('spotify_access_token');
+          localStorage.removeItem('spotify_refresh_token');
+          localStorage.removeItem('spotify_token_expiry');
+          setAccessToken(null);
+          tokenValidatedRef.current = false;
+          setState(prev => ({ 
+            ...prev, 
+            isAuthenticated: false,
+            error: 'Session expired',
+          }));
+        }
+        return;
+      }
+
+      const data = await response.json();
+      
+      if (data.item) {
+        setState(prev => ({
+          ...prev,
+          currentTrack: {
+            name: data.item.name,
+            artists: data.item.artists.map((a: any) => a.name),
+            album: data.item.album.name,
+            albumArt: data.item.album.images[0]?.url || '',
+            duration: data.item.duration_ms,
+            uri: data.item.uri,
+          },
+          isPlaying: data.is_playing,
+          position: data.progress_ms || 0,
+        }));
+      } else {
+        setState(prev => ({
+          ...prev,
+          currentTrack: null,
+          isPlaying: false,
+          position: 0,
+        }));
+      }
+    } catch (error) {
+      console.error('Error fetching playback state:', error);
+    }
+  }, []);
 
   // Validate token with Spotify API
   const validateToken = useCallback(async (token: string): Promise<boolean> => {
@@ -184,6 +249,8 @@ export const useSpotify = () => {
           if (isValid) {
             setAccessToken(token);
             setState(prev => ({ ...prev, isAuthenticated: true, error: null }));
+            // Immediately fetch current playback state
+            fetchPlaybackState(token);
           } else {
             // Token is invalid, clear it
             localStorage.removeItem('spotify_access_token');
@@ -208,7 +275,34 @@ export const useSpotify = () => {
         localStorage.removeItem('spotify_token_expiry');
       }
     }
-  }, [validateToken, exchangeCodeForToken]);
+  }, [validateToken, exchangeCodeForToken, fetchPlaybackState]);
+
+  // Poll playback state when authenticated
+  useEffect(() => {
+    if (!accessToken || !state.isAuthenticated) {
+      // Clear polling when not authenticated
+      if (pollingIntervalRef.current) {
+        clearInterval(pollingIntervalRef.current);
+        pollingIntervalRef.current = null;
+      }
+      return;
+    }
+
+    // Fetch immediately
+    fetchPlaybackState(accessToken);
+
+    // Then poll every 3 seconds
+    pollingIntervalRef.current = setInterval(() => {
+      fetchPlaybackState(accessToken);
+    }, 1000);
+
+    return () => {
+      if (pollingIntervalRef.current) {
+        clearInterval(pollingIntervalRef.current);
+        pollingIntervalRef.current = null;
+      }
+    };
+  }, [accessToken, state.isAuthenticated, fetchPlaybackState]);
 
   // Initialize Spotify Web Playback SDK
   useEffect(() => {
@@ -251,47 +345,13 @@ export const useSpotify = () => {
           deviceIdRef.current = device_id;
           setState(prev => ({ ...prev, device_id, error: null }));
           toast.success('Spotify Player Ready', {
-            description: 'Use the play button to start playback on this device',
+            description: 'Your Spotify player is now ready',
           });
           
-          // Check if there's already active playback on another device
-          (async () => {
-            try {
-              if (accessToken) {
-                const stateResp = await fetch('https://api.spotify.com/v1/me/player', {
-                  headers: { 'Authorization': `Bearer ${accessToken}` },
-                });
-                
-                if (stateResp.ok) {
-                  const data = await stateResp.json();
-                  // Only display current playback info, don't auto-transfer
-                  // User needs to click play to activate this device
-                  if (data.item) {
-                    setState(prev => ({
-                      ...prev,
-                      currentTrack: {
-                        name: data.item.name,
-                        artists: data.item.artists.map((a: any) => a.name),
-                        album: data.item.album.name,
-                        albumArt: data.item.album.images[0]?.url || '',
-                        duration: data.item.duration_ms,
-                        uri: data.item.uri,
-                      },
-                      isPlaying: false, // Don't auto-play
-                      position: 0,
-                    }));
-                    toast.info('Playback detected', {
-                      description: 'Click play to control playback on this device',
-                    });
-                  }
-                } else if (stateResp.status === 204) {
-                  console.log('No active playback found');
-                }
-              }
-            } catch (err) {
-              console.warn('Error checking playback state:', err);
-            }
-          })();
+          // Immediately fetch current playback state
+          if (accessToken) {
+            fetchPlaybackState(accessToken);
+          }
         });
 
         // Not Ready
@@ -371,7 +431,7 @@ export const useSpotify = () => {
         playerRef.current.disconnect();
       }
     };
-  }, [accessToken]);
+  }, [accessToken, fetchPlaybackState]);
 
   const login = useCallback(async () => {
     if (!CLIENT_ID) {
@@ -480,36 +540,57 @@ export const useSpotify = () => {
     }
 
     try {
-      const endpoint = state.isPlaying ? 'pause' : 'play';
-      
-      // When playing, we need to transfer playback to this device
-      const response = await fetch(`https://api.spotify.com/v1/me/player/${endpoint}`, {
-        method: 'PUT',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${accessToken}`,
-        },
-        body: endpoint === 'play' ? JSON.stringify({
-          device_id: deviceIdRef.current,
-        }) : undefined,
-      });
-
-      // Handle 404 specially for play command - it means no active device
-      if (response.status === 404 && endpoint === 'play') {
-        toast.error('No Active Playback', {
-          description: 'Please start playing music in Spotify first, then try again.',
+      if (state.isPlaying) {
+        // Pause playback
+        const response = await fetch('https://api.spotify.com/v1/me/player/pause', {
+          method: 'PUT',
+          headers: {
+            'Authorization': `Bearer ${accessToken}`,
+          },
         });
-        return;
-      }
 
-      await handleApiError(response, endpoint);
+        if (!response.ok && response.status !== 204) {
+          await handleApiError(response, 'pause');
+        }
+      } else {
+        // Start/resume playback - transfer to this device if needed
+        const response = await fetch('https://api.spotify.com/v1/me/player/play', {
+          method: 'PUT',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${accessToken}`,
+          },
+          body: JSON.stringify({
+            device_id: deviceIdRef.current,
+          }),
+        });
+
+        if (response.status === 404) {
+          // No active playback anywhere - need to start something
+          toast.error('No Active Playback', {
+            description: 'Please start playing music in Spotify first, then try again.',
+          });
+          return;
+        }
+
+        if (!response.ok && response.status !== 204) {
+          await handleApiError(response, 'play');
+        } else {
+          // Successfully started playback, fetch updated state
+          setTimeout(() => {
+            if (accessToken) {
+              fetchPlaybackState(accessToken);
+            }
+          }, 500);
+        }
+      }
     } catch (error) {
       console.error('Error toggling playback:', error);
       toast.error('Network Error', {
         description: 'Unable to connect to Spotify. Please check your internet connection.',
       });
     }
-  }, [accessToken, state.isPlaying, handleApiError]);
+  }, [accessToken, state.isPlaying, handleApiError, fetchPlaybackState]);
 
   const skipNext = useCallback(async () => {
     if (!accessToken) return;
