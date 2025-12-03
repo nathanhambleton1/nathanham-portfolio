@@ -532,7 +532,33 @@ export const useSpotify = () => {
       return;
     }
 
-    if (!deviceIdRef.current) {
+    // Ensure we have a device id before attempting to control playback.
+    // Sometimes the SDK takes a short moment to emit the 'ready' event
+    // — wait briefly for deviceIdRef to populate, and fall back to
+    // the `state.device_id` if available.
+    const ensureDeviceId = async (timeout = 2000): Promise<string | null> => {
+      if (deviceIdRef.current) return deviceIdRef.current;
+      if (state.device_id) return state.device_id;
+
+      const start = Date.now();
+      return await new Promise(resolve => {
+        const check = setInterval(() => {
+          if (deviceIdRef.current) {
+            clearInterval(check);
+            resolve(deviceIdRef.current);
+            return;
+          }
+          if (Date.now() - start > timeout) {
+            clearInterval(check);
+            resolve(null);
+            return;
+          }
+        }, 100);
+      });
+    };
+
+    const targetDeviceId = await ensureDeviceId(2000);
+    if (!targetDeviceId) {
       toast.error('Player Not Ready', {
         description: 'Please wait for the Spotify player to initialize.',
       });
@@ -561,7 +587,7 @@ export const useSpotify = () => {
             'Authorization': `Bearer ${accessToken}`,
           },
           body: JSON.stringify({
-            device_id: deviceIdRef.current,
+            device_id: targetDeviceId,
           }),
         });
 
