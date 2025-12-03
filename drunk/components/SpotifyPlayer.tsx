@@ -115,7 +115,7 @@ export const SpotifyPlayer = () => {
     <Card className="bg-gradient-card border-border p-4">
       <div className="flex flex-col gap-3">
         {/* Track Info */}
-        {currentTrack && (
+        {currentTrack ? (
           <div className="flex items-center gap-3">
             {currentTrack.albumArt && (
               <img 
@@ -128,6 +128,24 @@ export const SpotifyPlayer = () => {
               <p className="font-medium text-foreground truncate">{currentTrack.name}</p>
               <p className="text-sm text-muted-foreground truncate">
                 {currentTrack.artists.join(', ')}
+              </p>
+            </div>
+            <Button
+              onClick={logout}
+              variant="ghost"
+              size="sm"
+              className="text-xs"
+            >
+              Disconnect
+            </Button>
+          </div>
+        ) : (
+          <div className="flex items-center gap-3">
+            <Music className="w-12 h-12 text-muted-foreground/50" />
+            <div className="flex-1 min-w-0">
+              <p className="font-medium text-foreground">No Track Playing</p>
+              <p className="text-sm text-muted-foreground">
+                Start playing music in Spotify, then click play here
               </p>
             </div>
             <Button
@@ -182,7 +200,6 @@ export const SpotifyPlayer = () => {
           <Button
             onClick={togglePlay}
             className="h-10 w-10 rounded-full p-0 bg-white text-black hover:bg-gray-100"
-            disabled={!currentTrack}
           >
             {isPlaying ? (
               <Pause className="w-5 h-5" />

@@ -251,54 +251,45 @@ export const useSpotify = () => {
           deviceIdRef.current = device_id;
           setState(prev => ({ ...prev, device_id, error: null }));
           toast.success('Spotify Player Ready', {
-            description: 'Your Spotify player is ready to use',
+            description: 'Use the play button to start playback on this device',
           });
-          // Try to transfer playback to this SDK device so the player receives state/events.
-          // Many users expect their currently-playing session to automatically appear in the web player,
-          // but the Web Playback SDK only receives events when its device is the active device.
+          
+          // Check if there's already active playback on another device
           (async () => {
             try {
               if (accessToken) {
-                // Request Spotify to make this device the active device. We do not force playback-start; leave play=false.
-                const resp = await fetch('https://api.spotify.com/v1/me/player', {
-                  method: 'PUT',
-                  headers: {
-                    'Content-Type': 'application/json',
-                    'Authorization': `Bearer ${accessToken}`,
-                  },
-                  body: JSON.stringify({ device_ids: [device_id], play: false }),
+                const stateResp = await fetch('https://api.spotify.com/v1/me/player', {
+                  headers: { 'Authorization': `Bearer ${accessToken}` },
                 });
-
-                if (!resp.ok) {
-                  const text = await resp.text().catch(() => '');
-                  console.warn('Transfer playback request failed:', resp.status, text);
-                } else {
-                  // After transferring, fetch the current playback state to sync UI immediately.
-                  const stateResp = await fetch('https://api.spotify.com/v1/me/player', {
-                    headers: { 'Authorization': `Bearer ${accessToken}` },
-                  });
-                  if (stateResp.ok) {
-                    const data = await stateResp.json();
+                
+                if (stateResp.ok) {
+                  const data = await stateResp.json();
+                  // Only display current playback info, don't auto-transfer
+                  // User needs to click play to activate this device
+                  if (data.item) {
                     setState(prev => ({
                       ...prev,
-                      isPlaying: !!data.is_playing,
-                      position: data.progress_ms || 0,
-                      currentTrack: data.item
-                        ? {
-                            name: data.item.name,
-                            artists: data.item.artists.map((a: any) => a.name),
-                            album: data.item.album.name,
-                            albumArt: data.item.album.images[0]?.url || '',
-                            duration: data.item.duration_ms,
-                            uri: data.item.uri,
-                          }
-                        : null,
+                      currentTrack: {
+                        name: data.item.name,
+                        artists: data.item.artists.map((a: any) => a.name),
+                        album: data.item.album.name,
+                        albumArt: data.item.album.images[0]?.url || '',
+                        duration: data.item.duration_ms,
+                        uri: data.item.uri,
+                      },
+                      isPlaying: false, // Don't auto-play
+                      position: 0,
                     }));
+                    toast.info('Playback detected', {
+                      description: 'Click play to control playback on this device',
+                    });
                   }
+                } else if (stateResp.status === 204) {
+                  console.log('No active playback found');
                 }
               }
             } catch (err) {
-              console.warn('Error transferring playback to Web Playback SDK device:', err);
+              console.warn('Error checking playback state:', err);
             }
           })();
         });
@@ -481,14 +472,35 @@ export const useSpotify = () => {
       return;
     }
 
+    if (!deviceIdRef.current) {
+      toast.error('Player Not Ready', {
+        description: 'Please wait for the Spotify player to initialize.',
+      });
+      return;
+    }
+
     try {
       const endpoint = state.isPlaying ? 'pause' : 'play';
+      
+      // When playing, we need to transfer playback to this device
       const response = await fetch(`https://api.spotify.com/v1/me/player/${endpoint}`, {
         method: 'PUT',
         headers: {
+          'Content-Type': 'application/json',
           'Authorization': `Bearer ${accessToken}`,
         },
+        body: endpoint === 'play' ? JSON.stringify({
+          device_id: deviceIdRef.current,
+        }) : undefined,
       });
+
+      // Handle 404 specially for play command - it means no active device
+      if (response.status === 404 && endpoint === 'play') {
+        toast.error('No Active Playback', {
+          description: 'Please start playing music in Spotify first, then try again.',
+        });
+        return;
+      }
 
       await handleApiError(response, endpoint);
     } catch (error) {
@@ -503,7 +515,8 @@ export const useSpotify = () => {
     if (!accessToken) return;
 
     try {
-      const response = await fetch('https://api.spotify.com/v1/me/player/next', {
+      const deviceQuery = deviceIdRef.current ? `?device_id=${deviceIdRef.current}` : '';
+      const response = await fetch(`https://api.spotify.com/v1/me/player/next${deviceQuery}`, {
         method: 'POST',
         headers: {
           'Authorization': `Bearer ${accessToken}`,
@@ -523,7 +536,8 @@ export const useSpotify = () => {
     if (!accessToken) return;
 
     try {
-      const response = await fetch('https://api.spotify.com/v1/me/player/previous', {
+      const deviceQuery = deviceIdRef.current ? `?device_id=${deviceIdRef.current}` : '';
+      const response = await fetch(`https://api.spotify.com/v1/me/player/previous${deviceQuery}`, {
         method: 'POST',
         headers: {
           'Authorization': `Bearer ${accessToken}`,
@@ -543,7 +557,8 @@ export const useSpotify = () => {
     if (!accessToken) return;
 
     try {
-      const response = await fetch(`https://api.spotify.com/v1/me/player/seek?position_ms=${positionMs}`, {
+      const deviceQuery = deviceIdRef.current ? `&device_id=${deviceIdRef.current}` : '';
+      const response = await fetch(`https://api.spotify.com/v1/me/player/seek?position_ms=${positionMs}${deviceQuery}`, {
         method: 'PUT',
         headers: {
           'Authorization': `Bearer ${accessToken}`,
