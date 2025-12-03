@@ -145,7 +145,7 @@ export const SpotifyPlayer = () => {
             <div className="flex-1 min-w-0">
               <p className="font-medium text-foreground">No Track Playing</p>
               <p className="text-sm text-muted-foreground">
-                Start playing music in Spotify, then click play here
+                Start playing music.
               </p>
             </div>
             <Button
