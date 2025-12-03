@@ -18,6 +18,8 @@ import { Switch } from "../components/ui/switch";
 import { Label } from "../components/ui/label";
 import { Play, Pause, RotateCcw } from "lucide-react";
 import { toast } from "sonner";
+import { SpotifyPlayer } from "../components/SpotifyPlayer";
+import { useSpotify } from "../hooks/use-spotify";
 
 const PowerHour = () => {
   const [isRunning, setIsRunning] = useState(false);
@@ -663,6 +665,16 @@ const PowerHour = () => {
         playsInline
       />
 
+      {/* Debug: Spotify State Console Logs */}
+      {(() => {
+        const spotify = useSpotify();
+        console.log('[Spotify] isAuthenticated:', spotify.isAuthenticated);
+        console.log('[Spotify] isPlaying:', spotify.isPlaying);
+        console.log('[Spotify] currentTrack:', spotify.currentTrack);
+        console.log('[Spotify] position:', spotify.position);
+        console.log('[Spotify] device_id:', spotify.device_id);
+        return null;
+      })()}
       <div className="container max-w-2xl mx-auto px-4 py-8 flex flex-col items-center justify-center">
 
         <div className="text-center mb-8">
@@ -826,6 +838,11 @@ const PowerHour = () => {
             </div>
           )}
         </Card>
+
+        {/* Spotify Player */}
+        <div className="w-full max-w-2xl">
+          <SpotifyPlayer />
+        </div>
       </div>
     </div>
   );
