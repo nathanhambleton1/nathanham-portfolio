@@ -686,7 +686,7 @@ const PowerHour = () => {
           )}
         </div>
 
-        <Card className="bg-gradient-card border-border p-8 mb-6">
+        <Card className="bg-gradient-card border-border p-8 mb-6 w-full max-w-2xl mx-auto">
           {/* Interval Selector */}
           <div className="flex items-center justify-center gap-3 mb-6">
             {([60, 90, 120] as number[]).map((secs) => (
@@ -840,7 +840,7 @@ const PowerHour = () => {
         </Card>
 
         {/* Spotify Player */}
-        <div className="w-full max-w-2xl">
+        <div className="w-full max-w-2xl mx-auto">
           <SpotifyPlayer />
         </div>
       </div>

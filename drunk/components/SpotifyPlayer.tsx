@@ -10,12 +10,14 @@ export const SpotifyPlayer = () => {
     isPlaying,
     currentTrack,
     position,
+    error,
     login,
     logout,
     togglePlay,
     skipNext,
     skipPrevious,
     seek,
+    clearError,
   } = useSpotify();
 
   const [localPosition, setLocalPosition] = useState(0);
@@ -69,20 +71,41 @@ export const SpotifyPlayer = () => {
   if (!isAuthenticated) {
     return (
       <Card className="bg-gradient-card border-border p-4">
-        <div className="flex items-center justify-between gap-4">
-          <div className="flex items-center gap-3">
-            <Music className="w-6 h-6 text-green-500" />
-            <div>
-              <p className="font-medium text-foreground">Connect Spotify</p>
-              <p className="text-xs text-muted-foreground">Control your music while playing</p>
+        <div className="flex flex-col gap-3">
+          {error && (
+            <div className="bg-red-500/10 border border-red-500/20 rounded p-3 text-sm">
+              <p className="text-red-400 font-medium">Connection Error</p>
+              <p className="text-red-300/80 text-xs mt-1">
+                {error}
+              </p>
+            </div>
+          )}
+          <div className="flex items-center justify-between gap-4">
+            <div className="flex items-center gap-3">
+              <Music className="w-6 h-6 text-green-500" />
+              <div>
+                <p className="font-medium text-foreground">Connect Spotify</p>
+                <p className="text-xs text-muted-foreground">Control your music while playing</p>
+              </div>
+            </div>
+            <div className="flex gap-2">
+              {error && (
+                <Button 
+                  onClick={clearError}
+                  variant="outline"
+                  size="sm"
+                >
+                  Dismiss
+                </Button>
+              )}
+              <Button 
+                onClick={login}
+                className="bg-green-500 hover:bg-green-600 text-white"
+              >
+                {error ? 'Retry' : 'Connect'}
+              </Button>
             </div>
           </div>
-          <Button 
-            onClick={login}
-            className="bg-green-500 hover:bg-green-600 text-white"
-          >
-            Connect
-          </Button>
         </div>
       </Card>
     );
