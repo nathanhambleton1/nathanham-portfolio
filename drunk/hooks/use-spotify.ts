@@ -253,6 +253,54 @@ export const useSpotify = () => {
           toast.success('Spotify Player Ready', {
             description: 'Your Spotify player is ready to use',
           });
+          // Try to transfer playback to this SDK device so the player receives state/events.
+          // Many users expect their currently-playing session to automatically appear in the web player,
+          // but the Web Playback SDK only receives events when its device is the active device.
+          (async () => {
+            try {
+              if (accessToken) {
+                // Request Spotify to make this device the active device. We do not force playback-start; leave play=false.
+                const resp = await fetch('https://api.spotify.com/v1/me/player', {
+                  method: 'PUT',
+                  headers: {
+                    'Content-Type': 'application/json',
+                    'Authorization': `Bearer ${accessToken}`,
+                  },
+                  body: JSON.stringify({ device_ids: [device_id], play: false }),
+                });
+
+                if (!resp.ok) {
+                  const text = await resp.text().catch(() => '');
+                  console.warn('Transfer playback request failed:', resp.status, text);
+                } else {
+                  // After transferring, fetch the current playback state to sync UI immediately.
+                  const stateResp = await fetch('https://api.spotify.com/v1/me/player', {
+                    headers: { 'Authorization': `Bearer ${accessToken}` },
+                  });
+                  if (stateResp.ok) {
+                    const data = await stateResp.json();
+                    setState(prev => ({
+                      ...prev,
+                      isPlaying: !!data.is_playing,
+                      position: data.progress_ms || 0,
+                      currentTrack: data.item
+                        ? {
+                            name: data.item.name,
+                            artists: data.item.artists.map((a: any) => a.name),
+                            album: data.item.album.name,
+                            albumArt: data.item.album.images[0]?.url || '',
+                            duration: data.item.duration_ms,
+                            uri: data.item.uri,
+                          }
+                        : null,
+                    }));
+                  }
+                }
+              }
+            } catch (err) {
+              console.warn('Error transferring playback to Web Playback SDK device:', err);
+            }
+          })();
         });
 
         // Not Ready
