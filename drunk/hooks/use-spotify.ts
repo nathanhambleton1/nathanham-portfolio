@@ -61,8 +61,6 @@ export const useSpotify = () => {
   });
 
   const [accessToken, setAccessToken] = useState<string | null>(null);
-  const playerRef = useRef<any>(null);
-  const deviceIdRef = useRef<string | null>(null);
   const tokenValidatedRef = useRef<boolean>(false);
   const pollingIntervalRef = useRef<NodeJS.Timeout | null>(null);
 
@@ -304,135 +302,6 @@ export const useSpotify = () => {
     };
   }, [accessToken, state.isAuthenticated, fetchPlaybackState]);
 
-  // Initialize Spotify Web Playback SDK
-  useEffect(() => {
-    if (!accessToken) return;
-
-    // Check if SDK is already loaded
-    if ((window as any).Spotify) {
-      initializePlayer();
-      return;
-    }
-
-    // Load Spotify SDK script
-    const script = document.createElement('script');
-    script.src = 'https://sdk.scdn.co/spotify-player.js';
-    script.async = true;
-    
-    script.onerror = () => {
-      console.error('Failed to load Spotify SDK');
-      toast.error('Spotify SDK Error', {
-        description: 'Failed to load Spotify player. Please check your internet connection and try again.',
-      });
-      setState(prev => ({ ...prev, error: 'Failed to load Spotify SDK' }));
-    };
-    
-    document.body.appendChild(script);
-
-    function initializePlayer() {
-      try {
-        const player = new (window as any).Spotify.Player({
-          name: 'Power Hour Player',
-          getOAuthToken: (cb: (token: string) => void) => {
-            if (accessToken) cb(accessToken);
-          },
-          volume: 0.5,
-        });
-
-        // Ready
-        player.addListener('ready', ({ device_id }: any) => {
-          console.log('Ready with Device ID', device_id);
-          deviceIdRef.current = device_id;
-          setState(prev => ({ ...prev, device_id, error: null }));
-          toast.success('Spotify Player Ready', {
-            description: 'Your Spotify player is now ready',
-          });
-          
-          // Immediately fetch current playback state
-          if (accessToken) {
-            fetchPlaybackState(accessToken);
-          }
-        });
-
-        // Not Ready
-        player.addListener('not_ready', ({ device_id }: any) => {
-          console.log('Device ID has gone offline', device_id);
-          toast.error('Spotify Player Offline', {
-            description: 'Your Spotify player has gone offline',
-          });
-        });
-
-        // Authentication error
-        player.addListener('authentication_error', ({ message }: any) => {
-          console.error('Spotify authentication error:', message);
-          localStorage.removeItem('spotify_access_token');
-          setAccessToken(null);
-          setState(prev => ({ 
-            ...prev, 
-            isAuthenticated: false,
-            error: 'Authentication failed. Please reconnect.',
-          }));
-          toast.error('Spotify Authentication Error', {
-            description: 'Your session has expired. Please reconnect to Spotify.',
-          });
-        });
-
-        // Account error
-        player.addListener('account_error', ({ message }: any) => {
-          console.error('Spotify account error:', message);
-          toast.error('Spotify Account Error', {
-            description: message || 'There was an issue with your Spotify account',
-          });
-        });
-
-        // Playback error
-        player.addListener('playback_error', ({ message }: any) => {
-          console.error('Spotify playback error:', message);
-          toast.error('Playback Error', {
-            description: message || 'Unable to play track',
-          });
-        });
-
-        // Player state changed
-        player.addListener('player_state_changed', (state: any) => {
-          if (!state) return;
-
-          const track = state.track_window.current_track;
-          setState(prev => ({
-            ...prev,
-            isPlaying: !state.paused,
-            position: state.position,
-            currentTrack: track ? {
-              name: track.name,
-              artists: track.artists.map((a: any) => a.name),
-              album: track.album.name,
-              albumArt: track.album.images[0]?.url || '',
-              duration: track.duration_ms,
-              uri: track.uri,
-            } : null,
-          }));
-        });
-
-        player.connect();
-        playerRef.current = player;
-      } catch (error) {
-        console.error('Error initializing Spotify player:', error);
-        toast.error('Spotify Player Error', {
-          description: 'Failed to initialize Spotify player. Please try reconnecting.',
-        });
-        setState(prev => ({ ...prev, error: 'Failed to initialize player' }));
-      }
-    }
-
-    (window as any).onSpotifyWebPlaybackSDKReady = initializePlayer;
-
-    return () => {
-      if (playerRef.current) {
-        playerRef.current.disconnect();
-      }
-    };
-  }, [accessToken, fetchPlaybackState]);
-
   const login = useCallback(async () => {
     if (!CLIENT_ID) {
       toast.error('Configuration Error', {
@@ -485,9 +354,6 @@ export const useSpotify = () => {
       device_id: null,
       error: null,
     });
-    if (playerRef.current) {
-      playerRef.current.disconnect();
-    }
     toast.success('Disconnected from Spotify', {
       description: 'You have been logged out of Spotify',
     });
@@ -532,42 +398,9 @@ export const useSpotify = () => {
       return;
     }
 
-    // Ensure we have a device id before attempting to control playback.
-    // Sometimes the SDK takes a short moment to emit the 'ready' event
-    // — wait briefly for deviceIdRef to populate, and fall back to
-    // the `state.device_id` if available.
-    const ensureDeviceId = async (timeout = 2000): Promise<string | null> => {
-      if (deviceIdRef.current) return deviceIdRef.current;
-      if (state.device_id) return state.device_id;
-
-      const start = Date.now();
-      return await new Promise(resolve => {
-        const check = setInterval(() => {
-          if (deviceIdRef.current) {
-            clearInterval(check);
-            resolve(deviceIdRef.current);
-            return;
-          }
-          if (Date.now() - start > timeout) {
-            clearInterval(check);
-            resolve(null);
-            return;
-          }
-        }, 100);
-      });
-    };
-
-    const targetDeviceId = await ensureDeviceId(2000);
-    if (!targetDeviceId) {
-      toast.error('Player Not Ready', {
-        description: 'Please wait for the Spotify player to initialize.',
-      });
-      return;
-    }
-
     try {
       if (state.isPlaying) {
-        // Pause playback
+        // Pause playback on the current active device (don't specify device)
         const response = await fetch('https://api.spotify.com/v1/me/player/pause', {
           method: 'PUT',
           headers: {
@@ -579,16 +412,12 @@ export const useSpotify = () => {
           await handleApiError(response, 'pause');
         }
       } else {
-        // Start/resume playback - transfer to this device if needed
+        // Resume playback on the current active device (don't transfer to web player)
         const response = await fetch('https://api.spotify.com/v1/me/player/play', {
           method: 'PUT',
           headers: {
-            'Content-Type': 'application/json',
             'Authorization': `Bearer ${accessToken}`,
           },
-          body: JSON.stringify({
-            device_id: targetDeviceId,
-          }),
         });
 
         if (response.status === 404) {
@@ -622,8 +451,7 @@ export const useSpotify = () => {
     if (!accessToken) return;
 
     try {
-      const deviceQuery = deviceIdRef.current ? `?device_id=${deviceIdRef.current}` : '';
-      const response = await fetch(`https://api.spotify.com/v1/me/player/next${deviceQuery}`, {
+      const response = await fetch('https://api.spotify.com/v1/me/player/next', {
         method: 'POST',
         headers: {
           'Authorization': `Bearer ${accessToken}`,
@@ -643,8 +471,7 @@ export const useSpotify = () => {
     if (!accessToken) return;
 
     try {
-      const deviceQuery = deviceIdRef.current ? `?device_id=${deviceIdRef.current}` : '';
-      const response = await fetch(`https://api.spotify.com/v1/me/player/previous${deviceQuery}`, {
+      const response = await fetch('https://api.spotify.com/v1/me/player/previous', {
         method: 'POST',
         headers: {
           'Authorization': `Bearer ${accessToken}`,
@@ -664,8 +491,7 @@ export const useSpotify = () => {
     if (!accessToken) return;
 
     try {
-      const deviceQuery = deviceIdRef.current ? `&device_id=${deviceIdRef.current}` : '';
-      const response = await fetch(`https://api.spotify.com/v1/me/player/seek?position_ms=${positionMs}${deviceQuery}`, {
+      const response = await fetch(`https://api.spotify.com/v1/me/player/seek?position_ms=${positionMs}`, {
         method: 'PUT',
         headers: {
           'Authorization': `Bearer ${accessToken}`,
