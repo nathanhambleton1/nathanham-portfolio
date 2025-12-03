@@ -24,7 +24,7 @@ const PowerHour = () => {
   const [elapsedSeconds, setElapsedSeconds] = useState(0);
   // interval between sips in seconds (default 60 = 1:00)
   const [intervalSeconds, setIntervalSeconds] = useState(60);
-  const [soundEnabled, setSoundEnabled] = useState(false);
+  const [soundEnabled, setSoundEnabled] = useState(true);
   const [isComplete, setIsComplete] = useState(false);
 
   const audioRef = useRef<HTMLAudioElement | null>(null);
@@ -71,6 +71,74 @@ const PowerHour = () => {
   const randBetween = (min: number, max: number) => Math.floor(Math.random() * (max - min + 1)) + min;
   const totalSips = randomMode ? undefined : Math.floor(3600 / intervalSeconds);
 
+  // Persistence: save/restore state so user can refresh and resume later
+  const STORAGE_KEY = "powerhour_state_v1";
+
+  type PersistedState = {
+    elapsedSeconds: number;
+    intervalSeconds: number;
+    randomMode: boolean;
+    soundEnabled?: boolean;
+    nextSipAt: number;
+    lastSipAt: number;
+    currentInterval: number;
+    sipCount: number;
+    isComplete: boolean;
+    timestamp?: number;
+  };
+
+  const saveStateToStorage = () => {
+    try {
+      const state: PersistedState = {
+        elapsedSeconds,
+        intervalSeconds,
+        randomMode,
+        soundEnabled,
+        nextSipAt: nextSipAtRef.current || 0,
+        lastSipAt: lastSipAtRef.current || 0,
+        currentInterval: currentIntervalRef.current || intervalSeconds,
+        sipCount: sipCountRef.current || 0,
+        isComplete,
+        timestamp: Date.now(),
+      };
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+    } catch (err) {
+      console.warn("Failed to save power hour state:", err);
+    }
+  };
+
+  const loadStateFromStorage = () => {
+    try {
+      const raw = localStorage.getItem(STORAGE_KEY);
+      if (!raw) return;
+      const s: PersistedState = JSON.parse(raw);
+      const totalDuration = 3600;
+      const es = Math.max(0, Math.min(totalDuration, s.elapsedSeconds || 0));
+
+      // Restore core states and refs. Do not auto-start the timer; allow user to resume.
+      setElapsedSeconds(es);
+      setIntervalSeconds(s.intervalSeconds || 60);
+      setRandomMode(!!s.randomMode);
+      setSoundEnabled(!!s.soundEnabled);
+      nextSipAtRef.current = s.nextSipAt || (s.randomMode ? randBetween(minRandom, maxRandom) : s.intervalSeconds || 60);
+      lastSipAtRef.current = s.lastSipAt || 0;
+      currentIntervalRef.current = s.currentInterval || s.intervalSeconds || 60;
+      sipCountRef.current = s.sipCount || 0;
+      setSipCount(sipCountRef.current);
+      setIsComplete(!!s.isComplete);
+    } catch (err) {
+      console.warn("Failed to load power hour state:", err);
+    }
+  };
+
+  const clearStateStorage = () => {
+    try {
+      localStorage.removeItem(STORAGE_KEY);
+    } catch (err) {
+      // ignore
+    }
+  };
+
   useEffect(() => {
     let animationFrameId: number;
     let lastTime = Date.now();
@@ -111,6 +179,12 @@ const PowerHour = () => {
               currentIntervalRef.current = intervalSeconds;
               nextSipAtRef.current = lastSipAtRef.current + intervalSeconds;
             }
+              // Persist after scheduling a sip
+              try {
+                saveStateToStorage();
+              } catch (err) {
+                // ignore
+              }
           }
 
           // If we've reached the end of the hour
@@ -121,6 +195,13 @@ const PowerHour = () => {
               description: `You made it through ${sipCountRef.current} sips!`,
             });
           }
+
+            // Persist elapsed time and scheduling each second
+            try {
+              saveStateToStorage();
+            } catch (err) {
+              // ignore
+            }
 
           return newSeconds;
         });
@@ -152,7 +233,14 @@ const PowerHour = () => {
       }
     };
 
-    // Try to acquire immediately when the component mounts
+    // Load any saved state so user can resume where they left off
+    try {
+      loadStateFromStorage();
+    } catch (err) {
+      // ignore
+    }
+
+    // Try to acquire wake lock immediately when the component mounts
     void acquireWakeLock();
     document.addEventListener('visibilitychange', handleVisibilityChange);
 
@@ -168,6 +256,16 @@ const PowerHour = () => {
       void releaseWakeLock();
     };
   }, []);
+
+  // Persist preferences immediately when they change (sound, mode, interval, sip count)
+  useEffect(() => {
+    try {
+      saveStateToStorage();
+    } catch (err) {
+      // ignore
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [soundEnabled, randomMode, intervalSeconds, sipCount]);
 
   const playBeep = () => {
     if (!soundEnabled) return;
@@ -547,6 +645,12 @@ const PowerHour = () => {
     currentIntervalRef.current = randomMode ? nextSipAtRef.current : intervalSeconds;
     sipCountRef.current = 0;
     setSipCount(0);
+    // Clear persisted state
+    try {
+      clearStateStorage();
+    } catch (err) {
+      // ignore
+    }
   };
 
   return (
@@ -564,7 +668,7 @@ const PowerHour = () => {
         <div className="text-center mb-8">
           <h1 className="text-4xl font-bold mb-2 text-foreground">Power Hour</h1>
           {randomMode ? (
-            <p className="text-muted-foreground">Take a sip at random intervals (0:30–2:00) for 1 hour</p>
+            <p className="text-muted-foreground">Random intervals (0:30–2:00) for 1 hour</p>
           ) : (
             <p className="text-muted-foreground">Take a sip every {formatInterval(intervalSeconds)} for {totalSips} sips</p>
           )}
@@ -589,6 +693,11 @@ const PowerHour = () => {
                   currentIntervalRef.current = secs;
                   sipCountRef.current = 0;
                   setSipCount(0);
+                    try {
+                      saveStateToStorage();
+                    } catch (err) {
+                      // ignore
+                    }
                 }}
                 variant={intervalSeconds === secs && !randomMode ? undefined : "outline"}
                 className={`px-4 py-2 ${isRunning ? "opacity-50 cursor-not-allowed" : ""}`}
@@ -612,6 +721,11 @@ const PowerHour = () => {
                 currentIntervalRef.current = first;
                 sipCountRef.current = 0;
                 setSipCount(0);
+                try {
+                  saveStateToStorage();
+                } catch (err) {
+                  // ignore
+                }
               }}
               variant={randomMode ? undefined : "outline"}
               className={`px-4 py-2 ${isRunning ? "opacity-50 cursor-not-allowed" : ""}`}
