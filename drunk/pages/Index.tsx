@@ -1,5 +1,5 @@
 import { GameCard } from "../components/GameCard";
-import { Clock, Trophy, Crown, Dices, Users } from "lucide-react";
+import { Clock, Trophy, Crown, Dices, Users, Award } from "lucide-react";
 
 const Index = () => {
   const games = [
@@ -8,6 +8,12 @@ const Index = () => {
       description: "Monopoly with a drinking twist.",
       icon: Crown,
       path: "drunkopoly",
+    },
+    {
+      title: "Beer Olympics",
+      description: "Multi-event drinking tournament with scoring.",
+      icon: Award,
+      path: "beer-olympics",
     },
     {
       title: "Power Hour",

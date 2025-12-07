@@ -11,7 +11,13 @@ import { generateRegularSeasonGames } from "../lib/scheduler";
 import type { Team, Game as SGame, PlayoffRound, PlayoffMatch } from "../lib/scheduler";
 import { DragDropContext, Droppable, Draggable, DropResult } from "@hello-pangea/dnd";
 import { Checkbox } from "../components/ui/checkbox";
+import { useLocation, useNavigate } from "react-router-dom";
+import { createClient } from '@supabase/supabase-js';
 
+// Initialize Supabase client
+const supabaseUrl = 'https://kcyrvubzhsphpxfsewii.supabase.co';
+const supabaseAnonKey = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImtjeXJ2dWJ6aHNwaHB4ZnNld2lpIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjMxODAwMTcsImV4cCI6MjA3ODc1NjAxN30.8psClrpif-F1DWj67u2tErnU8-4ZYjw5LvEfRK3oHkI';
+const supabase = createClient(supabaseUrl, supabaseAnonKey);
 
 // Team and Game types are imported from scheduler
 
@@ -37,13 +43,23 @@ const computeDefaultPlayoffSpots = (numTeams: number) => {
 };
 
 const BeerBall = () => {
+  const location = useLocation();
+  const navigate = useNavigate();
+  
+  // Check for Beer Olympics integration
+  const params = new URLSearchParams(location.search);
+  const olympicsGameCode = params.get('olympics');
+  const olympicsEventId = params.get('event');
+  const olympicsPlayers = params.get('players');
+  
   const [players, setPlayers] = useState<Player[]>([]);
   const [newPlayerName, setNewPlayerName] = useState("");
   const [teamMode, setTeamMode] = useState<TeamMode>("random");
   // Ordering for ranking-based skill input (top = best)
   const [throwOrder, setThrowOrder] = useState<string[]>([]); // array of player ids
   const [drinkOrder, setDrinkOrder] = useState<string[]>([]); // array of player ids
-  const [activeRanking, setActiveRanking] = useState<"throw" | "drink">("throw");
+  const [defenseOrder, setDefenseOrder] = useState<string[]>([]); // array of player ids (new)
+  const [activeRanking, setActiveRanking] = useState<"throw" | "drink" | "defense">("throw");
   // Team size is fixed to 2 players
   const teamSize = 2;
   const [teams, setTeams] = useState<Team[]>([]);
@@ -53,12 +69,28 @@ const BeerBall = () => {
   const [gameWinners, setGameWinners] = useState<Record<string, string | null>>({});
   const [enablePlayoffs, setEnablePlayoffs] = useState<boolean>(true);
   const [playoffSpots, setPlayoffSpots] = useState<number>(0);
-  const [seriesLength, setSeriesLength] = useState<number>(1); // best-of-n (1 = single game)
   const [playoffRounds, setPlayoffRounds] = useState<PlayoffRound[]>([]);
   const [playoffChampion, setPlayoffChampion] = useState<Team | null>(null);
   // When true, regular-season match schedule is locked and cannot be changed
 
   const [scheduleLocked, setScheduleLocked] = useState<boolean>(false);
+
+  // Initialize players from Beer Olympics if coming from there
+  useEffect(() => {
+    if (olympicsPlayers && players.length === 0) {
+      const names = olympicsPlayers.split(',').map(n => n.trim()).filter(Boolean);
+      const initialPlayers = names.map((name, index) => ({
+        id: `p-${Date.now()}-${index}`,
+        name: name,
+      }));
+      setPlayers(initialPlayers);
+      const ids = initialPlayers.map(p => p.id);
+      setThrowOrder(ids);
+      setDrinkOrder(ids);
+      setDefenseOrder(ids);
+      toast.success(`Loaded ${names.length} players from Beer Olympics`);
+    }
+  }, [olympicsPlayers]);
 
   useEffect(() => {
     const numTeams = teams.length;
@@ -110,6 +142,7 @@ const BeerBall = () => {
     // append to both rankings at the end
     setThrowOrder((prev) => [...prev, newPlayer.id]);
     setDrinkOrder((prev) => [...prev, newPlayer.id]);
+    setDefenseOrder((prev) => [...prev, newPlayer.id]);
     setNewPlayerName("");
     toast.success(`${trimmed} joined!`);
   };
@@ -119,6 +152,7 @@ const BeerBall = () => {
     setPlayers((prev) => prev.filter((p) => p.id !== id));
     setThrowOrder((prev) => prev.filter((pid) => pid !== id));
     setDrinkOrder((prev) => prev.filter((pid) => pid !== id));
+    setDefenseOrder((prev) => prev.filter((pid) => pid !== id));
     if (removed) toast.info(`${removed.name} removed`);
   };
 
@@ -138,11 +172,16 @@ const BeerBall = () => {
       const [moved] = items.splice(sourceIndex, 1);
       items.splice(destIndex, 0, moved);
       setThrowOrder(items);
-    } else {
+    } else if (activeRanking === "drink") {
       const items = Array.from(drinkOrder);
       const [moved] = items.splice(sourceIndex, 1);
       items.splice(destIndex, 0, moved);
       setDrinkOrder(items);
+    } else {
+      const items = Array.from(defenseOrder);
+      const [moved] = items.splice(sourceIndex, 1);
+      items.splice(destIndex, 0, moved);
+      setDefenseOrder(items);
     }
   };
 
@@ -174,7 +213,7 @@ const BeerBall = () => {
         generatedTeams[idx % generatedTeams.length].players.push(player);
       });
     } else {
-      // Skill-based: snake draft using two separate rankings (throw & drink)
+      // Skill-based: snake draft using three separate rankings (throw, drink & defense)
       const numTeams = Math.floor(players.length / teamSize);
       generatedTeams = Array.from({ length: numTeams }, (_, i) => ({
         id: `team-${i + 1}`,
@@ -193,13 +232,16 @@ const BeerBall = () => {
         .map((p) => {
           const ti = throwOrder.indexOf(p.id);
           const di = drinkOrder.indexOf(p.id);
+          const defe = defenseOrder.indexOf(p.id);
           const throwScore = scoreFromIndex(ti);
           const drinkScore = scoreFromIndex(di);
+          const defenseScore = scoreFromIndex(defe);
           return {
             ...p,
             throwScore,
             drinkScore,
-            avg: (throwScore + drinkScore) / 2,
+            defenseScore,
+            avg: (throwScore + drinkScore + defenseScore) / 3,
           };
         })
         .sort((a, b) => b.avg - a.avg);
@@ -565,6 +607,12 @@ const BeerBall = () => {
                   >
                     Drink Ranking
                   </button>
+                  <button
+                    onClick={() => setActiveRanking("defense")}
+                    className={`px-3 py-1 rounded ${activeRanking === "defense" ? "bg-white text-black" : "bg-muted text-muted-foreground"}`}
+                  >
+                    Defense Ranking
+                  </button>
                 </div>
 
                 <p className="text-xs text-muted-foreground mb-3">
@@ -574,7 +622,7 @@ const BeerBall = () => {
                 <DragDropContext onDragEnd={onDragEnd}>
                   <Droppable droppableId={activeRanking}>
                     {(provided) => {
-                      const order = activeRanking === "throw" ? throwOrder : drinkOrder;
+                      const order = activeRanking === "throw" ? throwOrder : activeRanking === "drink" ? drinkOrder : defenseOrder;
                       return (
                         <div {...provided.droppableProps} ref={provided.innerRef} className="space-y-2">
                           {order.map((pid, index) => {
@@ -714,7 +762,7 @@ const BeerBall = () => {
                 </div>
 
                 {enablePlayoffs && (
-                  <div className="grid md:grid-cols-2 gap-2">
+                  <div className="grid md:grid-cols-1 gap-2">
                     <div>
                       <Label className="text-foreground mb-2 block">Playoff Spots</Label>
                       <Input
@@ -727,32 +775,8 @@ const BeerBall = () => {
                         className="bg-muted border-border opacity-80 cursor-not-allowed"
                       />
                       <p className="text-xs text-muted-foreground mt-1">
-                        Auto: even → all teams, odd → drops the lowest seed.
+                        Auto: even → all teams, odd → drops the lowest seed. Playoffs are single-game matchups.
                       </p>
-                    </div>
-
-                    <div>
-                      <Label className="text-foreground mb-2 block">Playoff Series (best-of)</Label>
-                      <div className="flex gap-2">
-                        <button
-                          onClick={() => setSeriesLength(1)}
-                          className={`px-3 py-1 rounded ${seriesLength === 1 ? "bg-white text-black" : "bg-muted text-muted-foreground"}`}
-                        >
-                          1
-                        </button>
-                        <button
-                          onClick={() => setSeriesLength(3)}
-                          className={`px-3 py-1 rounded ${seriesLength === 3 ? "bg-white text-black" : "bg-muted text-muted-foreground"}`}
-                        >
-                          3
-                        </button>
-                        <button
-                          onClick={() => setSeriesLength(5)}
-                          className={`px-3 py-1 rounded ${seriesLength === 5 ? "bg-white text-black" : "bg-muted text-muted-foreground"}`}
-                        >
-                          5
-                        </button>
-                      </div>
                     </div>
                   </div>
                 )}
@@ -891,6 +915,94 @@ const BeerBall = () => {
                       <div className="text-lg font-bold">
                         Champion: {playoffChampion ? playoffChampion.name : "TBD"}
                       </div>
+                      
+                      {olympicsGameCode && olympicsEventId && playoffChampion && (
+                        <Button
+                          className="mt-4 w-full"
+                          onClick={async () => {
+                            try {
+                              // Calculate points for each player based on team performance
+                              const teamStandings: Record<string, number> = {};
+                              
+                              // Give points based on regular season wins
+                              teams.forEach((team) => {
+                                const wins = bracket.filter(g => gameWinners[g.id] === team.id).length;
+                                teamStandings[team.id] = wins;
+                              });
+                              
+                              // Extra points for making playoffs and winning
+                              if (playoffChampion) {
+                                teamStandings[playoffChampion.id] = (teamStandings[playoffChampion.id] || 0) + 10;
+                              }
+                              
+                              // Assign individual player scores based on their team
+                              const playerScores: Record<string, number> = {};
+                              teams.forEach((team) => {
+                                const teamScore = teamStandings[team.id] || 0;
+                                team.players.forEach((playerName) => {
+                                  playerScores[playerName] = teamScore;
+                                });
+                              });
+                              
+                              // Get event details and player IDs from Beer Olympics
+                              const { data: eventData } = await supabase
+                                .from('beer_olympics_events')
+                                .select('*, beer_olympics_games!inner(id)')
+                                .eq('id', olympicsEventId)
+                                .single();
+                              
+                              if (!eventData) throw new Error('Event not found');
+                              
+                              const { data: olympicsPlayersData } = await supabase
+                                .from('beer_olympics_players')
+                                .select('*')
+                                .eq('game_id', eventData.beer_olympics_games.id);
+                              
+                              if (!olympicsPlayersData) throw new Error('Players not found');
+                              
+                              // Create scores for each player
+                              const scoresToInsert = olympicsPlayersData.map(p => {
+                                const score = playerScores[p.name] || 0;
+                                return {
+                                  event_id: olympicsEventId,
+                                  player_id: p.id,
+                                  points: score,
+                                  notes: `Beer Ball Tournament - ${teams.find(t => t.players.includes(p.name))?.name || 'Unknown Team'}`,
+                                };
+                              });
+                              
+                              // Insert scores
+                              const { error: scoreErr } = await supabase
+                                .from('beer_olympics_scores')
+                                .insert(scoresToInsert);
+                              
+                              if (scoreErr) throw scoreErr;
+                              
+                              // Update player total points
+                              for (const p of olympicsPlayersData) {
+                                const score = playerScores[p.name] || 0;
+                                await supabase
+                                  .from('beer_olympics_players')
+                                  .update({ total_points: p.total_points + score })
+                                  .eq('id', p.id);
+                              }
+                              
+                              toast.success('Results sent to Beer Olympics!');
+                              
+                              // Navigate back to Beer Olympics
+                              setTimeout(() => {
+                                navigate(`/drunk/beer-olympics?code=${olympicsGameCode}`);
+                              }, 1500);
+                              
+                            } catch (err) {
+                              console.error('Send results error:', err);
+                              toast.error('Failed to send results');
+                            }
+                          }}
+                        >
+                          Send Results to Beer Olympics
+                        </Button>
+                      )}
                     </div>
                   </div>
                 </div>
