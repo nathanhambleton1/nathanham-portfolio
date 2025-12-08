@@ -9,8 +9,12 @@ import {
 } from "./ui/dialog";
 import { Button } from "./ui/button";
 import { Input } from "./ui/input";
+import SeatingChartSipPopup from "./SeatingChartSipPopup";
+import { LayoutGrid, List } from "lucide-react";
 
 type Player = { id: string; name: string; pending_sips?: number };
+
+const STORAGE_KEY_VIEW = "drunkopoly:sipViewMode";
 
 export default function SipPopup({
   open,
@@ -27,6 +31,31 @@ export default function SipPopup({
   onSubmit: (to: string | string[], sip_count: number) => void;
   allowSelf?: boolean;
 }) {
+  const [viewMode, setViewMode] = useState<'classic' | 'seating'>('classic');
+
+  // Load saved view mode when component mounts or opens
+  useEffect(() => {
+    if (open) {
+      try {
+        const saved = typeof window !== "undefined" ? localStorage.getItem(STORAGE_KEY_VIEW) : null;
+        setViewMode((saved === 'seating' ? 'seating' : 'classic') as 'classic' | 'seating');
+      } catch {
+        setViewMode('classic');
+      }
+    }
+  }, [open]);
+
+  const toggleViewMode = () => {
+    const newMode = viewMode === 'classic' ? 'seating' : 'classic';
+    setViewMode(newMode);
+    try {
+      if (typeof window !== "undefined") {
+        localStorage.setItem(STORAGE_KEY_VIEW, newMode);
+      }
+    } catch {
+      // ignore storage errors
+    }
+  };
   // build recipient list: include current player first, then the rest alphabetically
   const others = useMemo(() => {
     const list = [...players];
@@ -69,6 +98,20 @@ export default function SipPopup({
   }, [open]);
 
   if (!open) return null;
+
+  // If seating chart mode, render that instead
+  if (viewMode === 'seating') {
+    return (
+      <SeatingChartSipPopup
+        open={open}
+        onOpenChange={onOpenChange}
+        currentPlayer={currentPlayer}
+        players={players}
+        onSubmit={onSubmit}
+        onSwitchToClassic={toggleViewMode}
+      />
+    );
+  }
 
   // effective count: if user typed a value, use that (rounded), otherwise use slider
   const typedNum = rawSip.trim() !== "" ? Number(rawSip) || 0 : NaN;
@@ -162,9 +205,20 @@ export default function SipPopup({
         </div>
 
         <DialogFooter>
-            <div className="flex gap-2 w-full justify-end">
-              <Button variant="secondary" onClick={() => onOpenChange(false)}>Cancel</Button>
-              <Button onClick={handleSubmit} className="bg-primary" disabled={!(selectedIds && selectedIds.size > 0)}>Give</Button>
+            <div className="flex gap-2 w-full justify-between items-center">
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={toggleViewMode}
+                className="text-xs"
+              >
+                <LayoutGrid className="h-4 w-4 mr-1" />
+                Seating Chart
+              </Button>
+              <div className="flex gap-2">
+                <Button variant="secondary" onClick={() => onOpenChange(false)}>Cancel</Button>
+                <Button onClick={handleSubmit} className="bg-primary" disabled={!(selectedIds && selectedIds.size > 0)}>Give</Button>
+              </div>
             </div>
         </DialogFooter>
       </DialogContent>
