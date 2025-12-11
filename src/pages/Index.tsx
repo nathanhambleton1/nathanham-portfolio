@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import React, { Suspense } from 'react';
+import Header from '../components/Header';
 import SkillDetailModal from '../components/SkillDetailModal';
 import LiquorBotDetailModal from '../components/LiquorBotDetailModal';
 import skillsData from '../lib/skills';
@@ -163,6 +164,14 @@ const Index = () => {
       document.body.style.overflow = '';
     };
   }, [selectedSkill]);
+
+  useEffect(() => {
+    document.title = "Nathan Hambleton – Portfolio";
+    const favicon = document.querySelector("link[rel='icon']");
+    if (favicon) {
+      favicon.setAttribute("href", "/logo.png");
+    }
+  }, []);
 
   return (
     <div className="min-h-screen bg-black text-foreground">

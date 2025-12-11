@@ -50,10 +50,8 @@ const Index = () => {
   return (
     <div className="min-h-screen bg-gradient-bg pb-24">
       <div className="container max-w-2xl mx-auto px-4 py-16 pb-24">
-        {/* Header */}
         <header className="text-center mb-12 animate-slide-up pt-1 pb-8">
         </header>
-
         {/* Game Cards */}
         <div className="grid gap-4 mb-12">
           {games.map((game, index) => (

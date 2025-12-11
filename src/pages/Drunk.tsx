@@ -1,4 +1,6 @@
+import { useEffect } from "react";
 import { Routes, Route } from "react-router-dom";
+import Header from "../components/Header";
 import Index from "../../drunk/pages/Index";
 import PowerHour from "../../drunk/pages/PowerHour";
 import BeerPong from "../../drunk/pages/BeerPong";
@@ -11,21 +13,39 @@ import Rules from "../../drunk/pages/Rules";
 import NotFound from "../../drunk/pages/NotFound";
 import "../../drunk/index.css";
 
-const Drunk = () => (
-  <div className="min-h-screen">
-    <Routes>
-      <Route index element={<Index />} />
-      <Route path="drunkopoly" element={<Drunkopoly />} />
-      <Route path="drunkopoly/rules" element={<Rules />} />
-      <Route path="beer-olympics" element={<BeerOlympics />} />
-      <Route path="power-hour" element={<PowerHour />} />
-      <Route path="beer-pong" element={<BeerPong />} />
-      <Route path="kings-cup" element={<KingsCup />} />
-      <Route path="sip-roulette" element={<SipRoulette />} />
-      <Route path="beer-ball" element={<BeerBall />} />
-      <Route path="*" element={<NotFound />} />
-    </Routes>
-  </div>
-);
+
+const Drunk = () => {
+  useEffect(() => {
+    document.title = "Drinking Games";
+    // Change favicon
+    const favicon = document.querySelector("link[rel='icon']");
+    if (favicon) {
+      favicon.setAttribute("href", "/drunk_logo.png");
+    }
+    return () => {
+      document.title = "Nathan Hambleton – Portfolio";
+      if (favicon) {
+        favicon.setAttribute("href", "/logo.png");
+      }
+    };
+  }, []);
+
+  return (
+    <div className="min-h-screen">
+      <Routes>
+        <Route index element={<Index />} />
+        <Route path="drunkopoly" element={<Drunkopoly />} />
+        <Route path="drunkopoly/rules" element={<Rules />} />
+        <Route path="beer-olympics" element={<BeerOlympics />} />
+        <Route path="power-hour" element={<PowerHour />} />
+        <Route path="beer-pong" element={<BeerPong />} />
+        <Route path="kings-cup" element={<KingsCup />} />
+        <Route path="sip-roulette" element={<SipRoulette />} />
+        <Route path="beer-ball" element={<BeerBall />} />
+        <Route path="*" element={<NotFound />} />
+      </Routes>
+    </div>
+  );
+};
 
 export default Drunk;

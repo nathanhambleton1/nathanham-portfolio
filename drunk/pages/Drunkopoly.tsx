@@ -1,7 +1,7 @@
 import { useEffect, useState, useRef } from "react";
 import PayPopup from "../components/PayPopup";
 import JailPopup from "../components/JailPopup";
-import { UserPlus, DollarSign, Users, Percent, Crown, PiggyBank, Clock, Copy } from "lucide-react";
+import { UserPlus, DollarSign, Users, Percent, Crown, PiggyBank, Clock, Copy, Settings } from "lucide-react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "../components/ui/dialog";
 import CollectPopup from "../components/CollectPopup";
 import SipPopup from "../components/SipPopup";
@@ -20,6 +20,7 @@ import {
 import { Input } from "../components/ui/input";
 import { Button } from "../components/ui/button";
 import { Popover, PopoverTrigger, PopoverContent } from "../components/ui/popover";
+import { Switch } from "../components/ui/switch";
 import {
   AlertDialog,
   AlertDialogTrigger,
@@ -47,6 +48,7 @@ const Drunkopoly = () => {
   const STORAGE_KEY_CODE = "drunkopoly:gameCode";
   const STORAGE_KEY_NAME = "drunkopoly:name";
   const STORAGE_KEY_RECENT = "drunkopoly:recentGames";
+  const STORAGE_KEY_SOUND = "drunkopoly:soundEnabled";
 
   const [screen, setScreen] = useState<Screen>("join-create");
   const [gameCode, setGameCode] = useState("");
@@ -82,6 +84,14 @@ const Drunkopoly = () => {
   const [blockedPaymentMessage, setBlockedPaymentMessage] = useState<string | null>(null);
   const prevBalanceRef = useRef<number | null>(null);
   const navigate = useNavigate();
+  const [soundEnabled, setSoundEnabled] = useState<boolean>(() => {
+    try {
+      const stored = typeof window !== "undefined" ? localStorage.getItem("drunkopoly:soundEnabled") : null;
+      return stored !== null ? stored === "true" : true;
+    } catch {
+      return true;
+    }
+  });
   // Show brief notification when the current player receives a money event.
   // Subscribe to the `game_events` view (same source ActivityLog uses) and show
   // a toast containing the sender name + optional note.
@@ -1754,78 +1764,18 @@ const Drunkopoly = () => {
             currentPlayer={player}
             game={game}
             onRemovePlayer={handleRemovePlayer}
+            soundEnabled={soundEnabled}
+            onToggleSound={(enabled) => {
+              setSoundEnabled(enabled);
+              try {
+                localStorage.setItem("drunkopoly:soundEnabled", String(enabled));
+              } catch (e) {
+                // ignore localStorage errors
+              }
+            }}
           />
         </div>
       </div>
-
-      {/* Lockdown overlay when player has pending sips */}
-      {player?.pending_sips > 0 && (
-        <div className="fixed inset-0 z-40 pointer-events-auto">
-          <div className="absolute inset-0 bg-black" />
-          <div className="relative z-40 min-h-screen flex items-center justify-center px-6">
-            <div className="max-w-lg w-full text-center text-white">
-              <div className="flex flex-col items-center gap-6 py-12">
-                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" className="w-16 h-16 text-white" fill="none" stroke="currentColor" strokeWidth={1.5}>
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M12 15v2" />
-                  <rect x="4" y="10" width="16" height="10" rx="2" strokeWidth={1.5} />
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M7 10V8a5 5 0 0110 0v2" />
-                </svg>
-                <div className="text-2xl font-bold">You have {player.pending_sips} sip{player.pending_sips > 1 ? 's' : ''}</div>
-                <p className="mt-3 text-lg text-white/90">Finish your sips to continue playing.</p>
-                <p className="mt-1 text-sm text-white/70">You cannot collect money until you've finished.</p>
-                <div className="w-full mt-4">
-                  <Button
-                    className="w-full"
-                    onClick={async () => {
-                      if (!game || !player) return;
-                      try {
-                        setCompletingSips(true);
-                        await completeSips(game.code, player.id);
-                        // Refresh state
-                        const players = await fetchPlayers(game.code);
-                        setPlayersList(players);
-                        const updatedPlayer = players.find((p: any) => p.id === player.id);
-                        if (updatedPlayer) setPlayer(updatedPlayer);
-                      } catch (err: any) {
-                        console.error('Complete sips error:', err);
-                        alert(err.message || 'Failed to complete sips');
-                      } finally {
-                        setCompletingSips(false);
-                      }
-                    }}
-                    disabled={completingSips}
-                  >
-                    {completingSips ? (
-                      <>
-                        Processing...
-                        <svg
-                          xmlns="http://www.w3.org/2000/svg"
-                          className="h-5 w-5 inline ml-2"
-                          viewBox="0 0 24 24"
-                          fill="none"
-                          stroke="currentColor"
-                          strokeWidth={2}
-                          style={{
-                            verticalAlign: 'middle',
-                            animation: 'spin 1s linear infinite'
-                          }}
-                        >
-                          <style>{`@keyframes spin { 100% { transform: rotate(360deg); } }`}</style>
-                          <circle cx="12" cy="12" r="10" strokeOpacity="0.25" />
-                          <path d="M22 12a10 10 0 00-10-10" strokeLinecap="round" />
-                        </svg>
-                      </>
-                    ) : (
-                      'Done'
-                    )}
-                    
-                  </Button>
-                </div>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
 
       <div className="flex-1 flex flex-col items-center justify-center">
         <div className="mb-8">
@@ -1833,7 +1783,7 @@ const Drunkopoly = () => {
             Current Balance
           </div>
           <div className="text-6xl font-extrabold text-primary text-center">
-            <AnimatedNumber value={player?.balance ?? game?.initial_balance ?? 1500} />
+            <AnimatedNumber value={player?.balance ?? game?.initial_balance ?? 1500} soundEnabled={soundEnabled} />
           </div>
         </div>
 
@@ -2124,6 +2074,75 @@ const Drunkopoly = () => {
           onUseCard={() => useGetOutCard()}
         />
 
+        {/* Lockdown overlay when player has pending sips - rendered after jail so it appears on top */}
+        {player?.pending_sips > 0 && (
+          <div className="fixed inset-0 z-[99999] pointer-events-auto">
+            <div className="absolute inset-0 bg-black" />
+            <div className="relative z-[99999] min-h-screen flex items-center justify-center px-6">
+              <div className="max-w-lg w-full text-center text-white">
+                <div className="flex flex-col items-center gap-6 py-12">
+                  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" className="w-16 h-16 text-white" fill="none" stroke="currentColor" strokeWidth={1.5}>
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M12 15v2" />
+                    <rect x="4" y="10" width="16" height="10" rx="2" strokeWidth={1.5} />
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M7 10V8a5 5 0 0110 0v2" />
+                  </svg>
+                  <div className="text-2xl font-bold">You have {player.pending_sips} sip{player.pending_sips > 1 ? 's' : ''}</div>
+                  <p className="mt-3 text-lg text-white/90">Finish your sips to continue playing.</p>
+                  <p className="mt-1 text-sm text-white/70">You cannot collect money until you've finished.</p>
+                  <div className="w-full mt-4">
+                    <Button
+                      className="w-full"
+                      onClick={async () => {
+                        if (!game || !player) return;
+                        try {
+                          setCompletingSips(true);
+                          await completeSips(game.code, player.id);
+                          // Refresh state
+                          const players = await fetchPlayers(game.code);
+                          setPlayersList(players);
+                          const updatedPlayer = players.find((p: any) => p.id === player.id);
+                          if (updatedPlayer) setPlayer(updatedPlayer);
+                        } catch (err: any) {
+                          console.error('Complete sips error:', err);
+                          alert(err.message || 'Failed to complete sips');
+                        } finally {
+                          setCompletingSips(false);
+                        }
+                      }}
+                      disabled={completingSips}
+                    >
+                      {completingSips ? (
+                        <>
+                          Processing...
+                          <svg
+                            xmlns="http://www.w3.org/2000/svg"
+                            className="h-5 w-5 inline ml-2"
+                            viewBox="0 0 24 24"
+                            fill="none"
+                            stroke="currentColor"
+                            strokeWidth={2}
+                            style={{
+                              verticalAlign: 'middle',
+                              animation: 'spin 1s linear infinite'
+                            }}
+                          >
+                            <style>{`@keyframes spin { 100% { transform: rotate(360deg); } }`}</style>
+                            <circle cx="12" cy="12" r="10" strokeOpacity="0.25" />
+                            <path d="M22 12a10 10 0 00-10-10" strokeLinecap="round" />
+                          </svg>
+                        </>
+                      ) : (
+                        'Done'
+                      )}
+                      
+                    </Button>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+
         <TradeLockOverlay
           open={!!game?.trade_locked}
           expiresAt={game?.trade_timer_expires_at}
@@ -2153,7 +2172,7 @@ function Section({
   );
 }
 
-function AnimatedNumber({ value }: { value: number }) {
+function AnimatedNumber({ value, soundEnabled = true }: { value: number; soundEnabled?: boolean }) {
   const [display, setDisplay] = useState<number>(value ?? 0);
   const prevRef = useRef<number>(value ?? 0);
   const audioRef = useRef<HTMLAudioElement | null>(null);
@@ -2184,7 +2203,7 @@ function AnimatedNumber({ value }: { value: number }) {
 
     // If increase: play sound now and delay animation so audio starts
     const delayMs = 500;
-    if (end > start) {
+    if (end > start && soundEnabled) {
       try {
         const a = audioRef.current;
         if (a) {
@@ -2269,8 +2288,8 @@ function AnimatedNumber({ value }: { value: number }) {
   );
 }
 
-function GameCodePopover({ code, onLogout, players, currentPlayer, game, onRemovePlayer }: { code: string; onLogout?: () => void; players?: any[]; currentPlayer?: any; game?: any; onRemovePlayer?: (id: string) => Promise<void> }) {
-  const [playersOpen, setPlayersOpen] = useState(false);
+function GameCodePopover({ code, onLogout, players, currentPlayer, game, onRemovePlayer, soundEnabled, onToggleSound }: { code: string; onLogout?: () => void; players?: any[]; currentPlayer?: any; game?: any; onRemovePlayer?: (id: string) => Promise<void>; soundEnabled?: boolean; onToggleSound?: (enabled: boolean) => void }) {
+  const [settingsOpen, setSettingsOpen] = useState(false);
   const [confirmOpen, setConfirmOpen] = useState(false);
   const [pendingRemove, setPendingRemove] = useState<{ id: string; name?: string } | null>(null);
 
@@ -2337,9 +2356,9 @@ function GameCodePopover({ code, onLogout, players, currentPlayer, game, onRemov
             <Copy size={16} />
             Invite Link
           </Button>
-          <Button variant="secondary" className="w-full mt-1" onClick={() => setPlayersOpen(true)}>
-            <Users size={16} />
-            Players
+          <Button variant="secondary" className="w-full mt-1" onClick={() => setSettingsOpen(true)}>
+            <Settings size={16} />
+            Settings
           </Button>
           <Button variant="destructive" className="w-full mt-1 ring-2 ring-red-500/10 shadow-sm shadow-red-500/20" onClick={onLogout}>
             Log Out
@@ -2347,37 +2366,62 @@ function GameCodePopover({ code, onLogout, players, currentPlayer, game, onRemov
         </div>
       </PopoverContent>
     </Popover>
-    <Dialog open={playersOpen} onOpenChange={setPlayersOpen}>
+    <Dialog open={settingsOpen} onOpenChange={setSettingsOpen}>
       <DialogContent className="max-w-lg">
         <DialogHeader>
-          <DialogTitle>Players</DialogTitle>
+          <DialogTitle>Settings</DialogTitle>
         </DialogHeader>
-        <div className="space-y-2 mt-2">
-          {(players && players.length > 0) ? (
-            players.map((p: any) => {
-              const isSelf = currentPlayer && String(currentPlayer.id) === String(p.id);
-              const isCommissioner = !!p.is_commissioner;
-              const canRemove = currentPlayer && (currentPlayer.is_commissioner || currentPlayer.is_commissioner === true) && !isCommissioner && !isSelf;
-              return (
-                <div key={p.id} className="flex items-center gap-3 py-2 px-2 border rounded">
-                  <div className="flex-1">
-                    <div className="font-medium">{p.name}{isCommissioner ? ' • Commissioner' : isSelf ? ' • You' : ''}</div>
-                    <div className="text-sm text-muted-foreground">Balance: ${Number(p.balance || 0).toLocaleString()}</div>
-                  </div>
-                  <div>
-                    <Button size="sm" variant="destructive" disabled={!canRemove} onClick={() => requestRemove(p.id, p.name)}>
-                      Remove
-                    </Button>
-                  </div>
-                </div>
-              );
-            })
-          ) : (
-            <div className="text-sm text-muted-foreground">No players found.</div>
-          )}
+        
+        {/* Sound Settings Section */}
+        <div className="space-y-4 mt-2">
+          <div className="pb-4 border-b">
+            <h3 className="text-sm font-semibold mb-3">Sound</h3>
+            <div className="flex items-center justify-between py-2 px-3 rounded-lg bg-muted/30">
+              <div className="flex-1">
+                <div className="font-medium text-sm">App Sounds</div>
+                <div className="text-xs text-muted-foreground">Play sounds for money changes</div>
+              </div>
+              <Switch
+                checked={soundEnabled ?? true}
+                onCheckedChange={(checked) => {
+                  if (onToggleSound) onToggleSound(checked);
+                }}
+              />
+            </div>
+          </div>
+          
+          {/* Players Section */}
+          <div>
+            <h3 className="text-sm font-semibold mb-3">Players</h3>
+            <div className="space-y-2">
+              {(players && players.length > 0) ? (
+                players.map((p: any) => {
+                  const isSelf = currentPlayer && String(currentPlayer.id) === String(p.id);
+                  const isCommissioner = !!p.is_commissioner;
+                  const canRemove = currentPlayer && (currentPlayer.is_commissioner || currentPlayer.is_commissioner === true) && !isCommissioner && !isSelf;
+                  return (
+                    <div key={p.id} className="flex items-center gap-3 py-2 px-2 border rounded">
+                      <div className="flex-1">
+                        <div className="font-medium">{p.name}{isCommissioner ? ' • Commissioner' : isSelf ? ' • You' : ''}</div>
+                        <div className="text-sm text-muted-foreground">Balance: ${Number(p.balance || 0).toLocaleString()}</div>
+                      </div>
+                      <div>
+                        <Button size="sm" variant="destructive" disabled={!canRemove} onClick={() => requestRemove(p.id, p.name)}>
+                          Remove
+                        </Button>
+                      </div>
+                    </div>
+                  );
+                })
+              ) : (
+                <div className="text-sm text-muted-foreground">No players found.</div>
+              )}
+            </div>
+          </div>
         </div>
+        
         <DialogFooter>
-          <Button onClick={() => setPlayersOpen(false)}>Close</Button>
+          <Button onClick={() => setSettingsOpen(false)}>Close</Button>
         </DialogFooter>
       </DialogContent>
     </Dialog>

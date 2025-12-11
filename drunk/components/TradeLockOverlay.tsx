@@ -20,13 +20,40 @@ export default function TradeLockOverlay({
 }) {
   const [now, setNow] = useState(() => Date.now());
   const [flash, setFlash] = useState(false);
+  const audioRef = React.useRef<HTMLAudioElement | null>(null);
+  
+  // Initialize alarm audio on mount
+  useEffect(() => {
+    try {
+      const a = new Audio('/alarm.mp3');
+      a.preload = 'auto';
+      a.volume = 0.85;
+      a.loop = true;
+      audioRef.current = a;
+      // Load the audio immediately
+      a.load();
+    } catch (e) {
+      console.warn('Alarm audio init failed', e);
+    }
+    
+    return () => {
+      if (audioRef.current) {
+        try {
+          audioRef.current.pause();
+          audioRef.current.currentTime = 0;
+        } catch (e) {}
+      }
+    };
+  }, []);
+
+  // Update timer display
   useEffect(() => {
     if (!open) return;
     const t = setInterval(() => setNow(Date.now()), 250);
     return () => clearInterval(t);
   }, [open]);
 
-  // fast flash toggle when expired to create a rapid pulse/glow effect
+  // Handle expiration: flash effect and alarm sound
   useEffect(() => {
     if (!open) return;
     const expires = expiresAt ? new Date(expiresAt).getTime() : null;
@@ -35,11 +62,34 @@ export default function TradeLockOverlay({
     if (expiredNow) {
       setFlash(true);
       iv = window.setInterval(() => setFlash((v) => !v), 200);
+      // Start alarm audio on expiry
+      try {
+        const a = audioRef.current;
+        if (a) {
+          a.currentTime = 0;
+          // Use play() with promise handling for better browser compatibility
+          const playPromise = a.play();
+          if (playPromise !== undefined) {
+            playPromise.catch((err) => {
+              console.warn('Alarm play failed (may be blocked by browser):', err);
+            });
+          }
+        }
+      } catch (err) {
+        console.warn('Alarm play error:', err);
+      }
     } else {
       setFlash(false);
+      // Stop alarm if running
+      if (audioRef.current) {
+        try {
+          audioRef.current.pause();
+          audioRef.current.currentTime = 0;
+        } catch (e) {}
+      }
     }
     return () => { if (iv) clearInterval(iv); };
-  }, [open, expiresAt]);
+  }, [open, expiresAt, now]);
 
   if (!open) return null;
 
@@ -60,10 +110,17 @@ export default function TradeLockOverlay({
 
           <div className="text-2xl font-bold mb-2">Trade Timer Countdown</div>
           <h2
-            className={`text-5xl font-extrabold mb-2 ${expired ? 'text-red-500' : 'text-white'}`}
+            className={`text-5xl font-extrabold mb-2 transition-all duration-300 ${expired ? 'text-red-600' : 'text-white'}`}
             style={
               expired
-                ? (flash ? { textShadow: '0 0 28px rgba(239,68,68,0.95)', transform: 'scale(1.04)' } : { textShadow: '0 0 8px rgba(239,68,68,0.6)' })
+                ? (flash 
+                    ? { 
+                        textShadow: '0 0 40px rgba(220,38,38,1), 0 0 20px rgba(220,38,38,0.8), 0 0 10px rgba(220,38,38,0.6)', 
+                        transform: 'scale(1.05)' 
+                      } 
+                    : { 
+                        textShadow: '0 0 20px rgba(220,38,38,0.7), 0 0 10px rgba(220,38,38,0.5)' 
+                      })
                 : undefined
             }
           >
@@ -77,9 +134,17 @@ export default function TradeLockOverlay({
 
           <div className="w-full">
             <button
-              className={`w-full px-4 py-3 rounded text-lg bg-white text-black border ${expired ? 'border-red-500' : 'border-transparent'}`}
-              style={expired && flash ? { boxShadow: '0 0 18px rgba(239,68,68,0.75)' } : undefined}
-              onClick={onDone}
+              className={`w-full px-4 py-3 rounded text-lg bg-white text-black border border-transparent`}
+              onClick={() => {
+                // stop alarm when user dismisses
+                if (audioRef.current) {
+                  try {
+                    audioRef.current.pause();
+                    audioRef.current.currentTime = 0;
+                  } catch (e) {}
+                }
+                onDone();
+              }}
             >
               Done
             </button>

@@ -1,7 +1,8 @@
 import React, { useState, useRef, useEffect, useLayoutEffect } from "react";
 import { X, List } from "lucide-react";
 import { Button } from "./ui/button";
-import { Dialog, DialogContent } from "./ui/dialog";
+import { Dialog, DialogPortal, DialogOverlay } from "./ui/dialog";
+import * as DialogPrimitive from "@radix-ui/react-dialog";
 
 type Player = { id: string; name: string; pending_sips?: number };
 
@@ -433,7 +434,9 @@ export default function SeatingChartSipPopup({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="!animate-none">
+      <DialogPortal>
+        <DialogOverlay className="fixed inset-0 z-[99999] bg-black/80" />
+        <DialogPrimitive.Content className="fixed left-[50%] top-[50%] z-[99999] grid mx-4 w-full max-w-2xl translate-x-[-50%] translate-y-[-50%] gap-4 border bg-background p-6 shadow-lg sm:rounded-lg">
         <div className="space-y-0">
           <div className="flex items-center justify-between mb-4">
             <h2 className="text-2xl font-bold">Give Sips</h2>
@@ -458,9 +461,8 @@ export default function SeatingChartSipPopup({
             const player = players.find(p => p.id === pos.id);
             if (!player) return null;
 
-            const hasTapEntry = tapCounts.has(player.id);
             const tapCount = tapCounts.get(player.id) ?? 0;
-            const displayValue = hasTapEntry ? tapCount : player.pending_sips;
+            const currentSips = player.pending_sips ?? 0;
             const isDragging = draggedId === player.id;
 
             return (
@@ -497,21 +499,30 @@ export default function SeatingChartSipPopup({
                   }`}
                   style={{ minWidth: 56 }}
                 >
-                  <div className="whitespace-nowrap text-center">{player.name}</div>
-
-                  {(displayValue !== undefined && displayValue !== null) && (
-                    <div className="mt-2 flex justify-center">
-                      <div
-                        className={`inline-flex items-center justify-center rounded-full min-w-[1.5rem] h-6 px-2 text-xs font-bold ${
-                          (typeof displayValue === 'number' && displayValue > 0)
-                            ? 'bg-destructive text-destructive-foreground animate-bounce'
-                            : 'bg-transparent text-muted-foreground border border-border'
-                        }`}
-                      >
-                        {displayValue}
-                      </div>
+                  {/* Top-right badge for pending sips being added */}
+                  {tapCount > 0 && (
+                    <div
+                      className="absolute top-0 right-0 -translate-y-1/2 bg-destructive text-destructive-foreground rounded-full min-w-[1.75rem] h-7 px-2 flex items-center justify-center text-xs font-bold shadow-lg animate-bounce border-2 border-background z-10"
+                      style={{ transform: 'translate(50%, -50%)' }}
+                    >
+                      +{tapCount}
                     </div>
                   )}
+
+                  <div className="whitespace-nowrap text-center">{player.name}</div>
+
+                  {/* Current sip count - always displayed */}
+                  <div className="mt-2 flex justify-center">
+                    <div
+                      className={`inline-flex items-center justify-center rounded-full min-w-[1.5rem] h-6 px-2 text-xs font-bold ${
+                        currentSips > 0
+                          ? 'bg-muted text-foreground border border-border'
+                          : 'bg-transparent text-muted-foreground border border-border'
+                      }`}
+                    >
+                      {currentSips}
+                    </div>
+                  </div>
                 </div>
               </div>
             );
@@ -540,12 +551,13 @@ export default function SeatingChartSipPopup({
               variant="secondary"
               onClick={() => onOpenChange(false)}
             >
-              Cancel
+              Close
             </Button>
           </div>
         </div>
       </div>
-      </DialogContent>
+        </DialogPrimitive.Content>
+      </DialogPortal>
     </Dialog>
   );
 }

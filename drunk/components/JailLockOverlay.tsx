@@ -22,9 +22,9 @@ export default function JailLockOverlay({
   if (!open) return null;
 
   return (
-    <div className="fixed inset-0 z-50 pointer-events-auto">
+    <div className="fixed inset-0 z-[9999] pointer-events-auto">
       <div className="absolute inset-0 bg-black" />
-      <div className="relative z-40 min-h-screen flex items-center justify-center px-6">
+      <div className="relative z-[9999] min-h-screen flex items-center justify-center px-6">
         <div className="max-w-lg w-full text-center text-white p-12 rounded">
           <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" className="w-16 h-16 mx-auto mb-4 text-white" fill="none" stroke="currentColor" strokeWidth={1.5}>
             <rect x="3" y="10" width="18" height="11" rx="2" />
