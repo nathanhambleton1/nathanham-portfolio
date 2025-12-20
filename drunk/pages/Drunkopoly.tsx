@@ -1,7 +1,8 @@
 import { useEffect, useState, useRef } from "react";
 import PayPopup from "../components/PayPopup";
 import JailPopup from "../components/JailPopup";
-import { UserPlus, DollarSign, Users, Percent, Crown, PiggyBank, Clock, Copy, Settings } from "lucide-react";
+import { UserPlus, DollarSign, Users, Percent, Crown, PiggyBank, Clock, Copy, Settings, QrCode } from "lucide-react";
+import { QRCodeSVG } from "qrcode.react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "../components/ui/dialog";
 import CollectPopup from "../components/CollectPopup";
 import SipPopup from "../components/SipPopup";
@@ -2291,6 +2292,7 @@ function AnimatedNumber({ value, soundEnabled = true }: { value: number; soundEn
 function GameCodePopover({ code, onLogout, players, currentPlayer, game, onRemovePlayer, soundEnabled, onToggleSound }: { code: string; onLogout?: () => void; players?: any[]; currentPlayer?: any; game?: any; onRemovePlayer?: (id: string) => Promise<void>; soundEnabled?: boolean; onToggleSound?: (enabled: boolean) => void }) {
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [confirmOpen, setConfirmOpen] = useState(false);
+  const [qrCodeOpen, setQrCodeOpen] = useState(false);
   const [pendingRemove, setPendingRemove] = useState<{ id: string; name?: string } | null>(null);
 
   const requestRemove = (id: string, name?: string) => {
@@ -2352,6 +2354,10 @@ function GameCodePopover({ code, onLogout, players, currentPlayer, game, onRemov
       </PopoverTrigger>
       <PopoverContent align="end" className="w-56">
         <div className="flex flex-col gap-2">
+          <Button variant="secondary" className="w-full mt-1" onClick={() => setQrCodeOpen(true)}>
+            <QrCode size={16} />
+            QR Code
+          </Button>
           <Button variant="secondary" className="w-full mt-1" onClick={handleCopyInvite}>
             <Copy size={16} />
             Invite Link
@@ -2366,6 +2372,32 @@ function GameCodePopover({ code, onLogout, players, currentPlayer, game, onRemov
         </div>
       </PopoverContent>
     </Popover>
+    <Dialog open={qrCodeOpen} onOpenChange={setQrCodeOpen}>
+      <DialogContent className="max-w-sm">
+        <DialogHeader>
+          <DialogTitle>Invite QR Code</DialogTitle>
+        </DialogHeader>
+        <div className="flex flex-col items-center justify-center py-6">
+          <div className="bg-white p-4 rounded-lg">
+            <QRCodeSVG 
+              value={code} 
+              size={256}
+              level="H"
+              includeMargin={true}
+            />
+          </div>
+          <p className="text-center text-sm text-muted-foreground mt-4">
+            Scan this code to join the game
+          </p>
+          <p className="text-center font-mono font-bold text-lg mt-2">
+            {code}
+          </p>
+        </div>
+        <DialogFooter>
+          <Button onClick={() => setQrCodeOpen(false)}>Close</Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
     <Dialog open={settingsOpen} onOpenChange={setSettingsOpen}>
       <DialogContent className="max-w-lg">
         <DialogHeader>
