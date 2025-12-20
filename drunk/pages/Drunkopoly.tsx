@@ -2380,7 +2380,7 @@ function GameCodePopover({ code, onLogout, players, currentPlayer, game, onRemov
         <div className="flex flex-col items-center justify-center py-6">
           <div className="bg-white p-4 rounded-lg">
             <QRCodeSVG 
-              value={code} 
+              value={`${window.location.origin}${window.location.pathname}?invite=${encodeURIComponent(code)}`} 
               size={256}
               level="H"
               includeMargin={true}
