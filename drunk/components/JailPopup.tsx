@@ -8,12 +8,14 @@ export default function JailPopup({
   currentPlayer,
   players = [],
   onSubmit,
+  showBalances = true,
 }: {
   open: boolean;
   onOpenChange: (v: boolean) => void;
   currentPlayer: any | null;
   players?: any[];
   onSubmit: (targetPlayerId: string) => void;
+  showBalances?: boolean;
 }) {
   const list = useMemo(() => {
     if (!players) return [];
@@ -55,7 +57,9 @@ export default function JailPopup({
                   onChange={() => setSelected(p.id)}
                 />
                 <div className="flex-1">{p.name}{p.id === currentPlayer?.id ? ' (you)' : ''}</div>
-                <div className="text-sm text-muted-foreground">${(p.balance ?? 0).toLocaleString()}</div>
+                {(showBalances || p.id === currentPlayer?.id) && (
+                  <div className="text-sm text-muted-foreground">${(p.balance ?? 0).toLocaleString()}</div>
+                )}
               </label>
             ))}
           </div>

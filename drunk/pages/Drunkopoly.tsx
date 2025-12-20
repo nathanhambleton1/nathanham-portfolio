@@ -2074,6 +2074,7 @@ const Drunkopoly = () => {
           onOpenChange={(v) => setJailModalOpen(v)}
           currentPlayer={player}
           players={playersList}
+          showBalances={game?.show_balances ?? true}
           onSubmit={async (targetId) => {
             await sendPlayerToJail(targetId);
           }}
