@@ -62,6 +62,7 @@ const Drunkopoly = () => {
   const [tempInitialBalance, setTempInitialBalance] = useState<string>("1500");
   const [tempPassGoAmount, setTempPassGoAmount] = useState<string>("200");
   const [tempFreeParkingBalance, setTempFreeParkingBalance] = useState<string>("0");
+  const [tempShowBalances, setTempShowBalances] = useState<boolean>(true);
   const [game, setGame] = useState<any | null>(null);
   const [player, setPlayer] = useState<any | null>(null);
   const [recentGames, setRecentGames] = useState<string[]>([]);
@@ -1637,6 +1638,7 @@ const Drunkopoly = () => {
                       initial_balance: Number(tempInitialBalance || 0),
                       pass_go_amount: Number(tempPassGoAmount || 0),
                       free_parking_balance: Number(tempFreeParkingBalance || 0),
+                      show_balances: tempShowBalances,
                     }])
                     .select()
                     .single();
@@ -1722,6 +1724,17 @@ const Drunkopoly = () => {
                     if (v === '' || /^[0-9]*$/.test(v)) setTempFreeParkingBalance(v);
                   }}
                 />
+
+                <div className="flex items-center justify-between py-2 px-3 rounded-lg bg-muted/30 mt-2">
+                  <div className="flex-1">
+                    <div className="font-medium text-sm">Show Player Balances</div>
+                    <div className="text-xs text-muted-foreground">Allow players to see each other's money</div>
+                  </div>
+                  <Switch
+                    checked={tempShowBalances}
+                    onCheckedChange={(checked) => setTempShowBalances(checked)}
+                  />
+                </div>
               </div>
 
               <div className="flex gap-2 mt-4">
@@ -1766,6 +1779,7 @@ const Drunkopoly = () => {
             game={game}
             onRemovePlayer={handleRemovePlayer}
             soundEnabled={soundEnabled}
+            showBalances={game?.show_balances ?? true}
             onToggleSound={(enabled) => {
               setSoundEnabled(enabled);
               try {
@@ -1845,6 +1859,7 @@ const Drunkopoly = () => {
           mode={payMode}
           currentPlayer={player}
           players={playersList}
+          showBalances={game?.show_balances ?? true}
           onSubmit={async (payments, opts) => {
             if (!game || !player) return;
             try {
@@ -2289,7 +2304,7 @@ function AnimatedNumber({ value, soundEnabled = true }: { value: number; soundEn
   );
 }
 
-function GameCodePopover({ code, onLogout, players, currentPlayer, game, onRemovePlayer, soundEnabled, onToggleSound }: { code: string; onLogout?: () => void; players?: any[]; currentPlayer?: any; game?: any; onRemovePlayer?: (id: string) => Promise<void>; soundEnabled?: boolean; onToggleSound?: (enabled: boolean) => void }) {
+function GameCodePopover({ code, onLogout, players, currentPlayer, game, onRemovePlayer, soundEnabled, onToggleSound, showBalances = true }: { code: string; onLogout?: () => void; players?: any[]; currentPlayer?: any; game?: any; onRemovePlayer?: (id: string) => Promise<void>; soundEnabled?: boolean; onToggleSound?: (enabled: boolean) => void; showBalances?: boolean }) {
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [confirmOpen, setConfirmOpen] = useState(false);
   const [qrCodeOpen, setQrCodeOpen] = useState(false);
@@ -2431,11 +2446,15 @@ function GameCodePopover({ code, onLogout, players, currentPlayer, game, onRemov
                   const isSelf = currentPlayer && String(currentPlayer.id) === String(p.id);
                   const isCommissioner = !!p.is_commissioner;
                   const canRemove = currentPlayer && (currentPlayer.is_commissioner || currentPlayer.is_commissioner === true) && !isCommissioner && !isSelf;
+                  // Show balance if showBalances is enabled OR if this is the current player (always show your own balance)
+                  const canSeeBalance = showBalances || isSelf;
                   return (
                     <div key={p.id} className="flex items-center gap-3 py-2 px-2 border rounded">
                       <div className="flex-1">
                         <div className="font-medium">{p.name}{isCommissioner ? ' • Commissioner' : isSelf ? ' • You' : ''}</div>
-                        <div className="text-sm text-muted-foreground">Balance: ${Number(p.balance || 0).toLocaleString()}</div>
+                        {canSeeBalance && (
+                          <div className="text-sm text-muted-foreground">Balance: ${Number(p.balance || 0).toLocaleString()}</div>
+                        )}
                       </div>
                       <div>
                         <Button size="sm" variant="destructive" disabled={!canRemove} onClick={() => requestRemove(p.id, p.name)}>

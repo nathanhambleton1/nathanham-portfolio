@@ -18,6 +18,7 @@ export default function PayPopup({
   mode,
   currentPlayer,
   players = [],
+  showBalances = true,
   onSubmit,
 }: {
   open: boolean;
@@ -25,6 +26,7 @@ export default function PayPopup({
   mode: "bank" | "players" | "tax" | null;
   currentPlayer: Player | null;
   players?: Player[];
+  showBalances?: boolean;
   onSubmit: (payments: { to: string | null; amount: number }[], opts?: { freeParking?: boolean; description?: string | null }) => void;
 }) {
   // Free parking is always used for tax mode
@@ -130,7 +132,9 @@ export default function PayPopup({
                       onChange={() => togglePlayer(p.id)}
                     />
                     <div className="flex-1">{p.name}</div>
-                    <div className="text-sm text-muted-foreground">${(p.balance ?? 0).toLocaleString()}</div>
+                    {showBalances && (
+                      <div className="text-sm text-muted-foreground">${(p.balance ?? 0).toLocaleString()}</div>
+                    )}
                   </label>
                 ))}
               </div>

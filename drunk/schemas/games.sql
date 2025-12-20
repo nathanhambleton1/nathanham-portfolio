@@ -14,9 +14,15 @@ create table public.games (
   trade_timer_expires_at timestamptz,
   trade_locked boolean not null default false,
   trade_started_by uuid,
+  -- Balance visibility: when true, players can see other players' balances.
+  -- When false, only your own balance is visible (in pay popup, settings, etc.)
+  show_balances boolean not null default true,
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now()
 );
+
+-- Migration: Add show_balances column to existing games table
+-- ALTER TABLE public.games ADD COLUMN IF NOT EXISTS show_balances boolean NOT NULL DEFAULT true;
 
 create index games_code_idx on public.games (code);
 create index games_trade_expires_idx on public.games (trade_timer_expires_at);
