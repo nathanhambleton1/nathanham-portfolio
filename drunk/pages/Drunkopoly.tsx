@@ -2447,8 +2447,8 @@ function GameCodePopover({ code, onLogout, players, currentPlayer, game, onRemov
                   const isSelf = currentPlayer && String(currentPlayer.id) === String(p.id);
                   const isCommissioner = !!p.is_commissioner;
                   const canRemove = currentPlayer && (currentPlayer.is_commissioner || currentPlayer.is_commissioner === true) && !isCommissioner && !isSelf;
-                  // Show balance if showBalances is enabled OR if this is the current player (always show your own balance)
-                  const canSeeBalance = showBalances || isSelf;
+                  // Show balance if showBalances is enabled
+                  const canSeeBalance = showBalances;
                   return (
                     <div key={p.id} className="flex items-center gap-3 py-2 px-2 border rounded">
                       <div className="flex-1">

@@ -57,7 +57,7 @@ export default function JailPopup({
                   onChange={() => setSelected(p.id)}
                 />
                 <div className="flex-1">{p.name}{p.id === currentPlayer?.id ? ' (you)' : ''}</div>
-                {(showBalances || p.id === currentPlayer?.id) && (
+                {showBalances && (
                   <div className="text-sm text-muted-foreground">${(p.balance ?? 0).toLocaleString()}</div>
                 )}
               </label>
