@@ -2204,6 +2204,17 @@ function AnimatedNumber({ value, soundEnabled = true }: { value: number; soundEn
         a.preload = 'auto';
         a.volume = 0.85;
         audioRef.current = a;
+        
+        // Set Media Session metadata for iOS media player
+        if ('mediaSession' in navigator) {
+          navigator.mediaSession.metadata = new MediaMetadata({
+            title: 'Drinking Games',
+            artist: 'Drunkopoly',
+            artwork: [
+              { src: '/drunk_logo.png', sizes: '512x512', type: 'image/png' }
+            ]
+          });
+        }
       }
     } catch (e) {
       // ignore audio init errors

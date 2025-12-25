@@ -242,6 +242,21 @@ const PowerHour = () => {
       // ignore
     }
 
+    // Set Media Session metadata for iOS media player
+    try {
+      if ('mediaSession' in navigator) {
+        navigator.mediaSession.metadata = new MediaMetadata({
+          title: 'Drinking Games',
+          artist: 'Power Hour',
+          artwork: [
+            { src: '/drunk_logo.png', sizes: '512x512', type: 'image/png' }
+          ]
+        });
+      }
+    } catch (err) {
+      console.warn('Media Session API failed:', err);
+    }
+
     // Try to acquire wake lock immediately when the component mounts
     void acquireWakeLock();
     document.addEventListener('visibilitychange', handleVisibilityChange);

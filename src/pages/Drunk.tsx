@@ -22,6 +22,22 @@ const Drunk = () => {
     if (favicon) {
       favicon.setAttribute("href", "/drunk_logo.png");
     }
+    
+    // Set Media Session metadata for iOS media player
+    try {
+      if ('mediaSession' in navigator) {
+        navigator.mediaSession.metadata = new MediaMetadata({
+          title: 'Drinking Games',
+          artist: 'nathanham.com',
+          artwork: [
+            { src: '/drunk_logo.png', sizes: '512x512', type: 'image/png' }
+          ]
+        });
+      }
+    } catch (err) {
+      console.warn('Media Session API failed:', err);
+    }
+    
     return () => {
       document.title = "Nathan Hambleton – Portfolio";
       if (favicon) {
