@@ -17,12 +17,17 @@ create table public.games (
   -- Balance visibility: when true, players can see other players' balances.
   -- When false, only your own balance is visible (in pay popup, settings, etc.)
   show_balances boolean not null default true,
+  -- Sips gameplay: when true, the Drunkopoly sips features (assigning/completing sips)
+  -- are enabled. When false, hide sip counters and related UI on the client.
+  sips_enabled boolean not null default true,
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now()
 );
 
 -- Migration: Add show_balances column to existing games table
 -- ALTER TABLE public.games ADD COLUMN IF NOT EXISTS show_balances boolean NOT NULL DEFAULT true;
+-- Migration: Add sips_enabled column to existing games table
+-- ALTER TABLE public.games ADD COLUMN IF NOT EXISTS sips_enabled boolean NOT NULL DEFAULT true;
 
 create index games_code_idx on public.games (code);
 create index games_trade_expires_idx on public.games (trade_timer_expires_at);

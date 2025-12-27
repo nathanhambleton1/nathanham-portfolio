@@ -63,6 +63,7 @@ const Drunkopoly = () => {
   const [tempPassGoAmount, setTempPassGoAmount] = useState<string>("200");
   const [tempFreeParkingBalance, setTempFreeParkingBalance] = useState<string>("0");
   const [tempShowBalances, setTempShowBalances] = useState<boolean>(true);
+  const [tempSipsEnabled, setTempSipsEnabled] = useState<boolean>(true);
   const [game, setGame] = useState<any | null>(null);
   const [player, setPlayer] = useState<any | null>(null);
   const [recentGames, setRecentGames] = useState<string[]>([]);
@@ -1639,6 +1640,7 @@ const Drunkopoly = () => {
                       pass_go_amount: Number(tempPassGoAmount || 0),
                       free_parking_balance: Number(tempFreeParkingBalance || 0),
                       show_balances: tempShowBalances,
+                      sips_enabled: tempSipsEnabled,
                     }])
                     .select()
                     .single();
@@ -1735,6 +1737,16 @@ const Drunkopoly = () => {
                     onCheckedChange={(checked) => setTempShowBalances(checked)}
                   />
                 </div>
+                <div className="flex items-center justify-between py-2 px-3 rounded-lg bg-muted/30 mt-2">
+                  <div className="flex-1">
+                    <div className="font-medium text-sm">Play With Sips</div>
+                    <div className="text-xs text-muted-foreground">Enable sip counters and Give Sips features</div>
+                  </div>
+                  <Switch
+                    checked={tempSipsEnabled}
+                    onCheckedChange={(checked) => setTempSipsEnabled(checked)}
+                  />
+                </div>
               </div>
 
               <div className="flex gap-2 mt-4">
@@ -1767,10 +1779,14 @@ const Drunkopoly = () => {
       <div className="flex items-center justify-between px-6 py-4 z-50">
         <div className="font-semibold text-lg text-foreground flex items-center gap-2">
           <div>{player?.name ?? name}</div>
-          <div className="text-sm text-muted-foreground">{(player?.total_sips ?? 0)} sips</div>
+          {(game?.sips_enabled ?? true) && (
+            <div className="text-sm text-muted-foreground">{(player?.total_sips ?? 0)} sips</div>
+          )}
         </div>
-        <div className="flex items-center gap-2">
-          <Button variant="ghost" size="sm" onClick={() => navigate('/drunk/drunkopoly/rules')}>Rules</Button>
+          <div className="flex items-center gap-2">
+          {(game?.sips_enabled ?? true) && (
+            <Button variant="ghost" size="sm" onClick={() => navigate('/drunk/drunkopoly/rules')}>Rules</Button>
+          )}
           <GameCodePopover
             code={game?.code ?? gameCode}
             onLogout={handleLogoutOfGame}
@@ -1802,15 +1818,17 @@ const Drunkopoly = () => {
           </div>
         </div>
 
-        {/* SIP section*/}
-        <Section title="Sips">
-          <div className="grid grid-cols-1 gap-4 w-64">
+        {/* SIP section (hidden when sips_enabled is false) */}
+        {(game?.sips_enabled ?? true) && (
+          <Section title="Sips">
+            <div className="grid grid-cols-1 gap-4 w-64">
               <Button variant="secondary" className="py-6" onClick={() => setSipModalOpen(true)}>
                 <UserPlus className="h-5 w-5" />
                 Give Sips
               </Button>
             </div>
-        </Section>
+          </Section>
+        )}
 
         {/* Pay section */}
         <Section title="Pay" className={"mt-8"}>
@@ -2092,7 +2110,7 @@ const Drunkopoly = () => {
         />
 
         {/* Lockdown overlay when player has pending sips - rendered after jail so it appears on top */}
-        {player?.pending_sips > 0 && (
+        {(game?.sips_enabled ?? true) && player?.pending_sips > 0 && (
           <div className="fixed inset-0 z-[99999] pointer-events-auto">
             <div className="absolute inset-0 bg-black" />
             <div className="relative z-[99999] min-h-screen flex items-center justify-center px-6">
