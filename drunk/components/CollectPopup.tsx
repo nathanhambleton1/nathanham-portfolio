@@ -1,4 +1,6 @@
 import React, { useEffect, useState } from 'react';
+import { setDropdownOpen } from './ui/dropdown-menu';
+import useLockBodyScroll from "../hooks/use-lock-body-scroll";
 import {
   Dialog,
   DialogContent,
@@ -53,6 +55,12 @@ export default function CollectPopup({
     prevOpenRef.current = open;
   }, [open, mode, game]);
 
+  useEffect(() => {
+    if (open) setDropdownOpen(null);
+  }, [open]);
+
+
+  useLockBodyScroll(!!open);
 
   if (!mode) return null;
 

@@ -1,7 +1,8 @@
 import { useEffect, useState, useRef } from "react";
 import PayPopup from "../components/PayPopup";
 import JailPopup from "../components/JailPopup";
-import { UserPlus, DollarSign, Users, Percent, Crown, PiggyBank, Clock, Copy, Settings, QrCode } from "lucide-react";
+import SipsLockOverlay from "../components/SipsLockOverlay";
+import { UserPlus, DollarSign, Users, Percent, Crown, PiggyBank, Clock, Copy, Settings, QrCode, ChevronDown, Info } from "lucide-react";
 import { QRCodeSVG } from "qrcode.react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "../components/ui/dialog";
 import CollectPopup from "../components/CollectPopup";
@@ -37,6 +38,7 @@ import { createClient } from '@supabase/supabase-js';
 import { useNavigate } from "react-router-dom";
 import { toast } from "../components/ui/use-toast";
 import { Toaster } from "../components/ui/toaster";
+import useLockBodyScroll from "../hooks/use-lock-body-scroll";
 
 // Initialize Supabase client
 const supabaseUrl = 'https://kcyrvubzhsphpxfsewii.supabase.co';
@@ -126,6 +128,22 @@ const Drunkopoly = () => {
       }
     })();
   }, []);
+
+  // Prevent background scrolling when any full-screen lock overlay is visible
+  const anyOverlayOpen = !!player?.in_jail || ((game?.sips_enabled ?? true) && (player?.pending_sips ?? 0) > 0) || !!game?.trade_locked;
+  useLockBodyScroll(anyOverlayOpen, { scrollToTop: true });
+
+  // If any full-screen overlay is active (trade/jail/sips), ensure other action
+  // popups are closed so they don't persist or auto-open when overlays toggle.
+  useEffect(() => {
+    if (anyOverlayOpen) {
+      setSipModalOpen(false);
+      setPayModalOpen(false);
+      setCollectModalOpen(false);
+      // also close the trade timer dialog if it's not the active overlay
+      setTradeTimerModalOpen(false);
+    }
+  }, [anyOverlayOpen]);
 
   const persistRecentGames = (list: string[]) => {
     try {
@@ -1160,6 +1178,14 @@ const Drunkopoly = () => {
               setPlayer(updatedPlayer);
             }
             prevBalanceRef.current = Number(updatedPlayer.balance ?? 0);
+          } else {
+            // Current player no longer exists in players list — they were removed
+            try {
+              setRemovedNoticeMsg('You were removed from the game.');
+              setRemovedNoticeOpen(true);
+            } catch (e) {
+              console.warn('Failed to show removed notice', e);
+            }
           }
         }
       } catch (e) {
@@ -1313,11 +1339,26 @@ const Drunkopoly = () => {
         const isFk = e && (e.code === '23503' || (e.details && String(e.details).includes('still referenced')));
         if (isFk && game) {
           try {
+            // Clear or remove any sip_events referencing this player so foreign keys
+            // don't block deletion. `from_player_id` is nullable so set it to null; 
+            // `to_player_id` is NOT NULL so delete those sip_events.
+            try {
+              await supabase.from('sip_events').update({ from_player_id: null }).eq('from_player_id', id).eq('game_id', game.id);
+            } catch (sErr) {
+              console.warn('Failed to null sip_events.from_player_id for removed player', sErr);
+            }
+            try {
+              await supabase.from('sip_events').delete().eq('to_player_id', id).eq('game_id', game.id);
+            } catch (sErr) {
+              console.warn('Failed to delete sip_events.to_player_id for removed player', sErr);
+            }
+
+            // Null any player references in money_events (nullable columns)
             await supabase.from('money_events').update({ actor_player_id: null }).eq('actor_player_id', id).eq('game_id', game.id);
             await supabase.from('money_events').update({ from_player_id: null }).eq('from_player_id', id).eq('game_id', game.id);
             await supabase.from('money_events').update({ to_player_id: null }).eq('to_player_id', id).eq('game_id', game.id);
 
-            // Retry deletion
+            // Retry deletion of player
             const { error: delErr } = await supabase.from('players').delete().eq('id', id).eq('game_id', game.id);
             if (delErr) throw delErr;
 
@@ -2107,82 +2148,264 @@ const Drunkopoly = () => {
           cardProcessing={cardProcessing}
           onPayToGetOut={() => payToGetOut()}
           onUseCard={() => useGetOutCard()}
+          players={playersList}
+          showBalances={game?.show_balances ?? true}
+          currentPlayerId={player?.id}
+          currentPlayer={player}
+          allowGiveSips={true}
+          onAssignSips={async (to, sip_count) => {
+            if (!game || !player) return;
+            try {
+              if (Array.isArray(to)) {
+                for (const t of to) {
+                  await assignSips(game.code, player.id, t, sip_count);
+                }
+              } else {
+                await assignSips(game.code, player.id, to, sip_count);
+              }
+              const players = await fetchPlayers(game.code);
+              setPlayersList(players);
+              const { data: gameData } = await supabase.from('games').select('*').eq('code', game.code).single();
+              if (gameData) setGame(gameData);
+            } catch (err: any) {
+              console.error('Assign sips error:', err);
+              alert(err.message || 'Failed to assign sips');
+            }
+          }}
+          onPaySubmit={async (payments, opts) => {
+            if (!game || !player) return;
+            try {
+              const result = await processPayments(game.code, player.id, payments, { ...(opts || {}), mode: opts?.mode || 'bank' });
+
+              // Check for blocked payments (pending sips / jailed recipients)
+              const blocked = (result.money_events || []).filter((me: any) => (Number(me.amount || 0) === 0) && me.to_player_id);
+              if (blocked.length > 0) {
+                const byReason: Record<string, any[]> = {};
+                for (const b of blocked) {
+                  const desc = (b.description || '').toLowerCase();
+                  const key = desc.includes('pending sips') ? 'sips' : desc.includes('in jail') || desc.includes('jail') ? 'jail' : 'other';
+                  if (!byReason[key]) byReason[key] = [];
+                  byReason[key].push(b);
+                }
+
+                const parts: string[] = [];
+                if (byReason.sips) {
+                  const names = byReason.sips.map((b: any) => {
+                    const found = (playersList || []).find((pl: any) => pl.id === b.to_player_id);
+                    return found ? found.name : b.to_player_id;
+                  }).join(', ');
+                  parts.push(`No money was sent to ${names} because they have pending sips. Congrats! 🎉`);
+                }
+                if (byReason.jail) {
+                  const names = byReason.jail.map((b: any) => {
+                    const found = (playersList || []).find((pl: any) => pl.id === b.to_player_id);
+                    return found ? found.name : b.to_player_id;
+                  }).join(', ');
+                  parts.push(`No money was sent to ${names} because they are in jail. Congrats! 🎉`);
+                }
+                if (byReason.other) {
+                  const names = byReason.other.map((b: any) => {
+                    const found = (playersList || []).find((pl: any) => pl.id === b.to_player_id);
+                    return found ? found.name : b.to_player_id;
+                  }).join(', ');
+                  parts.push(`No money was sent to ${names}.`);
+                }
+
+                setBlockedPaymentMessage(parts.join(' '));
+              }
+
+              // Refresh state
+              const players = await fetchPlayers(game.code);
+              setPlayersList(players);
+              const updatedPlayer = players.find((p: any) => p.id === player.id);
+              if (updatedPlayer) setPlayer(updatedPlayer);
+              const { data: gameData } = await supabase.from('games').select('*').eq('code', game.code).single();
+              if (gameData) setGame(gameData);
+            } catch (err: any) {
+              console.error('Pay submit error from JailLockOverlay:', err);
+              alert(err.message || 'Failed to process payment');
+            }
+          }}
         />
 
-        {/* Lockdown overlay when player has pending sips - rendered after jail so it appears on top */}
-        {(game?.sips_enabled ?? true) && player?.pending_sips > 0 && (
-          <div className="fixed inset-0 z-[99999] pointer-events-auto">
-            <div className="absolute inset-0 bg-black" />
-            <div className="relative z-[99999] min-h-screen flex items-center justify-center px-6">
-              <div className="max-w-lg w-full text-center text-white">
-                <div className="flex flex-col items-center gap-6 py-12">
-                  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" className="w-16 h-16 text-white" fill="none" stroke="currentColor" strokeWidth={1.5}>
-                    <path strokeLinecap="round" strokeLinejoin="round" d="M12 15v2" />
-                    <rect x="4" y="10" width="16" height="10" rx="2" strokeWidth={1.5} />
-                    <path strokeLinecap="round" strokeLinejoin="round" d="M7 10V8a5 5 0 0110 0v2" />
-                  </svg>
-                  <div className="text-2xl font-bold">You have {player.pending_sips} sip{player.pending_sips > 1 ? 's' : ''}</div>
-                  <p className="mt-3 text-lg text-white/90">Finish your sips to continue playing.</p>
-                  <p className="mt-1 text-sm text-white/70">You cannot collect money until you've finished.</p>
-                  <div className="w-full mt-4">
-                    <Button
-                      className="w-full"
-                      onClick={async () => {
-                        if (!game || !player) return;
-                        try {
-                          setCompletingSips(true);
-                          await completeSips(game.code, player.id);
-                          // Refresh state
-                          const players = await fetchPlayers(game.code);
-                          setPlayersList(players);
-                          const updatedPlayer = players.find((p: any) => p.id === player.id);
-                          if (updatedPlayer) setPlayer(updatedPlayer);
-                        } catch (err: any) {
-                          console.error('Complete sips error:', err);
-                          alert(err.message || 'Failed to complete sips');
-                        } finally {
-                          setCompletingSips(false);
-                        }
-                      }}
-                      disabled={completingSips}
-                    >
-                      {completingSips ? (
-                        <>
-                          Processing...
-                          <svg
-                            xmlns="http://www.w3.org/2000/svg"
-                            className="h-5 w-5 inline ml-2"
-                            viewBox="0 0 24 24"
-                            fill="none"
-                            stroke="currentColor"
-                            strokeWidth={2}
-                            style={{
-                              verticalAlign: 'middle',
-                              animation: 'spin 1s linear infinite'
-                            }}
-                          >
-                            <style>{`@keyframes spin { 100% { transform: rotate(360deg); } }`}</style>
-                            <circle cx="12" cy="12" r="10" strokeOpacity="0.25" />
-                            <path d="M22 12a10 10 0 00-10-10" strokeLinecap="round" />
-                          </svg>
-                        </>
-                      ) : (
-                        'Done'
-                      )}
-                      
-                    </Button>
-                  </div>
-                </div>
-              </div>
-            </div>
-          </div>
-        )}
+        <SipsLockOverlay
+          open={(game?.sips_enabled ?? true) && (player?.pending_sips ?? 0) > 0}
+          sipCount={player?.pending_sips ?? 0}
+          onDone={async () => {
+            if (!game || !player) return;
+            try {
+              setCompletingSips(true);
+              await completeSips(game.code, player.id);
+              // Refresh state
+              const players = await fetchPlayers(game.code);
+              setPlayersList(players);
+              const updatedPlayer = players.find((p: any) => p.id === player.id);
+              if (updatedPlayer) setPlayer(updatedPlayer);
+            } catch (err: any) {
+              console.error('Complete sips error:', err);
+              alert(err.message || 'Failed to complete sips');
+            } finally {
+              setCompletingSips(false);
+            }
+          }}
+          processing={completingSips}
+          currentBalance={player?.balance ?? 0}
+          players={playersList}
+          showBalances={game?.show_balances ?? true}
+          currentPlayerId={player?.id}
+          currentPlayer={player}
+          allowGiveSips={true}
+          onAssignSips={async (to, sip_count) => {
+            if (!game || !player) return;
+            if (Array.isArray(to)) {
+              for (const t of to) {
+                await assignSips(game.code, player.id, t, sip_count);
+              }
+            } else {
+              await assignSips(game.code, player.id, to, sip_count);
+            }
+            // Refresh state
+            const players = await fetchPlayers(game.code);
+            setPlayersList(players);
+            const updatedPlayer = players.find((p: any) => p.id === player.id);
+            if (updatedPlayer) setPlayer(updatedPlayer);
+          }}
+          onPaySubmit={async (payments, opts) => {
+            if (!game || !player) return;
+            try {
+              const result = await processPayments(game.code, player.id, payments, { ...(opts || {}), mode: opts?.mode || 'bank' });
+
+              // Check for blocked payments (pending sips / jailed recipients)
+              const blocked = (result.money_events || []).filter((me: any) => (Number(me.amount || 0) === 0) && me.to_player_id);
+              if (blocked.length > 0) {
+                const byReason: Record<string, any[]> = {};
+                for (const b of blocked) {
+                  const desc = (b.description || '').toLowerCase();
+                  const key = desc.includes('pending sips') ? 'sips' : desc.includes('in jail') || desc.includes('jail') ? 'jail' : 'other';
+                  if (!byReason[key]) byReason[key] = [];
+                  byReason[key].push(b);
+                }
+
+                const parts: string[] = [];
+                if (byReason.sips) {
+                  const names = byReason.sips.map((b: any) => {
+                    const found = (playersList || []).find((pl: any) => pl.id === b.to_player_id);
+                    return found ? found.name : b.to_player_id;
+                  }).join(', ');
+                  parts.push(`No money was sent to ${names} because they have pending sips. Congrats! 🎉`);
+                }
+                if (byReason.jail) {
+                  const names = byReason.jail.map((b: any) => {
+                    const found = (playersList || []).find((pl: any) => pl.id === b.to_player_id);
+                    return found ? found.name : b.to_player_id;
+                  }).join(', ');
+                  parts.push(`No money was sent to ${names} because they are in jail. Congrats! 🎉`);
+                }
+                if (byReason.other) {
+                  const names = byReason.other.map((b: any) => {
+                    const found = (playersList || []).find((pl: any) => pl.id === b.to_player_id);
+                    return found ? found.name : b.to_player_id;
+                  }).join(', ');
+                  parts.push(`No money was sent to ${names}.`);
+                }
+
+                setBlockedPaymentMessage(parts.join(' '));
+              }
+
+              // Refresh state
+              const players = await fetchPlayers(game.code);
+              setPlayersList(players);
+              const updatedPlayer = players.find((p: any) => p.id === player.id);
+              if (updatedPlayer) setPlayer(updatedPlayer);
+              const { data: gameData } = await supabase.from('games').select('*').eq('code', game.code).single();
+              if (gameData) setGame(gameData);
+            } catch (err: any) {
+              console.error('Pay submit error from SipsLockOverlay:', err);
+              alert(err.message || 'Failed to process payment');
+            }
+          }}
+        />
 
         <TradeLockOverlay
           open={!!game?.trade_locked}
           expiresAt={game?.trade_timer_expires_at}
           startedByName={playersList?.find((p: any) => p.id === game?.trade_started_by)?.name ?? null}
           onDone={() => stopTradeTimer()}
+          currentBalance={player?.balance ?? 0}
+          players={playersList}
+          showBalances={game?.show_balances ?? true}
+          currentPlayerId={player?.id}
+          currentPlayer={player}
+          allowGiveSips={true}
+          onAssignSips={async (to, sip_count) => {
+            if (!game || !player) return;
+            if (Array.isArray(to)) {
+              for (const t of to) {
+                await assignSips(game.code, player.id, t, sip_count);
+              }
+            } else {
+              await assignSips(game.code, player.id, to, sip_count);
+            }
+            // Refresh state
+            const players = await fetchPlayers(game.code);
+            setPlayersList(players);
+            const updatedPlayer = players.find((p: any) => p.id === player.id);
+            if (updatedPlayer) setPlayer(updatedPlayer);
+          }}
+          onPaySubmit={async (payments, opts) => {
+            if (!game || !player) return;
+            try {
+              const result = await processPayments(game.code, player.id, payments, { ...(opts || {}), mode: opts?.mode || 'bank' });
+
+              // Check for blocked payments (pending sips / jailed recipients)
+              const blocked = (result.money_events || []).filter((me: any) => (Number(me.amount || 0) === 0) && me.to_player_id);
+              if (blocked.length > 0) {
+                const byReason: Record<string, any[]> = {};
+                for (const b of blocked) {
+                  const desc = (b.description || '').toLowerCase();
+                  const key = desc.includes('pending sips') ? 'sips' : desc.includes('in jail') || desc.includes('jail') ? 'jail' : 'other';
+                  if (!byReason[key]) byReason[key] = [];
+                  byReason[key].push(b);
+                }
+
+                const parts: string[] = [];
+                if (byReason.sips) {
+                  const names = byReason.sips.map((b: any) => {
+                    const found = (playersList || []).find((pl: any) => pl.id === b.to_player_id);
+                    return found ? found.name : b.to_player_id;
+                  }).join(', ');
+                  parts.push(`No money was sent to ${names} because they have pending sips. Congrats! 🎉`);
+                }
+                if (byReason.jail) {
+                  const names = byReason.jail.map((b: any) => {
+                    const found = (playersList || []).find((pl: any) => pl.id === b.to_player_id);
+                    return found ? found.name : b.to_player_id;
+                  }).join(', ');
+                  parts.push(`No money was sent to ${names} because they are in jail. Congrats! 🎉`);
+                }
+                if (byReason.other) {
+                  const names = byReason.other.map((b: any) => {
+                    const found = (playersList || []).find((pl: any) => pl.id === b.to_player_id);
+                    return found ? found.name : b.to_player_id;
+                  }).join(', ');
+                  parts.push(`No money was sent to ${names}.`);
+                }
+
+                setBlockedPaymentMessage(parts.join(' '));
+              }
+
+              // Refresh state
+              const players = await fetchPlayers(game.code);
+              setPlayersList(players);
+              const updatedPlayer = players.find((p: any) => p.id === player.id);
+              if (updatedPlayer) setPlayer(updatedPlayer);
+              const { data: gameData } = await supabase.from('games').select('*').eq('code', game.code).single();
+              if (gameData) setGame(gameData);
+            } catch (err: any) {
+              console.error('Pay submit error from TradeLockOverlay:', err);
+              alert(err.message || 'Failed to process payment');
+            }
+          }}
         />
       </div>
       <ActivityLog gameCode={game?.code ?? gameCode} players={playersList} />

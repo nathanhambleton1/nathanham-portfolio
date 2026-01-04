@@ -1,12 +1,16 @@
 import React, { useMemo, useState, useEffect } from "react";
+import { setDropdownOpen } from "./ui/dropdown-menu";
+import useLockBodyScroll from "../hooks/use-lock-body-scroll";
 import {
   Dialog,
-  DialogContent,
+  DialogPortal,
+  DialogOverlay,
   DialogHeader,
   DialogTitle,
   DialogDescription,
   DialogFooter,
 } from "./ui/dialog";
+import * as DialogPrimitive from "@radix-ui/react-dialog";
 import { Button } from "./ui/button";
 import { Input } from "./ui/input";
 
@@ -62,6 +66,12 @@ export default function PayPopup({
     prevOpenRef.current = open;
   }, [open]);
 
+  useEffect(() => {
+    if (open) setDropdownOpen(null);
+  }, [open]);
+
+  useLockBodyScroll(!!open);
+
   if (!mode) return null;
 
   // For tax, always 1 payment (to bank or free parking), not per player
@@ -107,7 +117,9 @@ export default function PayPopup({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent>
+      <DialogPortal>
+        <DialogOverlay className="fixed inset-0 z-[100000] bg-black/80" />
+        <DialogPrimitive.Content className="fixed left-[50%] top-[50%] z-[100000] grid mx-4 w-full max-w-lg translate-x-[-50%] translate-y-[-50%] gap-4 border bg-background p-6 shadow-lg duration-200 sm:rounded-lg">
         <DialogHeader>
           <DialogTitle>Pay — {mode === "bank" ? "Bank" : mode === "tax" ? "Tax" : "Players"}</DialogTitle>
           <DialogDescription>
@@ -253,7 +265,8 @@ export default function PayPopup({
             </Button>
           </div>
         </DialogFooter>
-      </DialogContent>
+        </DialogPrimitive.Content>
+      </DialogPortal>
     </Dialog>
   );
 }

@@ -2,9 +2,46 @@ import * as React from "react";
 import * as DropdownMenuPrimitive from "@radix-ui/react-dropdown-menu";
 import { Check, ChevronRight, Circle } from "lucide-react";
 
-import { cn } from "@/lib/utils";
+import { cn } from "../../lib/utils";
 
-const DropdownMenu = DropdownMenuPrimitive.Root;
+// Simple global manager so only one dropdown (by id) can be open at a time
+let _currentOpenId: string | null = null;
+const _listeners = new Set<(id: string | null) => void>();
+function setDropdownOpen(id: string | null) {
+  _currentOpenId = id;
+  for (const l of Array.from(_listeners)) l(id);
+}
+function useGlobalDropdownOpen(): string | null {
+  const [val, setVal] = React.useState<string | null>(_currentOpenId);
+  React.useEffect(() => {
+    const cb = (id: string | null) => setVal(id);
+    _listeners.add(cb);
+    // ensure initial sync
+    setVal(_currentOpenId);
+    return () => { _listeners.delete(cb); };
+  }, []);
+  return val;
+}
+
+const DropdownMenu = ({ id, children, ...props }: any) => {
+  const globalOpenId = useGlobalDropdownOpen();
+  const controlledOpen = id ? globalOpenId === id : undefined;
+
+  const origOnOpenChange = props.onOpenChange;
+  const onOpenChange = (v: boolean) => {
+    if (id) {
+      if (v) setDropdownOpen(id);
+      else if (globalOpenId === id) setDropdownOpen(null);
+    }
+    if (typeof origOnOpenChange === 'function') origOnOpenChange(v);
+  };
+
+  return (
+    <DropdownMenuPrimitive.Root open={controlledOpen} onOpenChange={onOpenChange} {...props}>
+      {children}
+    </DropdownMenuPrimitive.Root>
+  );
+};
 
 const DropdownMenuTrigger = DropdownMenuPrimitive.Trigger;
 
@@ -162,6 +199,7 @@ DropdownMenuShortcut.displayName = "DropdownMenuShortcut";
 
 export {
   DropdownMenu,
+  setDropdownOpen,
   DropdownMenuTrigger,
   DropdownMenuContent,
   DropdownMenuItem,

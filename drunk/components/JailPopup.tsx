@@ -1,4 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react';
+import { setDropdownOpen } from './ui/dropdown-menu';
+import useLockBodyScroll from '../hooks/use-lock-body-scroll';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from './ui/dialog';
 import { Button } from './ui/button';
 
@@ -34,6 +36,12 @@ export default function JailPopup({
   useEffect(() => {
     if (!open) setSelected(null);
   }, [open]);
+
+  useEffect(() => {
+    if (open) setDropdownOpen(null);
+  }, [open]);
+
+  useLockBodyScroll(!!open);
 
   if (!open) return null;
 

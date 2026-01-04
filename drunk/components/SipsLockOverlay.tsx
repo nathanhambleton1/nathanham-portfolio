@@ -5,18 +5,11 @@ import { ChevronDown, Info, DollarSign, UserPlus, MoreVertical, Users } from 'lu
 import SipPopup from './SipPopup';
 import PayPopup from './PayPopup';
 
-function formatRemaining(ms: number) {
-  const total = Math.max(0, Math.ceil(ms / 1000));
-  const m = Math.floor(total / 60);
-  const s = total % 60;
-  return `${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`;
-}
-
-export default function TradeLockOverlay({
+export default function SipsLockOverlay({
   open,
-  expiresAt,
-  startedByName,
+  sipCount,
   onDone,
+  processing,
   currentBalance,
   players,
   showBalances = false,
@@ -27,9 +20,9 @@ export default function TradeLockOverlay({
   onPaySubmit,
 }: {
   open: boolean;
-  expiresAt?: string | null;
-  startedByName?: string | null;
+  sipCount: number;
   onDone: () => void;
+  processing?: boolean;
   currentBalance?: number | null;
   players?: any[];
   showBalances?: boolean;
@@ -39,45 +32,18 @@ export default function TradeLockOverlay({
   onAssignSips?: (to: string | string[], sip_count: number) => Promise<void> | void;
   onPaySubmit?: (payments: { to: string | null; amount: number }[], opts?: { freeParking?: boolean; description?: string | null; mode?: 'bank' | 'players' | 'tax' }) => Promise<void> | void;
 }) {
-  const [now, setNow] = useState(() => Date.now());
-  const [flash, setFlash] = useState(false);
-  const audioRef = React.useRef<HTMLAudioElement | null>(null);
-  const [sipModalOpen, setSipModalOpen] = useState(false);
-  const [payModalOpen, setPayModalOpen] = useState(false);
-  const [payMode, setPayMode] = useState<'bank' | 'players' | 'tax' | null>('bank');
-  
-  // Initialize alarm audio on mount
-  useEffect(() => {
-    try {
-      const a = new Audio('/alarm.mp3');
-      a.preload = 'auto';
-      a.volume = 0.85;
-      a.loop = true;
-      audioRef.current = a;
-      // Load the audio immediately
-      a.load();
-    } catch (e) {
-      console.warn('Alarm audio init failed', e);
-    }
-    
-    return () => {
-      if (audioRef.current) {
-        try {
-          audioRef.current.pause();
-          audioRef.current.currentTime = 0;
-        } catch (e) {}
-      }
-    };
-  }, []);
-
   useLockBodyScroll(!!open, { scrollToTop: true });
 
   React.useEffect(() => {
     if (open) setDropdownOpen(null);
   }, [open]);
 
-  // Ensure any internal popup state is reset when the overlay opens so it
-  // doesn't auto-open stale dialogs from previous mounts.
+  const [sipModalOpen, setSipModalOpen] = useState(false);
+  const [payModalOpen, setPayModalOpen] = useState(false);
+  const [payMode, setPayMode] = useState<'bank' | 'players' | 'tax' | null>('bank');
+
+  // Reset any internal popup flags when the overlay opens so the overlay
+  // always starts with its internal popups closed.
   useEffect(() => {
     if (open) {
       setSipModalOpen(false);
@@ -85,150 +51,97 @@ export default function TradeLockOverlay({
     }
   }, [open]);
 
-  // Update timer display
-  useEffect(() => {
-    if (!open) return;
-    const t = setInterval(() => setNow(Date.now()), 250);
-    return () => clearInterval(t);
-  }, [open]);
-
-  // Handle expiration: flash effect and alarm sound
-  useEffect(() => {
-    if (!open) return;
-    const expires = expiresAt ? new Date(expiresAt).getTime() : null;
-    const expiredNow = expires ? (expires - Date.now() <= 0) : false;
-    let iv: number | null = null;
-    if (expiredNow) {
-      setFlash(true);
-      iv = window.setInterval(() => setFlash((v) => !v), 200);
-      // Start alarm audio on expiry
-      try {
-        const a = audioRef.current;
-        if (a) {
-          a.currentTime = 0;
-          // Use play() with promise handling for better browser compatibility
-          const playPromise = a.play();
-          if (playPromise !== undefined) {
-            playPromise.catch((err) => {
-              console.warn('Alarm play failed (may be blocked by browser):', err);
-            });
-          }
-        }
-      } catch (err) {
-        console.warn('Alarm play error:', err);
-      }
-    } else {
-      setFlash(false);
-      // Stop alarm if running
-      if (audioRef.current) {
-        try {
-          audioRef.current.pause();
-          audioRef.current.currentTime = 0;
-        } catch (e) {}
-      }
-    }
-    return () => { if (iv) clearInterval(iv); };
-  }, [open, expiresAt, now]);
-
   if (!open) return null;
 
-  const expires = expiresAt ? new Date(expiresAt).getTime() : null;
-  const remainingMs = expires ? expires - now : null;
-  const expired = remainingMs !== null ? remainingMs <= 0 : false;
-
   return (
-    <div className="fixed inset-0 z-[99999] pointer-events-auto">
+    <div className="fixed inset-0 z-[100000] pointer-events-auto">
       <div className="absolute inset-0 bg-black" />
-      <div className="relative z-[99999] min-h-screen flex items-center justify-center px-6">
-        <div className={`max-w-lg w-full text-center text-white p-12 rounded`}>
-          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" className="w-16 h-16 mx-auto mb-4 text-white" fill="none" stroke="currentColor" strokeWidth={1.5}>
-            <path strokeLinecap="round" strokeLinejoin="round" d="M12 15v2" />
-            <rect x="4" y="10" width="16" height="10" rx="2" strokeWidth={1.5} />
-            <path strokeLinecap="round" strokeLinejoin="round" d="M7 10V8a5 5 0 0110 0v2" />
-          </svg>
+      <div className="relative z-[100000] min-h-screen flex items-center justify-center px-6">
+        <div className="max-w-lg w-full text-center text-white">
+          <div className="flex flex-col items-center gap-6 py-12">
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" className="w-16 h-16 text-white" fill="none" stroke="currentColor" strokeWidth={1.5}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M12 15v2" />
+              <rect x="4" y="10" width="16" height="10" rx="2" strokeWidth={1.5} />
+              <path strokeLinecap="round" strokeLinejoin="round" d="M7 10V8a5 5 0 0110 0v2" />
+            </svg>
+            
+            <div className="text-2xl font-bold">You have {sipCount} sip{sipCount > 1 ? 's' : ''}</div>
 
-          <div className="text-2xl font-bold mb-2">Trade Timer Countdown</div>
-          <h2
-            className={`text-5xl font-extrabold mb-2 transition-all duration-300 ${expired ? 'text-red-600' : 'text-white'}`}
-            style={
-              expired
-                ? (flash 
-                    ? { 
-                        textShadow: '0 0 40px rgba(220,38,38,1), 0 0 20px rgba(220,38,38,0.8), 0 0 10px rgba(220,38,38,0.6)', 
-                        transform: 'scale(1.05)' 
-                      } 
-                    : { 
-                        textShadow: '0 0 20px rgba(220,38,38,0.7), 0 0 10px rgba(220,38,38,0.5)' 
-                      })
-                : undefined
-            }
-          >
-            {formatRemaining(remainingMs ?? 0)}
-          </h2>
-          {/* Collapsible sections: Balances (open by default) and Info */}
-          {/* Persist open/closed state in localStorage */}
-          <BalancesAndInfo
-            startedByName={startedByName}
-            currentBalance={currentBalance}
-            players={players}
-            showBalances={showBalances}
-            currentPlayerId={currentPlayerId}
-            onOpenSip={() => setSipModalOpen(true)}
-            onOpenPay={(mode: 'bank' | 'players' | 'tax') => { setPayMode(mode ?? 'bank'); setPayModalOpen(true); }}
-            allowGiveSips={!!allowGiveSips}
-          />
+            <BalancesAndInfo
+              currentBalance={currentBalance}
+              players={players}
+              showBalances={showBalances}
+              currentPlayerId={currentPlayerId}
+              onOpenSip={() => setSipModalOpen(true)}
+              onOpenPay={(mode: 'bank' | 'players' | 'tax') => { setPayMode(mode ?? 'bank'); setPayModalOpen(true); }}
+              allowGiveSips={!!allowGiveSips}
+            />
 
-          <SipPopup
-            open={sipModalOpen}
-            onOpenChange={(v) => setSipModalOpen(v)}
-            currentPlayer={currentPlayer ?? null}
-            players={players ?? []}
-            allowSelf={!!allowGiveSips}
-            onSubmit={async (to, sip_count) => {
-              if (!onAssignSips) return;
-              try {
-                await onAssignSips(to, sip_count);
-              } catch (err) {
-                console.error('Assign sips error from TradeLockOverlay:', err);
-                throw err;
-              }
-            }}
-          />
-
-          <PayPopup
-            open={payModalOpen}
-            onOpenChange={(v) => setPayModalOpen(v)}
-            mode={payMode}
-            currentPlayer={currentPlayer ?? null}
-            players={players ?? []}
-            showBalances={showBalances}
-            onSubmit={async (payments, opts) => {
-              if (!onPaySubmit) return;
-              try {
-                await onPaySubmit(payments, { ...(opts || {}), mode: (payMode ?? 'bank') });
-              } catch (err) {
-                console.error('PayPopup submit error from TradeLockOverlay:', err);
-                throw err;
-              }
-            }}
-          />
-
-          <div className="w-full">
-            <button
-              className={`w-full px-4 py-3 rounded text-lg bg-white text-black border border-transparent`}
-              onClick={() => {
-                // stop alarm when user dismisses
-                if (audioRef.current) {
-                  try {
-                    audioRef.current.pause();
-                    audioRef.current.currentTime = 0;
-                  } catch (e) {}
+            <SipPopup
+              open={sipModalOpen}
+              onOpenChange={(v) => setSipModalOpen(v)}
+              currentPlayer={currentPlayer ?? null}
+              players={players ?? []}
+              allowSelf={!!allowGiveSips}
+              onSubmit={async (to, sip_count) => {
+                if (!onAssignSips) return;
+                try {
+                  await onAssignSips(to, sip_count);
+                } catch (err) {
+                  console.error('Assign sips error from SipsLockOverlay:', err);
+                  throw err;
                 }
-                onDone();
               }}
-            >
-              Done
-            </button>
+            />
+
+            <PayPopup
+              open={payModalOpen}
+              onOpenChange={(v) => setPayModalOpen(v)}
+              mode={payMode}
+              currentPlayer={currentPlayer ?? null}
+              players={players ?? []}
+              showBalances={showBalances}
+              onSubmit={async (payments, opts) => {
+                if (!onPaySubmit) return;
+                try {
+                  await onPaySubmit(payments, { ...(opts || {}), mode: (payMode ?? 'bank') });
+                } catch (err) {
+                  console.error('PayPopup submit error from SipsLockOverlay:', err);
+                  throw err;
+                }
+              }}
+            />
+
+            <div className="w-full mt-4">
+              <button
+                type="button"
+                disabled={!!processing}
+                aria-disabled={!!processing}
+                className={`w-full px-4 py-3 rounded text-lg bg-white text-black transition-opacity duration-150 ${processing ? 'opacity-70 cursor-wait' : 'cursor-pointer hover:opacity-95'}`}
+                onClick={() => { if (!processing) onDone(); }}
+              >
+                {processing ? (
+                  <span className="flex items-center justify-center gap-2">
+                    Processing…
+                    <svg
+                      xmlns="http://www.w3.org/2000/svg"
+                      className="h-5 w-5"
+                      viewBox="0 0 24 24"
+                      fill="none"
+                      stroke="currentColor"
+                      strokeWidth={2}
+                      style={{
+                        animation: 'spin 1s linear infinite'
+                      }}
+                    >
+                      <style>{`@keyframes spin { 100% { transform: rotate(360deg); } }`}</style>
+                      <circle cx="12" cy="12" r="10" strokeOpacity="0.25" />
+                      <path d="M22 12a10 10 0 00-10-10" strokeLinecap="round" />
+                    </svg>
+                  </span>
+                ) : 'Done'}
+              </button>
+            </div>
           </div>
         </div>
       </div>
@@ -237,7 +150,6 @@ export default function TradeLockOverlay({
 }
 
 function BalancesAndInfo({
-  startedByName,
   currentBalance,
   players,
   showBalances,
@@ -246,7 +158,6 @@ function BalancesAndInfo({
   onOpenPay,
   allowGiveSips,
 }: {
-  startedByName?: string | null;
   currentBalance?: number | null;
   players?: any[];
   showBalances?: boolean;
@@ -260,7 +171,7 @@ function BalancesAndInfo({
   const [openSection, setOpenSection] = useState<'actions' | 'balances' | 'info' | null>(null);
 
   return (
-    <div className="mb-6 text-left">
+    <div className="mb-6 text-left w-full px-6">
       <div className="space-y-3">
         <div>
           <button
@@ -344,11 +255,9 @@ function BalancesAndInfo({
           {openSection === 'balances' && (
             <div className="mt-3 px-0">
               <div className="rounded bg-white/5 border border-white/8 p-3">
-                {/* unified list: current player first, then others */}
                 <div className="text-sm font-medium text-white/80 mb-2">Player balances</div>
                 <div className="divide-y divide-white/6 max-h-40 overflow-auto">
                   {(players && players.length > 0) ? (
-                    // put current player first
                     (() => {
                       const sorted = [...players].sort((a, b) => {
                         if (String(a.id) === String(currentPlayerId)) return -1;
@@ -399,8 +308,8 @@ function BalancesAndInfo({
           {openSection === 'info' && (
             <div className="mt-3 px-0">
               <div className="rounded bg-white/5 border border-white/8 p-3 text-sm text-white/90">
-                {startedByName && <div className="mb-2">Started by {startedByName}</div>}
-                <div>The trade UI is locked for the duration. When finished, press <strong>Done</strong> to unlock for everyone.</div>
+                <div className="mb-2">Finish your sips to continue playing.</div>
+                <div>You cannot collect money until you've finished.</div>
               </div>
             </div>
           )}

@@ -233,6 +233,10 @@ export default function SeatingChartSipPopup({
       const setCount = (v: number) => { (window as any)[OPEN_COUNT_KEY] = v; };
 
       if (open) {
+        // ensure header is visible when opening modal
+        try {
+          window.scrollTo({ top: 0, left: 0, behavior: 'auto' });
+        } catch {}
         const prevCount = getCount();
         if (prevCount === 0) {
           // store the original overflow value once
@@ -435,8 +439,8 @@ export default function SeatingChartSipPopup({
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogPortal>
-        <DialogOverlay className="fixed inset-0 z-[99999] bg-black/80" />
-        <DialogPrimitive.Content className="fixed left-[50%] top-[50%] z-[99999] grid mx-4 w-full max-w-2xl translate-x-[-50%] translate-y-[-50%] gap-4 border bg-background p-6 shadow-lg sm:rounded-lg">
+        <DialogOverlay className="fixed inset-0 z-[100000] bg-black/80" />
+        <DialogPrimitive.Content className="fixed left-[50%] top-[50%] z-[100000] grid mx-4 w-full max-w-2xl translate-x-[-50%] translate-y-[-50%] gap-4 border bg-background p-6 shadow-lg sm:rounded-lg">
         <div className="space-y-0">
           <div className="flex items-center justify-between mb-4">
             <h2 className="text-2xl font-bold">Give Sips</h2>
