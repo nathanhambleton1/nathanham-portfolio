@@ -1,8 +1,7 @@
 import React, { useState, useRef, useEffect, useLayoutEffect } from "react";
 import { X, List } from "lucide-react";
 import { Button } from "./ui/button";
-import { Dialog, DialogPortal, DialogOverlay } from "./ui/dialog";
-import * as DialogPrimitive from "@radix-ui/react-dialog";
+import { Dialog, DialogPortal, DialogOverlay, DialogContent } from "./ui/dialog";
 
 type Player = { id: string; name: string; pending_sips?: number };
 
@@ -440,7 +439,7 @@ export default function SeatingChartSipPopup({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogPortal>
         <DialogOverlay className="fixed inset-0 z-[100000] bg-black/80" />
-        <DialogPrimitive.Content className="fixed left-[50%] top-[50%] z-[100000] grid mx-4 w-full max-w-2xl translate-x-[-50%] translate-y-[-50%] gap-4 border bg-background p-6 shadow-lg sm:rounded-lg">
+        <DialogContent>
         <div className="space-y-0">
           <div className="flex items-center justify-between mb-4">
             <h2 className="text-2xl font-bold">Give Sips</h2>
@@ -560,7 +559,7 @@ export default function SeatingChartSipPopup({
           </div>
         </div>
       </div>
-        </DialogPrimitive.Content>
+        </DialogContent>
       </DialogPortal>
     </Dialog>
   );

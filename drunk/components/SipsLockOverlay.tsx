@@ -4,6 +4,7 @@ import { setDropdownOpen } from './ui/dropdown-menu';
 import { ChevronDown, Info, DollarSign, UserPlus, MoreVertical, Users } from 'lucide-react';
 import SipPopup from './SipPopup';
 import PayPopup from './PayPopup';
+import CollectPopup from './CollectPopup';
 
 export default function SipsLockOverlay({
   open,
@@ -18,6 +19,8 @@ export default function SipsLockOverlay({
   allowGiveSips,
   onAssignSips,
   onPaySubmit,
+  onOpenCollect,
+  onCollect,
 }: {
   open: boolean;
   sipCount: number;
@@ -31,6 +34,8 @@ export default function SipsLockOverlay({
   allowGiveSips?: boolean;
   onAssignSips?: (to: string | string[], sip_count: number) => Promise<void> | void;
   onPaySubmit?: (payments: { to: string | null; amount: number }[], opts?: { freeParking?: boolean; description?: string | null; mode?: 'bank' | 'players' | 'tax' }) => Promise<void> | void;
+  onOpenCollect?: () => void;
+  onCollect?: (opts: any) => Promise<void> | void;
 }) {
   useLockBodyScroll(!!open, { scrollToTop: true });
 
@@ -40,6 +45,7 @@ export default function SipsLockOverlay({
 
   const [sipModalOpen, setSipModalOpen] = useState(false);
   const [payModalOpen, setPayModalOpen] = useState(false);
+  const [collectModalOpen, setCollectModalOpen] = useState(false);
   const [payMode, setPayMode] = useState<'bank' | 'players' | 'tax' | null>('bank');
 
   // Reset any internal popup flags when the overlay opens so the overlay
@@ -74,6 +80,7 @@ export default function SipsLockOverlay({
               currentPlayerId={currentPlayerId}
               onOpenSip={() => setSipModalOpen(true)}
               onOpenPay={(mode: 'bank' | 'players' | 'tax') => { setPayMode(mode ?? 'bank'); setPayModalOpen(true); }}
+              onOpenCollect={() => setCollectModalOpen(true)}
               allowGiveSips={!!allowGiveSips}
             />
 
@@ -111,6 +118,23 @@ export default function SipsLockOverlay({
                 }
               }}
             />
+
+              <CollectPopup
+                open={collectModalOpen}
+                onOpenChange={(v) => setCollectModalOpen(v)}
+                mode={'bank'}
+                currentPlayer={currentPlayer}
+                game={null}
+                onCollect={async (opts) => {
+                  if (!onCollect || !currentPlayer) return;
+                  try {
+                    await onCollect(opts);
+                  } catch (err) {
+                    console.error('Collect error from SipsLockOverlay:', err);
+                    throw err;
+                  }
+                }}
+              />
 
             <div className="w-full mt-4">
               <button
@@ -156,6 +180,7 @@ function BalancesAndInfo({
   currentPlayerId,
   onOpenSip,
   onOpenPay,
+  onOpenCollect,
   allowGiveSips,
 }: {
   currentBalance?: number | null;
@@ -164,11 +189,14 @@ function BalancesAndInfo({
   currentPlayerId?: string | number | null;
   onOpenSip?: () => void;
   onOpenPay?: (mode: 'bank' | 'players' | 'tax') => void;
+  onOpenCollect?: () => void;
   allowGiveSips?: boolean;
 }) {
   // only one section may be open at a time: 'actions' | 'balances' | 'info' | null
   // All dropdowns start closed by default (no localStorage persistence)
   const [openSection, setOpenSection] = useState<'actions' | 'balances' | 'info' | null>(null);
+  // only show non-bankrupt (active) players in the balances list
+  const activePlayers = (players || []).filter((p) => !p.is_bankrupt);
 
   return (
     <div className="mb-6 text-left w-full px-6">
@@ -184,7 +212,7 @@ function BalancesAndInfo({
               <MoreVertical className="w-5 h-5" />
               <div className="text-left">
                 <div className="font-medium">Actions</div>
-                <div className="text-sm text-white/80">Give sips, pay bank, and more</div>
+                <div className="text-sm text-white/80">{allowGiveSips ? 'Give sips, pay bank, and more' : 'Pay bank and players'}</div>
               </div>
             </div>
             <ChevronDown
@@ -197,15 +225,24 @@ function BalancesAndInfo({
             <div className="mt-3 px-0">
               <div className="rounded bg-white/5 border border-white/8 p-3">
                 <div className="space-y-2">
+                  {allowGiveSips && (
+                    <button
+                      type="button"
+                      onClick={() => { onOpenSip && onOpenSip(); }}
+                      className={`w-full text-left p-2 rounded bg-transparent flex items-center gap-2 hover:bg-white/6`}
+                    >
+                      <UserPlus className="w-4 h-4" />
+                      <span>Give Sips</span>
+                    </button>
+                  )}
+
                   <button
                     type="button"
-                    onClick={() => { if (!allowGiveSips) return; onOpenSip && onOpenSip(); }}
-                    disabled={!allowGiveSips}
-                    aria-disabled={!allowGiveSips}
-                    className={`w-full text-left p-2 rounded bg-transparent flex items-center gap-2 ${!allowGiveSips ? 'opacity-60 cursor-not-allowed' : 'hover:bg-white/6'}`}
+                    onClick={() => onOpenCollect && onOpenCollect()}
+                    className="w-full text-left p-2 rounded bg-transparent flex items-center gap-2 hover:bg-white/6"
                   >
-                    <UserPlus className="w-4 h-4" />
-                    <span>Give Sips</span>
+                    <DollarSign className="w-4 h-4" />
+                    <span>Collect From Bank</span>
                   </button>
 
                   <button
@@ -257,24 +294,44 @@ function BalancesAndInfo({
               <div className="rounded bg-white/5 border border-white/8 p-3">
                 <div className="text-sm font-medium text-white/80 mb-2">Player balances</div>
                 <div className="divide-y divide-white/6 max-h-40 overflow-auto">
-                  {(players && players.length > 0) ? (
-                    (() => {
-                      const sorted = [...players].sort((a, b) => {
-                        if (String(a.id) === String(currentPlayerId)) return -1;
-                        if (String(b.id) === String(currentPlayerId)) return 1;
-                        return (a.name || '').toString().localeCompare((b.name || '').toString());
-                      });
-                      return sorted.map((p) => (
-                        <div key={p.id} className="flex items-center justify-between py-2 text-sm text-white/80">
-                          <div className={`${String(p.id) === String(currentPlayerId) ? 'font-medium' : ''}`}>
-                            {p.name}{String(p.id) === String(currentPlayerId) ? ' • You' : ''}
+                  {(activePlayers && activePlayers.length > 0) ? (
+                    showBalances ? (
+                      (() => {
+                        const sorted = [...activePlayers].sort((a, b) => {
+                          if (String(a.id) === String(currentPlayerId)) return -1;
+                          if (String(b.id) === String(currentPlayerId)) return 1;
+                          return (a.name || '').toString().localeCompare((b.name || '').toString());
+                        });
+                        return sorted.map((p) => (
+                          <div key={p.id} className="flex items-center justify-between py-2 text-sm text-white/80">
+                            <div className={`${String(p.id) === String(currentPlayerId) ? 'font-medium' : ''}`}>
+                              {p.name}{String(p.id) === String(currentPlayerId) ? ' • You' : ''}
+                            </div>
+                            <div>${Number(p.balance ?? 0).toLocaleString()}</div>
                           </div>
-                          <div>${Number(p.balance ?? 0).toLocaleString()}</div>
-                        </div>
-                      ));
-                    })()
+                        ));
+                      })()
+                    ) : (
+                      (() => {
+                        const currentActive = activePlayers.find((p) => String(p.id) === String(currentPlayerId));
+                        if (currentActive) {
+                          return (
+                            <div key={currentActive.id} className="flex items-center justify-between py-2 text-sm text-white/80">
+                              <div className="font-medium">{currentActive.name} • You</div>
+                              <div>${Number(currentActive.balance ?? 0).toLocaleString()}</div>
+                            </div>
+                          );
+                        }
+                        // If current player is bankrupt or no active current player, don't show balances
+                        const current = (players || []).find((p) => String(p.id) === String(currentPlayerId));
+                        if (current?.is_bankrupt) {
+                          return <div className="text-sm text-white/70">You are bankrupt — balances hidden.</div>;
+                        }
+                        return <div className="text-sm text-white/70">Other players' balances are hidden by game settings.</div>;
+                      })()
+                    )
                   ) : (
-                    <div className="text-sm text-white/70">No players</div>
+                    <div className="text-sm text-white/70">No active players</div>
                   )}
                 </div>
                 {!showBalances && (

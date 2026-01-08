@@ -10,12 +10,6 @@ const Index = () => {
       path: "drunkopoly",
     },
     {
-      title: "Beer Olympics",
-      description: "Multi-event drinking tournament with scoring.",
-      icon: Award,
-      path: "beer-olympics",
-    },
-    {
       title: "Power Hour",
       description: "Sip of beer every minute for an hour.",
       icon: Clock,

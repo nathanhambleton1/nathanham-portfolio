@@ -5,12 +5,12 @@ import {
   Dialog,
   DialogPortal,
   DialogOverlay,
+  DialogContent,
   DialogHeader,
   DialogTitle,
   DialogDescription,
   DialogFooter,
 } from "./ui/dialog";
-import * as DialogPrimitive from "@radix-ui/react-dialog";
 import { Button } from "./ui/button";
 import { Input } from "./ui/input";
 
@@ -36,13 +36,15 @@ export default function PayPopup({
   // Free parking is always used for tax mode
   const others = useMemo(() => {
     if (!players) return [];
-    // Exclude current player, sort others alphabetically
-    const otherPlayers = players.filter((p) => p.id !== currentPlayer?.id).sort((a, b) => {
-      if (a.name && b.name) {
-        return a.name.localeCompare(b.name);
-      }
-      return 0;
-    });
+    // Exclude current player and bankrupt players, sort others alphabetically
+    const otherPlayers = players
+      .filter((p) => p.id !== currentPlayer?.id && !(p as any).is_bankrupt)
+      .sort((a, b) => {
+        if (a.name && b.name) {
+          return a.name.localeCompare(b.name);
+        }
+        return 0;
+      });
     return otherPlayers;
   }, [players, currentPlayer]);
 
@@ -119,7 +121,7 @@ export default function PayPopup({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogPortal>
         <DialogOverlay className="fixed inset-0 z-[100000] bg-black/80" />
-        <DialogPrimitive.Content className="fixed left-[50%] top-[50%] z-[100000] grid mx-4 w-full max-w-lg translate-x-[-50%] translate-y-[-50%] gap-4 border bg-background p-6 shadow-lg duration-200 sm:rounded-lg">
+        <DialogContent>
         <DialogHeader>
           <DialogTitle>Pay — {mode === "bank" ? "Bank" : mode === "tax" ? "Tax" : "Players"}</DialogTitle>
           <DialogDescription>
@@ -265,7 +267,7 @@ export default function PayPopup({
             </Button>
           </div>
         </DialogFooter>
-        </DialogPrimitive.Content>
+        </DialogContent>
       </DialogPortal>
     </Dialog>
   );

@@ -21,14 +21,17 @@ export default function JailPopup({
 }) {
   const list = useMemo(() => {
     if (!players) return [];
-    // Separate current player and others
-    const current = players.find(p => p.id === currentPlayer?.id);
-    const others = players.filter(p => p.id !== currentPlayer?.id).sort((a, b) => {
-      if (a.name && b.name) {
-        return a.name.localeCompare(b.name);
-      }
-      return 0;
-    });
+    // Separate current player and others. Exclude bankrupt players.
+    // Do NOT include the current player when they are bankrupt (spectator/ghost).
+    const current = players.find(p => p.id === currentPlayer?.id && !(p as any).is_bankrupt);
+    const others = players
+      .filter(p => p.id !== currentPlayer?.id && !(p as any).is_bankrupt)
+      .sort((a, b) => {
+        if (a.name && b.name) {
+          return a.name.localeCompare(b.name);
+        }
+        return 0;
+      });
     return current ? [current, ...others] : others;
   }, [players, currentPlayer]);
   const [selected, setSelected] = useState<string | null>(null);

@@ -126,3 +126,11 @@ All colors MUST be HSL.
   background: hsl(var(--primary));
   border: 3px solid hsl(var(--card));
 }
+
+/* When any lock overlay is open, hide the eye/show-balance toggle to
+   prevent it from peeking above overlays rendered elsewhere (portals). */
+body.drunk-overlay-open .drunk-eye-toggle {
+  display: none !important;
+  visibility: hidden !important;
+  pointer-events: none !important;
+}

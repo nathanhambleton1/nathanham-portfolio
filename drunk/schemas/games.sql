@@ -20,6 +20,8 @@ create table public.games (
   -- Sips gameplay: when true, the Drunkopoly sips features (assigning/completing sips)
   -- are enabled. When false, hide sip counters and related UI on the client.
   sips_enabled boolean not null default true,
+  -- Expansion Pack: when true, payments to the bank are routed to Free Parking pot
+  expansion_enabled boolean not null default false,
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now()
 );
@@ -28,6 +30,8 @@ create table public.games (
 -- ALTER TABLE public.games ADD COLUMN IF NOT EXISTS show_balances boolean NOT NULL DEFAULT true;
 -- Migration: Add sips_enabled column to existing games table
 -- ALTER TABLE public.games ADD COLUMN IF NOT EXISTS sips_enabled boolean NOT NULL DEFAULT true;
+-- Migration: Add expansion_enabled column to existing games table
+-- ALTER TABLE public.games ADD COLUMN IF NOT EXISTS expansion_enabled boolean NOT NULL DEFAULT false;
 
 create index games_code_idx on public.games (code);
 create index games_trade_expires_idx on public.games (trade_timer_expires_at);

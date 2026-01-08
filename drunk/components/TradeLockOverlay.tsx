@@ -4,6 +4,7 @@ import { setDropdownOpen } from './ui/dropdown-menu';
 import { ChevronDown, Info, DollarSign, UserPlus, MoreVertical, Users } from 'lucide-react';
 import SipPopup from './SipPopup';
 import PayPopup from './PayPopup';
+import CollectPopup from './CollectPopup';
 
 function formatRemaining(ms: number) {
   const total = Math.max(0, Math.ceil(ms / 1000));
@@ -25,6 +26,8 @@ export default function TradeLockOverlay({
   allowGiveSips,
   onAssignSips,
   onPaySubmit,
+  onOpenCollect,
+  onCollect,
 }: {
   open: boolean;
   expiresAt?: string | null;
@@ -38,12 +41,15 @@ export default function TradeLockOverlay({
   allowGiveSips?: boolean;
   onAssignSips?: (to: string | string[], sip_count: number) => Promise<void> | void;
   onPaySubmit?: (payments: { to: string | null; amount: number }[], opts?: { freeParking?: boolean; description?: string | null; mode?: 'bank' | 'players' | 'tax' }) => Promise<void> | void;
+  onOpenCollect?: () => void;
+  onCollect?: (opts: any) => Promise<void> | void;
 }) {
   const [now, setNow] = useState(() => Date.now());
   const [flash, setFlash] = useState(false);
   const audioRef = React.useRef<HTMLAudioElement | null>(null);
   const [sipModalOpen, setSipModalOpen] = useState(false);
   const [payModalOpen, setPayModalOpen] = useState(false);
+  const [collectModalOpen, setCollectModalOpen] = useState(false);
   const [payMode, setPayMode] = useState<'bank' | 'players' | 'tax' | null>('bank');
   
   // Initialize alarm audio on mount
@@ -175,6 +181,7 @@ export default function TradeLockOverlay({
             currentPlayerId={currentPlayerId}
             onOpenSip={() => setSipModalOpen(true)}
             onOpenPay={(mode: 'bank' | 'players' | 'tax') => { setPayMode(mode ?? 'bank'); setPayModalOpen(true); }}
+            onOpenCollect={() => setCollectModalOpen(true)}
             allowGiveSips={!!allowGiveSips}
           />
 
@@ -213,6 +220,23 @@ export default function TradeLockOverlay({
             }}
           />
 
+          <CollectPopup
+            open={collectModalOpen}
+            onOpenChange={(v) => setCollectModalOpen(v)}
+            mode={'bank'}
+            currentPlayer={currentPlayer}
+            game={null}
+            onCollect={async (opts) => {
+              if (!onCollect || !currentPlayer) return;
+              try {
+                await onCollect(opts);
+              } catch (err) {
+                console.error('Collect error from TradeLockOverlay:', err);
+                throw err;
+              }
+            }}
+          />
+
           <div className="w-full">
             <button
               className={`w-full px-4 py-3 rounded text-lg bg-white text-black border border-transparent`}
@@ -244,6 +268,7 @@ function BalancesAndInfo({
   currentPlayerId,
   onOpenSip,
   onOpenPay,
+  onOpenCollect,
   allowGiveSips,
 }: {
   startedByName?: string | null;
@@ -253,11 +278,22 @@ function BalancesAndInfo({
   currentPlayerId?: string | number | null;
   onOpenSip?: () => void;
   onOpenPay?: (mode: 'bank' | 'players' | 'tax') => void;
+  onOpenCollect?: () => void;
   allowGiveSips?: boolean;
 }) {
   // only one section may be open at a time: 'actions' | 'balances' | 'info' | null
   // All dropdowns start closed by default (no localStorage persistence)
   const [openSection, setOpenSection] = useState<'actions' | 'balances' | 'info' | null>(null);
+
+  // determine if the current player is bankrupt so we can hide payment actions
+  const current = (players || []).find((p) => String(p.id) === String(currentPlayerId));
+  const isBankrupt = !!current?.is_bankrupt;
+  // only show non-bankrupt (active) players in the balances list
+  const activePlayers = (players || []).filter((p) => !p.is_bankrupt);
+
+  const actionsCaption = isBankrupt
+    ? 'Give Sips'
+    : (allowGiveSips ? 'Give sips, pay bank, and more' : 'Pay bank and players');
 
   return (
     <div className="mb-6 text-left">
@@ -273,7 +309,7 @@ function BalancesAndInfo({
               <MoreVertical className="w-5 h-5" />
               <div className="text-left">
                 <div className="font-medium">Actions</div>
-                <div className="text-sm text-white/80">Give sips, pay bank, and more</div>
+                <div className="text-sm text-white/80">{actionsCaption}</div>
               </div>
             </div>
             <ChevronDown
@@ -286,34 +322,48 @@ function BalancesAndInfo({
             <div className="mt-3 px-0">
               <div className="rounded bg-white/5 border border-white/8 p-3">
                 <div className="space-y-2">
-                  <button
-                    type="button"
-                    onClick={() => { if (!allowGiveSips) return; onOpenSip && onOpenSip(); }}
-                    disabled={!allowGiveSips}
-                    aria-disabled={!allowGiveSips}
-                    className={`w-full text-left p-2 rounded bg-transparent flex items-center gap-2 ${!allowGiveSips ? 'opacity-60 cursor-not-allowed' : 'hover:bg-white/6'}`}
-                  >
-                    <UserPlus className="w-4 h-4" />
-                    <span>Give Sips</span>
-                  </button>
+                  {/* If player is bankrupt, hide collect/pay buttons and only show Give Sips */}
+                  {(allowGiveSips || isBankrupt) && (
+                    <button
+                      type="button"
+                      onClick={() => { onOpenSip && onOpenSip(); }}
+                      className={`w-full text-left p-2 rounded bg-transparent flex items-center gap-2 hover:bg-white/6`}
+                    >
+                      <UserPlus className="w-4 h-4" />
+                      <span>Give Sips</span>
+                    </button>
+                  )}
 
-                  <button
-                    type="button"
-                    onClick={() => onOpenPay && onOpenPay('bank')}
-                    className="w-full text-left p-2 rounded bg-transparent flex items-center gap-2 hover:bg-white/6"
-                  >
-                    <DollarSign className="w-4 h-4" />
-                    <span>Pay Bank</span>
-                  </button>
+                  {!isBankrupt && (
+                    <>
+                      <button
+                        type="button"
+                        onClick={() => onOpenCollect && onOpenCollect()}
+                        className="w-full text-left p-2 rounded bg-transparent flex items-center gap-2 hover:bg-white/6"
+                      >
+                        <DollarSign className="w-4 h-4" />
+                        <span>Collect From Bank</span>
+                      </button>
 
-                  <button
-                    type="button"
-                    onClick={() => onOpenPay && onOpenPay('players')}
-                    className="w-full text-left p-2 rounded bg-transparent flex items-center gap-2 hover:bg-white/6"
-                  >
-                    <Users className="w-4 h-4" />
-                    <span>Pay Players</span>
-                  </button>
+                      <button
+                        type="button"
+                        onClick={() => onOpenPay && onOpenPay('bank')}
+                        className="w-full text-left p-2 rounded bg-transparent flex items-center gap-2 hover:bg-white/6"
+                      >
+                        <DollarSign className="w-4 h-4" />
+                        <span>Pay Bank</span>
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={() => onOpenPay && onOpenPay('players')}
+                        className="w-full text-left p-2 rounded bg-transparent flex items-center gap-2 hover:bg-white/6"
+                      >
+                        <Users className="w-4 h-4" />
+                        <span>Pay Players</span>
+                      </button>
+                    </>
+                  )}
                 </div>
               </div>
             </div>
@@ -347,25 +397,44 @@ function BalancesAndInfo({
                 {/* unified list: current player first, then others */}
                 <div className="text-sm font-medium text-white/80 mb-2">Player balances</div>
                 <div className="divide-y divide-white/6 max-h-40 overflow-auto">
-                  {(players && players.length > 0) ? (
-                    // put current player first
-                    (() => {
-                      const sorted = [...players].sort((a, b) => {
-                        if (String(a.id) === String(currentPlayerId)) return -1;
-                        if (String(b.id) === String(currentPlayerId)) return 1;
-                        return (a.name || '').toString().localeCompare((b.name || '').toString());
-                      });
-                      return sorted.map((p) => (
-                        <div key={p.id} className="flex items-center justify-between py-2 text-sm text-white/80">
-                          <div className={`${String(p.id) === String(currentPlayerId) ? 'font-medium' : ''}`}>
-                            {p.name}{String(p.id) === String(currentPlayerId) ? ' • You' : ''}
+                  {(activePlayers && activePlayers.length > 0) ? (
+                    showBalances ? (
+                      // put current (active) player first
+                      (() => {
+                        const sorted = [...activePlayers].sort((a, b) => {
+                          if (String(a.id) === String(currentPlayerId)) return -1;
+                          if (String(b.id) === String(currentPlayerId)) return 1;
+                          return (a.name || '').toString().localeCompare((b.name || '').toString());
+                        });
+                        return sorted.map((p) => (
+                          <div key={p.id} className="flex items-center justify-between py-2 text-sm text-white/80">
+                            <div className={`${String(p.id) === String(currentPlayerId) ? 'font-medium' : ''}`}>
+                              {p.name}{String(p.id) === String(currentPlayerId) ? ' • You' : ''}
+                            </div>
+                            <div>${Number(p.balance ?? 0).toLocaleString()}</div>
                           </div>
-                          <div>${Number(p.balance ?? 0).toLocaleString()}</div>
-                        </div>
-                      ));
-                    })()
+                        ));
+                      })()
+                    ) : (
+                      (() => {
+                        const currentActive = activePlayers.find((p) => String(p.id) === String(currentPlayerId));
+                        if (currentActive) {
+                          return (
+                            <div key={currentActive.id} className="flex items-center justify-between py-2 text-sm text-white/80">
+                              <div className="font-medium">{currentActive.name} • You</div>
+                              <div>${Number(currentActive.balance ?? 0).toLocaleString()}</div>
+                            </div>
+                          );
+                        }
+                        // If current player is bankrupt or no active current player, don't show balances
+                        if (isBankrupt) {
+                          return <div className="text-sm text-white/70">You are bankrupt — balances hidden.</div>;
+                        }
+                        return <div className="text-sm text-white/70">Other players' balances are hidden by game settings.</div>;
+                      })()
+                    )
                   ) : (
-                    <div className="text-sm text-white/70">No players</div>
+                    <div className="text-sm text-white/70">No active players</div>
                   )}
                 </div>
                 {!showBalances && (

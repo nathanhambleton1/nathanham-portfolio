@@ -1,8 +1,9 @@
 import { useEffect, useState, useRef } from "react";
 import PayPopup from "../components/PayPopup";
 import JailPopup from "../components/JailPopup";
+import BankruptPopup from "../components/BankruptPopup";
 import SipsLockOverlay from "../components/SipsLockOverlay";
-import { UserPlus, DollarSign, Users, Percent, Crown, PiggyBank, Clock, Copy, Settings, QrCode, ChevronDown, Info } from "lucide-react";
+import { UserPlus, DollarSign, Users, Percent, Crown, PiggyBank, Clock, Copy, Settings, QrCode, ChevronDown, Info, Eye, EyeOff } from "lucide-react";
 import { QRCodeSVG } from "qrcode.react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "../components/ui/dialog";
 import CollectPopup from "../components/CollectPopup";
@@ -66,6 +67,7 @@ const Drunkopoly = () => {
   const [tempFreeParkingBalance, setTempFreeParkingBalance] = useState<string>("0");
   const [tempShowBalances, setTempShowBalances] = useState<boolean>(true);
   const [tempSipsEnabled, setTempSipsEnabled] = useState<boolean>(true);
+  const [tempExpansionEnabled, setTempExpansionEnabled] = useState<boolean>(false);
   const [game, setGame] = useState<any | null>(null);
   const [player, setPlayer] = useState<any | null>(null);
   const [recentGames, setRecentGames] = useState<string[]>([]);
@@ -82,13 +84,29 @@ const Drunkopoly = () => {
   const [jailModalOpen, setJailModalOpen] = useState(false);
   const [payProcessing, setPayProcessing] = useState(false);
   const [cardProcessing, setCardProcessing] = useState(false);
+  const [insufficientFundsFlash, setInsufficientFundsFlash] = useState(false);
   const [completingSips, setCompletingSips] = useState(false);
   const [freeParkingPot, setFreeParkingPot] = useState(0);
   const [collectModalOpen, setCollectModalOpen] = useState(false);
   const [collectMode, setCollectMode] = useState<'bank'|'pass_go'|'free_parking'|null>(null);
+  const [bankruptModalOpen, setBankruptModalOpen] = useState(false);
   const [blockedPaymentMessage, setBlockedPaymentMessage] = useState<string | null>(null);
   const prevBalanceRef = useRef<number | null>(null);
   const navigate = useNavigate();
+  const [isNarrow, setIsNarrow] = useState<boolean>(() => {
+    try {
+      return typeof window !== 'undefined' ? window.innerWidth < 400 : false;
+    } catch (e) {
+      return false;
+    }
+  });
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    const onResize = () => setIsNarrow(window.innerWidth < 400);
+    window.addEventListener('resize', onResize);
+    return () => window.removeEventListener('resize', onResize);
+  }, []);
   const [soundEnabled, setSoundEnabled] = useState<boolean>(() => {
     try {
       const stored = typeof window !== "undefined" ? localStorage.getItem("drunkopoly:soundEnabled") : null;
@@ -129,21 +147,28 @@ const Drunkopoly = () => {
     })();
   }, []);
 
-  // Prevent background scrolling when any full-screen lock overlay is visible
-  const anyOverlayOpen = !!player?.in_jail || ((game?.sips_enabled ?? true) && (player?.pending_sips ?? 0) > 0) || !!game?.trade_locked;
-  useLockBodyScroll(anyOverlayOpen, { scrollToTop: true });
+  // Determine which overlays are active. We always want the sips overlay to
+  // be visible when there are pending sips so players can clear them, but
+  // we should NOT forcibly close other action popups when only the sips
+  // overlay appears. Only jail or trade overlays should interrupt other flows.
+  const jailOverlayOpen = !!player?.in_jail;
+  const sipsOverlayOpen = (player?.pending_sips ?? 0) > 0;
+  const tradeOverlayOpen = !!game?.trade_locked;
 
-  // If any full-screen overlay is active (trade/jail/sips), ensure other action
-  // popups are closed so they don't persist or auto-open when overlays toggle.
+  useLockBodyScroll(jailOverlayOpen || sipsOverlayOpen || tradeOverlayOpen, { scrollToTop: true });
+
+  // If a blocking overlay (jail or trade) is active, close other action popups
+  // so they don't persist or auto-open when overlays toggle. But do NOT close
+  // popups when only the sips overlay is active.
   useEffect(() => {
-    if (anyOverlayOpen) {
+    if (jailOverlayOpen || tradeOverlayOpen) {
       setSipModalOpen(false);
       setPayModalOpen(false);
       setCollectModalOpen(false);
       // also close the trade timer dialog if it's not the active overlay
       setTradeTimerModalOpen(false);
     }
-  }, [anyOverlayOpen]);
+  }, [jailOverlayOpen, tradeOverlayOpen]);
 
   const persistRecentGames = (list: string[]) => {
     try {
@@ -328,8 +353,12 @@ const Drunkopoly = () => {
       let total = 0;
       let meData: any[] = [];
 
+      // Determine whether payments to the bank should route to free parking.
+      const expansionEnabled = !!game?.expansion_enabled;
+      const freeParkingFlag = !!opts.freeParking || expansionEnabled;
+
       // Handle tax distribution
-        if (opts.mode === 'tax' && !opts.freeParking && payments.length === 1 && (payments[0].to == null)) {
+        if (opts.mode === 'tax' && !freeParkingFlag && payments.length === 1 && (payments[0].to == null)) {
         const amountPer = Number(payments[0].amount || 0);
         const { data: allPlayers, error: apErr } = await supabase
           .from('players')
@@ -411,7 +440,7 @@ const Drunkopoly = () => {
               from_player_id: p.from_player_id || actor_player_id,
               to_player_id: null,
               amount: intended,
-              type: opts.type || (opts.freeParking ? 'tax' : 'manual'),
+                  type: opts.type || (freeParkingFlag ? 'tax' : 'manual'),
               description: opts.description || null,
             });
             total += intended;
@@ -434,7 +463,7 @@ const Drunkopoly = () => {
               from_player_id: p.from_player_id || actor_player_id,
               to_player_id: p.to,
               amount: 0,
-              type: opts.type || (opts.freeParking ? 'tax' : 'manual'),
+              type: opts.type || (freeParkingFlag ? 'tax' : 'manual'),
               description: opts.description || null,
             });
             continue;
@@ -450,7 +479,7 @@ const Drunkopoly = () => {
               from_player_id: p.from_player_id || actor_player_id,
               to_player_id: p.to,
               amount: 0,
-              type: opts.type || (opts.freeParking ? 'tax' : 'manual'),
+              type: opts.type || (freeParkingFlag ? 'tax' : 'manual'),
               description: hasPending ? (opts.description || `Recipient has pending sips; no money was sent`) : (opts.description || `Recipient is in jail; no money was sent`),
             });
             continue;
@@ -462,7 +491,7 @@ const Drunkopoly = () => {
             from_player_id: p.from_player_id || actor_player_id,
             to_player_id: p.to,
             amount: intended,
-            type: opts.type || (opts.freeParking ? 'tax' : 'manual'),
+              type: opts.type || (freeParkingFlag ? 'tax' : 'manual'),
             description: opts.description || null,
           });
           total += intended;
@@ -508,6 +537,11 @@ const Drunkopoly = () => {
         }
       }
 
+      // Prevent negative balances: ensure actor has enough funds for the total owed
+      if ((actor.balance || 0) < total) {
+        throw new Error('Insufficient funds');
+      }
+
       // Decrement actor balance
       await supabase
         .from('players')
@@ -515,7 +549,7 @@ const Drunkopoly = () => {
         .eq('id', actor_player_id);
 
       // Handle free parking
-      if (opts.freeParking) {
+      if (freeParkingFlag) {
         await supabase
           .from('games')
           .update({ free_parking_balance: (game.free_parking_balance || 0) + total })
@@ -644,6 +678,98 @@ const Drunkopoly = () => {
     }
   };
 
+  // Shared collect handler used by the main CollectPopup and the lock overlays
+  const handleCollect = async (opts: any): Promise<void> => {
+    if (!game || !player) return;
+    try {
+      await collectMoney(game.code, player.id, opts);
+      // Refresh state
+      const players = await fetchPlayers(game.code);
+      setPlayersList(players);
+      // Find updated player robustly (handle number/string id mismatch)
+      const updatedPlayer = players.find((p: any) => String(p.id) === String(player.id));
+      if (updatedPlayer) setPlayer(updatedPlayer);
+      const { data: gameData } = await supabase.from('games').select('*').eq('code', game.code).single();
+      if (gameData) setGame(gameData);
+      // Update any derived UI state (free parking pot)
+      try {
+        setFreeParkingPot(Number((gameData && gameData.free_parking_balance) || 0));
+      } catch (e) {}
+    } catch (err: any) {
+      console.error('Collect error:', err);
+      alert(err.message || 'Failed to collect');
+      throw err;
+    }
+  };
+
+  // Handle bankruptcy - send all money to another player and enter ghost mode
+  const handleBankrupt = async (recipientId: string): Promise<void> => {
+    if (!game || !player) return;
+    try {
+      const currentBalance = player.balance ?? 0;
+      
+      // Transfer all money to recipient if there is any
+      if (currentBalance > 0) {
+        await processPayments(game.code, player.id, [{ to: recipientId, amount: currentBalance }], { 
+          mode: 'players',
+          description: `${player.name} declared bankruptcy`
+        });
+      }
+
+      // Mark player as bankrupt
+      await supabase
+        .from('players')
+        .update({ 
+          is_bankrupt: true, 
+          bankrupt_at: new Date().toISOString(),
+          balance: 0 
+        })
+        .eq('id', player.id);
+
+      // Log bankruptcy event
+      try {
+        const recipient = playersList.find((p: any) => p.id === recipientId);
+        await supabase.from('money_events').insert([{
+          game_id: game.id,
+          actor_player_id: player.id,
+          from_player_id: player.id,
+          to_player_id: recipientId,
+          amount: 0,
+          type: 'bankruptcy',
+          description: `${player.name} declared bankruptcy and sent $${currentBalance.toLocaleString()} to ${recipient?.name ?? 'another player'}`,
+        }]);
+      } catch (logErr) {
+        console.warn('Failed to log bankruptcy', logErr);
+      }
+
+      // Refresh state
+      const players = await fetchPlayers(game.code);
+      setPlayersList(players);
+      const updatedPlayer = players.find((p: any) => String(p.id) === String(player.id));
+      if (updatedPlayer) setPlayer(updatedPlayer);
+
+      try {
+        toast({ 
+          title: 'Bankruptcy Declared', 
+          description: 'You are now in ghost mode. You can spectate but cannot participate in payments.' 
+        });
+      } catch (e) {
+        // ignore toast errors
+      }
+    } catch (err: any) {
+      console.error('Bankruptcy error:', err);
+      try {
+        toast({ 
+          title: 'Bankruptcy failed', 
+          description: err?.message || 'Failed to declare bankruptcy' 
+        });
+      } catch (e) {
+        alert(err?.message || 'Failed to declare bankruptcy');
+      }
+      throw err;
+    }
+  };
+
   // Assign sips
   const assignSips = async (code: string, actor_player_id: string, to_player_id: string, sip_count: number) => {
     try {
@@ -657,6 +783,24 @@ const Drunkopoly = () => {
       if (gErr) throw gErr;
       if (!games || games.length === 0) throw new Error('Game not found');
       const game = games[0];
+
+      // Prevent bankrupt (ghost) players from assigning sips to themselves
+      try {
+        const { data: actorRows, error: aErr } = await supabase
+          .from('players')
+          .select('*')
+          .eq('id', actor_player_id)
+          .eq('game_id', game.id)
+          .limit(1);
+        if (aErr) throw aErr;
+        const actorRow = actorRows && actorRows.length ? actorRows[0] : null;
+        if (actorRow && actorRow.is_bankrupt && String(actor_player_id) === String(to_player_id)) {
+          throw new Error('Bankrupt players cannot assign sips to themselves');
+        }
+      } catch (checkErr) {
+        // If the check failed because actor not found or is bankrupt-self, rethrow
+        if ((checkErr as any)?.message) throw checkErr;
+      }
 
       // Insert sip event
       const insertRow = {
@@ -843,6 +987,75 @@ const Drunkopoly = () => {
     }
   };
 
+  // Toggle show balances (only commissioner)
+  const toggleShowBalances = async (enabled: boolean) => {
+    if (!game || !player) return;
+    if (!player.is_commissioner) {
+      try { toast({ title: 'Not allowed', description: 'Only the commissioner can change game settings.' }); } catch {}
+      return;
+    }
+    try {
+      const { data: updatedGames, error } = await supabase
+        .from('games')
+        .update({ show_balances: enabled, updated_at: new Date().toISOString() })
+        .eq('id', game.id)
+        .select()
+        .limit(1);
+      if (error) throw error;
+      if (updatedGames && updatedGames.length > 0) setGame(updatedGames[0]);
+      try { toast({ title: 'Updated', description: `Show player balances ${enabled ? 'enabled' : 'disabled'}.` }); } catch {}
+    } catch (err: any) {
+      console.error('Toggle show balances failed', err);
+      try { toast({ title: 'Failed', description: err?.message || 'Unable to update setting' }); } catch {}
+    }
+  };
+
+  // Toggle sips enabled (only commissioner)
+  const toggleSipsEnabled = async (enabled: boolean) => {
+    if (!game || !player) return;
+    if (!player.is_commissioner) {
+      try { toast({ title: 'Not allowed', description: 'Only the commissioner can change game settings.' }); } catch {}
+      return;
+    }
+    try {
+      const { data: updatedGames, error } = await supabase
+        .from('games')
+        .update({ sips_enabled: enabled, updated_at: new Date().toISOString() })
+        .eq('id', game.id)
+        .select()
+        .limit(1);
+      if (error) throw error;
+      if (updatedGames && updatedGames.length > 0) setGame(updatedGames[0]);
+      try { toast({ title: 'Updated', description: `Sips ${enabled ? 'enabled' : 'disabled'}.` }); } catch {}
+    } catch (err: any) {
+      console.error('Toggle sips failed', err);
+      try { toast({ title: 'Failed', description: err?.message || 'Unable to update setting' }); } catch {}
+    }
+  };
+
+  // Toggle expansion pack (only commissioner)
+  const toggleExpansionEnabled = async (enabled: boolean) => {
+    if (!game || !player) return;
+    if (!player.is_commissioner) {
+      try { toast({ title: 'Not allowed', description: 'Only the commissioner can change game settings.' }); } catch {}
+      return;
+    }
+    try {
+      const { data: updatedGames, error } = await supabase
+        .from('games')
+        .update({ expansion_enabled: enabled, updated_at: new Date().toISOString() })
+        .eq('id', game.id)
+        .select()
+        .limit(1);
+      if (error) throw error;
+      if (updatedGames && updatedGames.length > 0) setGame(updatedGames[0]);
+      try { toast({ title: 'Updated', description: `Expansion Pack ${enabled ? 'enabled' : 'disabled'}.` }); } catch {}
+    } catch (err: any) {
+      console.error('Toggle expansion failed', err);
+      try { toast({ title: 'Failed', description: err?.message || 'Unable to update setting' }); } catch {}
+    }
+  };
+
   // Send a player to jail
   const sendPlayerToJail = async (targetPlayerId: string) => {
     if (!game || !player) return;
@@ -885,6 +1098,18 @@ const Drunkopoly = () => {
 
   const payToGetOut = async () => {
     if (!game || !player) return;
+    // Prevent paying to get out if player doesn't have enough money
+    if ((player.balance || 0) < 50) {
+      try {
+        toast({ title: 'Insufficient funds', description: "You don't have $50 to pay to get out of jail.", variant: 'destructive' });
+      } catch (e) {
+        // fallback
+        alert('Insufficient funds to pay $50 to get out of jail');
+      }
+      setInsufficientFundsFlash(true);
+      window.setTimeout(() => setInsufficientFundsFlash(false), 900);
+      return;
+    }
     setPayProcessing(true);
     try {
       // Deduct $50 from the jailed player and send it to Free Parking
@@ -1519,7 +1744,13 @@ const Drunkopoly = () => {
               className="space-y-4"
               onSubmit={async (e) => {
                 e.preventDefault();
-                if (!name.trim()) return;
+                const cleaned = (name ?? '').trim();
+                if (!cleaned) return;
+                // Validate: only letters and spaces, 1-15 chars
+                if (!/^[A-Z ]{1,15}$/.test(cleaned)) {
+                  setError('Name must be letters and spaces only (max 15 characters)');
+                  return;
+                }
                 setError(null);
                 setLoading(true);
                 try {
@@ -1627,15 +1858,24 @@ const Drunkopoly = () => {
               <Input
                 placeholder="Your name"
                 value={name}
-                onChange={(e) => setName((e.target.value ?? '').toUpperCase())}
-                maxLength={20}
+                onChange={(e) => {
+                  const raw = e.target.value ?? '';
+                  const upper = raw.toUpperCase();
+                  let filtered = upper.replace(/[^A-Z ]+/g, '');
+                  if (filtered.length > 10) filtered = filtered.slice(0, 10);
+                  setName(filtered);
+                }}
+                maxLength={10}
                 autoFocus
               />
               <div className="flex flex-col gap-2">
-                <Button className="w-full" type="submit" disabled={!name.trim() || loading}>
+                <Button className="w-full" type="submit" disabled={!/^[A-Z ]{1,10}$/.test((name||'').trim()) || loading}>
                   {loading ? "Please wait..." : "Continue"}
                 </Button>
                 {error && <div className="text-destructive text-sm">{error}</div>}
+                              {name.length > 10 && (
+                                <div className="text-destructive text-sm">Name must be 10 characters or less.</div>
+                              )}
               </div>
             </form>
           </CardContent>
@@ -1682,6 +1922,7 @@ const Drunkopoly = () => {
                       free_parking_balance: Number(tempFreeParkingBalance || 0),
                       show_balances: tempShowBalances,
                       sips_enabled: tempSipsEnabled,
+                      expansion_enabled: tempExpansionEnabled,
                     }])
                     .select()
                     .single();
@@ -1788,6 +2029,16 @@ const Drunkopoly = () => {
                     onCheckedChange={(checked) => setTempSipsEnabled(checked)}
                   />
                 </div>
+                <div className="flex items-center justify-between py-2 px-3 rounded-lg bg-muted/30 mt-2">
+                  <div className="flex-1">
+                    <div className="font-medium text-sm">Expansion Pack</div>
+                    <div className="text-xs text-muted-foreground">When enabled, all payments to the bank go into Free Parking</div>
+                  </div>
+                  <Switch
+                    checked={tempExpansionEnabled}
+                    onCheckedChange={(checked) => setTempExpansionEnabled(checked)}
+                  />
+                </div>
               </div>
 
               <div className="flex gap-2 mt-4">
@@ -1825,7 +2076,7 @@ const Drunkopoly = () => {
           )}
         </div>
           <div className="flex items-center gap-2">
-          {(game?.sips_enabled ?? true) && (
+          {(game?.sips_enabled ?? true) && !isNarrow && (
             <Button variant="ghost" size="sm" onClick={() => navigate('/drunk/drunkopoly/rules')}>Rules</Button>
           )}
           <GameCodePopover
@@ -1836,6 +2087,7 @@ const Drunkopoly = () => {
             game={game}
             onRemovePlayer={handleRemovePlayer}
             soundEnabled={soundEnabled}
+            showRulesInPopover={isNarrow && (game?.sips_enabled ?? true)}
             showBalances={game?.show_balances ?? true}
             onToggleSound={(enabled) => {
               setSoundEnabled(enabled);
@@ -1845,70 +2097,210 @@ const Drunkopoly = () => {
                 // ignore localStorage errors
               }
             }}
+            onToggleShowBalances={toggleShowBalances}
+            onToggleSipsEnabled={toggleSipsEnabled}
+            onToggleExpansion={toggleExpansionEnabled}
           />
         </div>
       </div>
 
-      <div className="flex-1 flex flex-col items-center justify-center">
-        <div className="mb-8">
-          <div className="text-muted-foreground text-lg mb-2 text-center">
-            Current Balance
-          </div>
-          <div className="text-6xl font-extrabold text-primary text-center">
-            <AnimatedNumber value={player?.balance ?? game?.initial_balance ?? 1500} soundEnabled={soundEnabled} />
-          </div>
-        </div>
-
-        {/* SIP section (hidden when sips_enabled is false) */}
-        {(game?.sips_enabled ?? true) && (
-          <Section title="Sips">
-            <div className="grid grid-cols-1 gap-4 w-64">
-              <Button variant="secondary" className="py-6" onClick={() => setSipModalOpen(true)}>
-                <UserPlus className="h-5 w-5" />
-                Give Sips
-              </Button>
+      <div className="flex-1 flex flex-col items-center justify-center px-4 sm:px-6 lg:px-8">
+        {player?.is_bankrupt ? (
+          /* Ghost Mode UI for bankrupt players */
+          <>
+            <div className="mb-8 text-center">
+              <div className="text-2xl font-bold text-muted-foreground mb-4">
+                You are bankrupt
+              </div>
+              <div className="text-sm text-muted-foreground max-w-md">
+                You can monitor the game and use actions like trade timers and jail but you cannot participate in payments.
+              </div>
             </div>
-          </Section>
-        )}
 
-        {/* Pay section */}
-        <Section title="Pay" className={"mt-8"}>
-          <div className="grid grid-cols-1 gap-4 w-64">
-            <Button
-              variant="secondary"
-              className="w-full py-6"
-              onClick={() => {
-                setPayMode("bank");
-                setPayModalOpen(true);
-              }}
-            >
-              <DollarSign className="h-5 w-5" />
-              Bank
-            </Button>
-            <Button
-              variant="secondary"
-              className="w-full py-6"
-              onClick={() => {
-                setPayMode("players");
-                setPayModalOpen(true);
-              }}
-            >
-              <Users className="h-5 w-5" />
-              Players
-            </Button>
-            <Button
-              variant="secondary"
-              className="w-full py-6"
-              onClick={() => {
-                setPayMode("tax");
-                setPayModalOpen(true);
-              }}
-            >
-              <Percent className="h-5 w-5" />
-              Tax
-            </Button>
-          </div>
-        </Section>
+            {/* Show all players' balances (override show_balances setting for ghosts) */}
+            <Section title="Player Balances" className="mt-8">
+              <div className="grid grid-cols-1 gap-2 w-64">
+                {playersList
+                  .filter((p: any) => !p.is_bankrupt)
+                  .sort((a: any, b: any) => (b.balance ?? 0) - (a.balance ?? 0))
+                  .map((p: any) => (
+                    <div key={p.id} className="flex items-center justify-between p-3 border rounded bg-card w-full">
+                      <div className="font-medium">{p.name}</div>
+                      <div className="text-lg font-bold text-primary">${(p.balance ?? 0).toLocaleString()}</div>
+                    </div>
+                  ))}
+              </div>
+            </Section>
+
+            {/* Ghost mode can still give sips if enabled */}
+            {(game?.sips_enabled ?? true) && (
+              <Section title="Sips" className="mt-8">
+                <div className="grid grid-cols-1 gap-4 w-64">
+                  <Button variant="secondary" className="py-6" onClick={() => setSipModalOpen(true)}>
+                    <UserPlus className="h-5 w-5" />
+                    Give Sips
+                  </Button>
+                </div>
+              </Section>
+            )}
+
+            {/* Ghost mode can still use actions */}
+            <Section title="Actions" className="mt-8">
+              <div className="grid grid-cols-1 gap-4 w-64">
+                <Button
+                  variant="secondary"
+                  className="w-full py-6"
+                  onClick={() => {
+                    setTradeTimerSelected(Number(game?.trade_timer_seconds ?? 60));
+                    setTradeTimerModalOpen(true);
+                  }}
+                >
+                  <Clock className="h-5 w-5" />
+                  Trade Timer
+                </Button>
+                <Button
+                  variant="secondary"
+                  className="w-full py-6"
+                  onClick={() => setJailModalOpen(true)}
+                >
+                  <Users className="h-5 w-5" />
+                  Jail
+                </Button>
+              </div>
+            </Section>
+          </>
+        ) : (
+          /* Normal UI for active players */
+          <>
+            <div className="mb-8">
+              <div className="text-muted-foreground text-lg mb-2 text-center">
+                Current Balance
+              </div>
+              <div className="text-6xl font-extrabold text-primary text-center">
+                <AnimatedNumber
+                  value={player?.balance ?? game?.initial_balance ?? 1500}
+                  soundEnabled={soundEnabled}
+                  maskIfGameHidden={!((game && game.show_balances) ?? true)}
+                  gameCode={game?.code ?? null}
+                />
+              </div>
+            </div>
+
+            {/* SIP section (hidden when sips_enabled is false) */}
+            {(game?.sips_enabled ?? true) && (
+              <Section title="Sips">
+                <div className="grid grid-cols-1 gap-4 w-64">
+                  <Button variant="secondary" className="py-6" onClick={() => setSipModalOpen(true)}>
+                    <UserPlus className="h-5 w-5" />
+                    Give Sips
+                  </Button>
+                </div>
+              </Section>
+            )}
+
+            {/* Pay section */}
+            <Section title="Pay" className={"mt-8"}>
+              <div className="grid grid-cols-1 gap-4 w-64">
+                <Button
+                  variant="secondary"
+                  className="w-full py-6"
+                  onClick={() => {
+                    setPayMode("bank");
+                    setPayModalOpen(true);
+                  }}
+                >
+                  <DollarSign className="h-5 w-5" />
+                  Bank
+                </Button>
+                <Button
+                  variant="secondary"
+                  className="w-full py-6"
+                  onClick={() => {
+                    setPayMode("players");
+                    setPayModalOpen(true);
+                  }}
+                >
+                  <Users className="h-5 w-5" />
+                  Players
+                </Button>
+                <Button
+                  variant="secondary"
+                  className="w-full py-6"
+                  onClick={() => {
+                    setPayMode("tax");
+                    setPayModalOpen(true);
+                  }}
+                >
+                  <Percent className="h-5 w-5" />
+                  Tax
+                </Button>
+              </div>
+            </Section>
+            
+            
+
+            {/* Collect section */}
+            <Section title="Collect" className="mt-8">
+              <div className="grid grid-cols-1 gap-4 w-64">
+                <Button variant="secondary" className="w-full py-6" onClick={() => { setCollectMode('bank'); setCollectModalOpen(true); }}>
+                  <DollarSign className="h-5 w-5" />
+                  Bank
+                </Button>
+                <Button variant="secondary" className="w-full py-6" onClick={() => { setCollectMode('pass_go'); setCollectModalOpen(true); }}>
+                  <Crown className="h-5 w-5" />
+                  Pass Go
+                </Button>
+                <Button 
+                  variant="secondary" 
+                  className="w-full py-6" 
+                  onClick={() => { 
+                    setCollectMode('free_parking'); 
+                    setCollectModalOpen(true); 
+                  }}
+                >
+                  <PiggyBank className="h-5 w-5" />
+                  Free Parking
+                </Button>
+              </div>
+            </Section>
+            
+            {/* Actions section (trade timer) */}
+            <Section title="Actions" className="mt-8">
+              <div className="grid grid-cols-1 gap-4 w-64">
+                <Button
+                  variant="secondary"
+                  className="w-full py-6"
+                  onClick={() => {
+                    setTradeTimerSelected(Number(game?.trade_timer_seconds ?? 60));
+                    setTradeTimerModalOpen(true);
+                  }}
+                >
+                  <Clock className="h-5 w-5" />
+                  Trade Timer
+                </Button>
+                <Button
+                  variant="secondary"
+                  className="w-full py-6"
+                  onClick={() => setJailModalOpen(true)}
+                >
+                  <Users className="h-5 w-5" />
+                  Jail
+                </Button>
+                {!player?.is_bankrupt && (
+                  <Button
+                    variant="secondary"
+                    className="w-full py-6 border-2 border-red-500 text-foreground shadow-sm"
+                    style={{ borderColor: '#ef4444' }}
+                    onClick={() => setBankruptModalOpen(true)}
+                  >
+                    <DollarSign className="h-5 w-5" />
+                    Declare Bankruptcy
+                  </Button>
+                )}
+              </div>
+            </Section>
+          </>
+        )}
         
         
 
@@ -1972,25 +2364,24 @@ const Drunkopoly = () => {
               if (gameData) setGame(gameData);
             } catch (err: any) {
               console.error('Payment error:', err);
-              alert(err.message || 'Failed to process payment');
+              const msg = err?.message || 'Failed to process payment';
+              if (msg && msg.toLowerCase().includes('insufficient')) {
+                try {
+                  toast({ title: 'Insufficient funds', description: "You don't have enough money to complete this payment.", variant: 'destructive' });
+                } catch (e) {
+                  alert(msg);
+                }
+                setInsufficientFundsFlash(true);
+                window.setTimeout(() => setInsufficientFundsFlash(false), 900);
+              } else {
+                try { toast({ title: 'Payment failed', description: msg }); } catch (e) { alert(msg); }
+              }
             }
           }}
         />
 
         {/* Blocked payment message modal */}
-        <Dialog open={!!blockedPaymentMessage} onOpenChange={v => { if (!v) setBlockedPaymentMessage(null); }}>
-          <DialogContent>
-            <div className="px-4">
-              <DialogHeader>
-                <DialogTitle>Payment Blocked</DialogTitle>
-              </DialogHeader>
-              <div className="mb-4">{blockedPaymentMessage}</div>
-              <DialogFooter>
-                <Button onClick={() => setBlockedPaymentMessage(null)}>OK</Button>
-              </DialogFooter>
-            </div>
-          </DialogContent>
-        </Dialog>
+        <BlockedPaymentDialog blockedPaymentMessage={blockedPaymentMessage} setBlockedPaymentMessage={setBlockedPaymentMessage} />
 
         <CollectPopup
           open={collectModalOpen}
@@ -1998,22 +2389,7 @@ const Drunkopoly = () => {
           mode={collectMode}
           currentPlayer={player}
           game={game}
-          onCollect={async (opts) => {
-            if (!game || !player) return;
-            try {
-              await collectMoney(game.code, player.id, opts);
-              // Refresh state
-              const players = await fetchPlayers(game.code);
-              setPlayersList(players);
-              const updatedPlayer = players.find((p: any) => p.id === player.id);
-              if (updatedPlayer) setPlayer(updatedPlayer);
-              const { data: gameData } = await supabase.from('games').select('*').eq('code', game.code).single();
-              if (gameData) setGame(gameData);
-            } catch (err: any) {
-              console.error('Collect error:', err);
-              alert(err.message || 'Failed to collect');
-            }
-          }}
+          onCollect={async (opts) => { await handleCollect(opts); }}
         />
 
         <SipPopup
@@ -2021,7 +2397,7 @@ const Drunkopoly = () => {
           onOpenChange={(v) => setSipModalOpen(v)}
           currentPlayer={player}
           players={playersList}
-          allowSelf={!!(player?.is_commissioner || (game?.host_player_id === player?.id))}
+          allowSelf={!!(player && !player.is_bankrupt)}
           onSubmit={async (to, sip_count) => {
             if (!game || !player) return;
             try {
@@ -2043,58 +2419,6 @@ const Drunkopoly = () => {
             }
           }}
         />
-
-        
-
-        {/* Collect section */}
-        <Section title="Collect" className="mt-8">
-          <div className="grid grid-cols-1 gap-4 w-64">
-            <Button variant="secondary" className="w-full py-6" onClick={() => { setCollectMode('bank'); setCollectModalOpen(true); }}>
-              <DollarSign className="h-5 w-5" />
-              Bank
-            </Button>
-            <Button variant="secondary" className="w-full py-6" onClick={() => { setCollectMode('pass_go'); setCollectModalOpen(true); }}>
-              <Crown className="h-5 w-5" />
-              Pass Go
-            </Button>
-            <Button 
-              variant="secondary" 
-              className="w-full py-6" 
-              onClick={() => { 
-                setCollectMode('free_parking'); 
-                setCollectModalOpen(true); 
-              }}
-            >
-              <PiggyBank className="h-5 w-5" />
-              Free Parking
-            </Button>
-          </div>
-        </Section>
-        
-        {/* Actions section (trade timer) */}
-        <Section title="Actions" className="mt-8">
-          <div className="grid grid-cols-1 gap-4 w-64">
-            <Button
-              variant="secondary"
-              className="w-full py-6"
-              onClick={() => {
-                setTradeTimerSelected(Number(game?.trade_timer_seconds ?? 60));
-                setTradeTimerModalOpen(true);
-              }}
-            >
-              <Clock className="h-5 w-5" />
-              Trade Timer
-            </Button>
-            <Button
-              variant="secondary"
-              className="w-full py-6"
-              onClick={() => setJailModalOpen(true)}
-            >
-              <Users className="h-5 w-5" />
-              Jail
-            </Button>
-          </div>
-        </Section>
 
         <Dialog open={tradeTimerModalOpen} onOpenChange={(v) => setTradeTimerModalOpen(v)}>
           <DialogContent>
@@ -2139,6 +2463,15 @@ const Drunkopoly = () => {
           }}
         />
 
+        <BankruptPopup
+          open={bankruptModalOpen}
+          onOpenChange={(v) => setBankruptModalOpen(v)}
+          currentPlayer={player}
+          players={playersList}
+          showBalances={game?.show_balances ?? true}
+          onSubmit={handleBankrupt}
+        />
+
         <JailLockOverlay
           open={!!player?.in_jail}
           jailedByName={playersList?.find((p: any) => p.id === player?.jail_started_by)?.name ?? null}
@@ -2148,11 +2481,12 @@ const Drunkopoly = () => {
           cardProcessing={cardProcessing}
           onPayToGetOut={() => payToGetOut()}
           onUseCard={() => useGetOutCard()}
+          payInsufficientFlash={insufficientFundsFlash}
           players={playersList}
           showBalances={game?.show_balances ?? true}
           currentPlayerId={player?.id}
           currentPlayer={player}
-          allowGiveSips={true}
+          allowGiveSips={game?.sips_enabled ?? true}
           onAssignSips={async (to, sip_count) => {
             if (!game || !player) return;
             try {
@@ -2169,7 +2503,8 @@ const Drunkopoly = () => {
               if (gameData) setGame(gameData);
             } catch (err: any) {
               console.error('Assign sips error:', err);
-              alert(err.message || 'Failed to assign sips');
+              const msg = err?.message || 'Failed to assign sips';
+              try { toast({ title: 'Action failed', description: msg }); } catch (e) { alert(msg); }
             }
           }}
           onPaySubmit={async (payments, opts) => {
@@ -2223,13 +2558,22 @@ const Drunkopoly = () => {
               if (gameData) setGame(gameData);
             } catch (err: any) {
               console.error('Pay submit error from JailLockOverlay:', err);
-              alert(err.message || 'Failed to process payment');
+              const msg = err?.message || 'Failed to process payment';
+              if (msg && msg.toLowerCase().includes('insufficient')) {
+                try { toast({ title: 'Insufficient funds', description: "You don't have enough money to complete this payment.", variant: 'destructive' }); } catch (e) { alert(msg); }
+                setInsufficientFundsFlash(true);
+                window.setTimeout(() => setInsufficientFundsFlash(false), 900);
+              } else {
+                try { toast({ title: 'Payment failed', description: msg }); } catch (e) { alert(msg); }
+              }
             }
           }}
+          onOpenCollect={() => { setCollectModalOpen(true); setCollectMode('bank'); }}
+          onCollect={handleCollect}
         />
 
         <SipsLockOverlay
-          open={(game?.sips_enabled ?? true) && (player?.pending_sips ?? 0) > 0}
+          open={(player?.pending_sips ?? 0) > 0}
           sipCount={player?.pending_sips ?? 0}
           onDone={async () => {
             if (!game || !player) return;
@@ -2254,7 +2598,7 @@ const Drunkopoly = () => {
           showBalances={game?.show_balances ?? true}
           currentPlayerId={player?.id}
           currentPlayer={player}
-          allowGiveSips={true}
+          allowGiveSips={game?.sips_enabled ?? true}
           onAssignSips={async (to, sip_count) => {
             if (!game || !player) return;
             if (Array.isArray(to)) {
@@ -2321,9 +2665,18 @@ const Drunkopoly = () => {
               if (gameData) setGame(gameData);
             } catch (err: any) {
               console.error('Pay submit error from SipsLockOverlay:', err);
-              alert(err.message || 'Failed to process payment');
+              const msg = err?.message || 'Failed to process payment';
+              if (msg && msg.toLowerCase().includes('insufficient')) {
+                try { toast({ title: 'Insufficient funds', description: "You don't have enough money to complete this payment.", variant: 'destructive' }); } catch (e) { alert(msg); }
+                setInsufficientFundsFlash(true);
+                window.setTimeout(() => setInsufficientFundsFlash(false), 900);
+              } else {
+                try { toast({ title: 'Payment failed', description: msg }); } catch (e) { alert(msg); }
+              }
             }
           }}
+          onOpenCollect={() => { setCollectModalOpen(true); setCollectMode('bank'); }}
+          onCollect={handleCollect}
         />
 
         <TradeLockOverlay
@@ -2336,7 +2689,7 @@ const Drunkopoly = () => {
           showBalances={game?.show_balances ?? true}
           currentPlayerId={player?.id}
           currentPlayer={player}
-          allowGiveSips={true}
+          allowGiveSips={game?.sips_enabled ?? true}
           onAssignSips={async (to, sip_count) => {
             if (!game || !player) return;
             if (Array.isArray(to)) {
@@ -2403,9 +2756,18 @@ const Drunkopoly = () => {
               if (gameData) setGame(gameData);
             } catch (err: any) {
               console.error('Pay submit error from TradeLockOverlay:', err);
-              alert(err.message || 'Failed to process payment');
+              const msg = err?.message || 'Failed to process payment';
+              if (msg && msg.toLowerCase().includes('insufficient')) {
+                try { toast({ title: 'Insufficient funds', description: "You don't have enough money to complete this payment.", variant: 'destructive' }); } catch (e) { alert(msg); }
+                setInsufficientFundsFlash(true);
+                window.setTimeout(() => setInsufficientFundsFlash(false), 900);
+              } else {
+                try { toast({ title: 'Payment failed', description: msg }); } catch (e) { alert(msg); }
+              }
             }
           }}
+          onOpenCollect={() => { setCollectModalOpen(true); setCollectMode('bank'); }}
+          onCollect={handleCollect}
         />
       </div>
       <ActivityLog gameCode={game?.code ?? gameCode} players={playersList} />
@@ -2430,12 +2792,27 @@ function Section({
   );
 }
 
-function AnimatedNumber({ value, soundEnabled = true }: { value: number; soundEnabled?: boolean }) {
+function AnimatedNumber({ value, soundEnabled = true, maskIfGameHidden = false, gameCode, }: { value: number; soundEnabled?: boolean; maskIfGameHidden?: boolean; gameCode?: string | null }) {
   const [display, setDisplay] = useState<number>(value ?? 0);
   const prevRef = useRef<number>(value ?? 0);
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const [bump, setBump] = useState<'up' | 'down' | 'neutral'>('neutral');
   const timeoutRef = useRef<number | null>(null);
+  const SHOW_KEY_PREFIX = 'drunkopoly:show_my_balance:';
+  const storageKey = SHOW_KEY_PREFIX + (gameCode || 'global');
+
+  // When the game has `show_balances` disabled we allow the user to locally
+  // toggle visibility of their own big balance. This persists to localStorage
+  // per-game (or global if no code).
+  const [localShown, setLocalShown] = useState<boolean>(() => {
+    try {
+      if (!maskIfGameHidden) return true;
+      const raw = typeof window !== 'undefined' ? localStorage.getItem(storageKey) : null;
+      return raw === 'true';
+    } catch (e) {
+      return false;
+    }
+  });
 
   // initialize audio once
   useEffect(() => {
@@ -2549,19 +2926,55 @@ function AnimatedNumber({ value, soundEnabled = true }: { value: number; soundEn
   // Inline hex color to ensure it overrides any inherited text color
   const colorHex = isUp ? '#34D399' /* green-400 */ : isDown ? '#EF4444' /* red-500 */ : undefined;
 
+  const isMasked = maskIfGameHidden && !localShown;
+
   return (
-    <div aria-live="polite" className="inline-flex items-baseline gap-1">
-      <span className={`text-2xl align-baseline ${colorClass}`} style={{ ...styleToUse, color: colorHex }}>{"$"}</span>
-      <span className={`align-baseline ${colorClass}`} style={{ ...styleToUse, fontVariantNumeric: 'tabular-nums', color: colorHex }}>{formatted}</span>
+    <div aria-live="polite" className="relative inline-flex items-baseline gap-1">
+      <div
+        className={`inline-flex items-baseline gap-1`} 
+        style={{
+          transition: 'filter 220ms ease, opacity 220ms',
+          filter: isMasked ? 'blur(14px) saturate(.85)' : 'none',
+        }}
+      >
+        <span className={`text-2xl align-baseline ${colorClass}`} style={{ ...styleToUse, color: colorHex }}>{"$"}</span>
+        <span className={`align-baseline ${colorClass}`} style={{ ...styleToUse, fontVariantNumeric: 'tabular-nums', color: colorHex }}>{formatted}</span>
+      </div>
+
+      {maskIfGameHidden ? (
+        <button
+          onClick={(e) => {
+            e.stopPropagation();
+            try {
+              const next = !localShown;
+              setLocalShown(next);
+              if (typeof window !== 'undefined') localStorage.setItem(storageKey, String(next));
+            } catch (err) {
+              // ignore storage errors
+            }
+          }}
+          aria-pressed={localShown}
+          aria-label={localShown ? 'Hide balance' : 'Show balance'}
+          title={localShown ? 'Hide balance' : 'Show balance'}
+          className="drunk-eye-toggle inline-flex items-center justify-center -ml-4 mt-8 w-9 h-9 rounded-full border border-white/16 shadow-[0_6px_18px_rgba(0,0,0,0.45)] text-white bg-transparent transition-transform duration-150 hover:-translate-y-1 focus:outline-none focus:ring-2 focus:ring-white/10"
+        >
+          {localShown ? (
+            <Eye className="w-4 h-4" />
+          ) : (
+            <EyeOff className="w-4 h-4" />
+          )}
+        </button>
+      ) : null}
     </div>
   );
 }
 
-function GameCodePopover({ code, onLogout, players, currentPlayer, game, onRemovePlayer, soundEnabled, onToggleSound, showBalances = true }: { code: string; onLogout?: () => void; players?: any[]; currentPlayer?: any; game?: any; onRemovePlayer?: (id: string) => Promise<void>; soundEnabled?: boolean; onToggleSound?: (enabled: boolean) => void; showBalances?: boolean }) {
+function GameCodePopover({ code, onLogout, players, currentPlayer, game, onRemovePlayer, soundEnabled, onToggleSound, showBalances = true, onToggleShowBalances, onToggleSipsEnabled, onToggleExpansion, showRulesInPopover }: { code: string; onLogout?: () => void; players?: any[]; currentPlayer?: any; game?: any; onRemovePlayer?: (id: string) => Promise<void>; soundEnabled?: boolean; onToggleSound?: (enabled: boolean) => void; showBalances?: boolean; onToggleShowBalances?: (enabled: boolean) => void; onToggleSipsEnabled?: (enabled: boolean) => void; onToggleExpansion?: (enabled: boolean) => void; showRulesInPopover?: boolean }) {
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [confirmOpen, setConfirmOpen] = useState(false);
   const [qrCodeOpen, setQrCodeOpen] = useState(false);
   const [pendingRemove, setPendingRemove] = useState<{ id: string; name?: string } | null>(null);
+  const navigate = useNavigate();
 
   const requestRemove = (id: string, name?: string) => {
     setPendingRemove({ id, name });
@@ -2630,6 +3043,12 @@ function GameCodePopover({ code, onLogout, players, currentPlayer, game, onRemov
             <Copy size={16} />
             Invite Link
           </Button>
+          {showRulesInPopover && (
+            <Button variant="secondary" className="w-full mt-1" onClick={() => { setQrCodeOpen(false); setSettingsOpen(false); onLogout && /* no-op */ null; navigate('/drunk/drunkopoly/rules'); }}>
+              <Info size={16} />
+              Rules
+            </Button>
+          )}
           <Button variant="secondary" className="w-full mt-1" onClick={() => setSettingsOpen(true)}>
             <Settings size={16} />
             Settings
@@ -2667,15 +3086,16 @@ function GameCodePopover({ code, onLogout, players, currentPlayer, game, onRemov
       </DialogContent>
     </Dialog>
     <Dialog open={settingsOpen} onOpenChange={setSettingsOpen}>
-      <DialogContent className="max-w-lg">
+      <DialogContent className="max-w-lg max-h-[90vh] overflow-auto">
         <DialogHeader>
           <DialogTitle>Settings</DialogTitle>
         </DialogHeader>
         
-        {/* Sound Settings Section */}
         <div className="space-y-4 mt-2">
-          <div className="pb-4 border-b">
-            <h3 className="text-sm font-semibold mb-3">Sound</h3>
+          {/* Game settings container - App Sounds lives here, below the header. */}
+          <div className="pt-4 border-b">
+            <h3 className="text-sm font-semibold mb-3">Game Settings</h3>
+
             <div className="flex items-center justify-between py-2 px-3 rounded-lg bg-muted/30">
               <div className="flex-1">
                 <div className="font-medium text-sm">App Sounds</div>
@@ -2688,8 +3108,43 @@ function GameCodePopover({ code, onLogout, players, currentPlayer, game, onRemov
                 }}
               />
             </div>
+
+            {/* Commissioner-only settings */}
+            {currentPlayer && currentPlayer.is_commissioner && (
+              <>
+                <div className="flex items-center justify-between py-2 px-3 rounded-lg bg-muted/30 mt-2">
+                  <div className="flex-1">
+                    <div className="font-medium text-sm">Show Player Balances</div>
+                    <div className="text-xs text-muted-foreground">Allow players to see each other's money</div>
+                  </div>
+                  <Switch
+                    checked={!!(game?.show_balances ?? showBalances)}
+                    onCheckedChange={(checked) => { if (onToggleShowBalances) onToggleShowBalances(checked); }}
+                  />
+                </div>
+                <div className="flex items-center justify-between py-2 px-3 rounded-lg bg-muted/30 mt-2">
+                  <div className="flex-1">
+                    <div className="font-medium text-sm">Play With Sips</div>
+                    <div className="text-xs text-muted-foreground">Enable sip counters and Give Sips features</div>
+                  </div>
+                  <Switch
+                    checked={!!(game?.sips_enabled ?? true)}
+                    onCheckedChange={(checked) => { if (onToggleSipsEnabled) onToggleSipsEnabled(checked); }}
+                  />
+                </div>
+                <div className="flex items-center justify-between py-2 px-3 rounded-lg bg-muted/30 mt-2">
+                  <div className="flex-1">
+                    <div className="font-medium text-sm">Expansion Pack</div>
+                    <div className="text-xs text-muted-foreground">Route payments to the bank into Free Parking</div>
+                  </div>
+                  <Switch
+                    checked={!!(game?.expansion_enabled ?? false)}
+                    onCheckedChange={(checked) => { if (onToggleExpansion) onToggleExpansion(checked); }}
+                  />
+                </div>
+              </>
+            )}
           </div>
-          
           {/* Players Section */}
           <div>
             <h3 className="text-sm font-semibold mb-3">Players</h3>
@@ -2749,3 +3204,28 @@ function GameCodePopover({ code, onLogout, players, currentPlayer, game, onRemov
 }
 
 export default Drunkopoly;
+
+// BlockedPaymentDialog component moved outside Drunkopoly to avoid type and JSX errors
+interface BlockedPaymentDialogProps {
+  blockedPaymentMessage: string | null;
+  setBlockedPaymentMessage: (msg: string | null) => void;
+}
+
+const BlockedPaymentDialog: React.FC<BlockedPaymentDialogProps> = ({
+  blockedPaymentMessage,
+  setBlockedPaymentMessage,
+}) => (
+  <Dialog open={!!blockedPaymentMessage} onOpenChange={(v: boolean) => { if (!v) setBlockedPaymentMessage(null); }}>
+    <DialogContent>
+      <div className="px-4">
+        <DialogHeader>
+          <DialogTitle>Payment Blocked</DialogTitle>
+        </DialogHeader>
+        <div className="mb-4">{blockedPaymentMessage}</div>
+        <DialogFooter>
+          <Button onClick={() => setBlockedPaymentMessage(null)}>OK</Button>
+        </DialogFooter>
+      </div>
+    </DialogContent>
+  </Dialog>
+);

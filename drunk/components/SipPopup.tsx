@@ -5,12 +5,12 @@ import {
   Dialog,
   DialogPortal,
   DialogOverlay,
+  DialogContent,
   DialogHeader,
   DialogTitle,
   DialogDescription,
   DialogFooter,
 } from "./ui/dialog";
-import * as DialogPrimitive from "@radix-ui/react-dialog";
 import { Button } from "./ui/button";
 import { Input } from "./ui/input";
 import SeatingChartSipPopup from "./SeatingChartSipPopup";
@@ -65,23 +65,27 @@ export default function SipPopup({
       // ignore storage errors
     }
   };
-  // build recipient list: include current player first, then the rest alphabetically
+  // build recipient list: include current player first (only when allowed), then the rest alphabetically, exclude bankrupt players
   const others = useMemo(() => {
     const list = [...players];
     let self: Player | null = null;
     const filtered = list.filter((p) => {
       if (currentPlayer && p.id === currentPlayer.id) {
-        self = p;
+        // only include self as a recipient when caller explicitly allows it and the current player is not bankrupt
+        if (allowSelf && !(currentPlayer as any).is_bankrupt) {
+          self = p;
+        }
         return false;
       }
-      return true;
+      // Exclude bankrupt players
+      return !(p as any).is_bankrupt;
     });
     filtered.sort((a, b) => a.name.localeCompare(b.name));
     const out: Player[] = [];
     if (self) out.push(self);
     out.push(...filtered);
     return out;
-  }, [players, currentPlayer]);
+  }, [players, currentPlayer, allowSelf]);
 
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const toggleSelected = (id: string) => {
@@ -108,6 +112,17 @@ export default function SipPopup({
 
   useLockBodyScroll(!!open);
 
+  // seating chart should exclude bankrupt players; only keep current player if allowed and not bankrupt
+  const seatingPlayers = useMemo(() => {
+    if (!players) return [];
+    return players.filter((p) => {
+      if (currentPlayer && p.id === currentPlayer.id) {
+        return !!allowSelf && !(currentPlayer as any).is_bankrupt;
+      }
+      return !(p as any).is_bankrupt;
+    });
+  }, [players, currentPlayer, allowSelf]);
+
   if (!open) return null;
 
   // If seating chart mode, render that instead
@@ -117,7 +132,7 @@ export default function SipPopup({
         open={open}
         onOpenChange={onOpenChange}
         currentPlayer={currentPlayer}
-        players={players}
+        players={seatingPlayers}
         onSubmit={onSubmit}
         onSwitchToClassic={toggleViewMode}
       />
@@ -139,9 +154,7 @@ export default function SipPopup({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogPortal>
         <DialogOverlay className="fixed inset-0 z-[100000] bg-black/80 data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0" />
-        <DialogPrimitive.Content
-          className="fixed left-[50%] top-[50%] z-[100000] grid mx-4 w-full max-w-lg translate-x-[-50%] translate-y-[-50%] gap-4 border bg-background p-6 shadow-lg duration-200 data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 data-[state=closed]:zoom-out-95 data-[state=open]:zoom-in-95 data-[state=closed]:slide-out-to-left-1/2 data-[state=closed]:slide-out-to-top-[48%] data-[state=open]:slide-in-from-left-1/2 data-[state=open]:slide-in-from-top-[48%] sm:rounded-lg"
-        >
+        <DialogContent>
         <DialogHeader>
           <DialogTitle>Give Sips</DialogTitle>
           <DialogDescription>Select one or more players and how many sips to assign.</DialogDescription>
@@ -236,11 +249,7 @@ export default function SipPopup({
               </div>
             </div>
         </DialogFooter>
-        <DialogPrimitive.Close className="absolute right-4 top-4 rounded-sm opacity-70 ring-offset-background transition-opacity data-[state=open]:bg-accent data-[state=open]:text-muted-foreground hover:opacity-100 focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 disabled:pointer-events-none">
-          <svg className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.5} xmlns="http://www.w3.org/2000/svg"><path d="M18 6L6 18" strokeLinecap="round" strokeLinejoin="round"/><path d="M6 6l12 12" strokeLinecap="round" strokeLinejoin="round"/></svg>
-          <span className="sr-only">Close</span>
-        </DialogPrimitive.Close>
-      </DialogPrimitive.Content>
+        </DialogContent>
       </DialogPortal>
     </Dialog>
   );

@@ -18,6 +18,13 @@ ALTER TABLE public.players
 ADD COLUMN has_new_messenger BOOLEAN NOT NULL DEFAULT FALSE,
 ADD COLUMN messenger_data TEXT;
 
+-- Bankruptcy columns
+-- is_bankrupt: boolean to indicate if player is in ghost mode
+-- bankrupt_at: timestamp when bankruptcy was declared
+ALTER TABLE public.players
+ADD COLUMN is_bankrupt BOOLEAN NOT NULL DEFAULT FALSE,
+ADD COLUMN bankrupt_at TIMESTAMPTZ;
+
 -- Each game cannot have duplicate names
 create unique index players_game_name_key
   on public.players (game_id, name);
