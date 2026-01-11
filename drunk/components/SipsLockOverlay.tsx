@@ -60,11 +60,10 @@ export default function SipsLockOverlay({
   if (!open) return null;
 
   return (
-    <div className="fixed inset-0 z-[100000] pointer-events-auto">
-      <div className="absolute inset-0 bg-black" />
-      <div className="relative z-[100000] min-h-screen flex items-center justify-center px-6">
-        <div className="max-w-lg w-full text-center text-white">
-          <div className="flex flex-col items-center gap-6 py-12">
+    <div className="fixed inset-0 z-[100001] pointer-events-auto overflow-auto bg-black">
+      <div className="relative z-[100001] min-h-screen flex items-center justify-center px-6 py-12">
+        <div className="max-w-lg w-full text-center text-white p-12 rounded overflow-auto max-h-[calc(100vh-6rem)]">
+          <div className="flex flex-col items-center gap-6">
             <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" className="w-16 h-16 text-white" fill="none" stroke="currentColor" strokeWidth={1.5}>
               <path strokeLinecap="round" strokeLinejoin="round" d="M12 15v2" />
               <rect x="4" y="10" width="16" height="10" rx="2" strokeWidth={1.5} />

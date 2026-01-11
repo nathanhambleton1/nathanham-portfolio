@@ -71,10 +71,9 @@ export default function JailLockOverlay({
   if (!open) return null;
 
   return (
-    <div className="fixed inset-0 z-[100000] pointer-events-auto">
-      <div className="absolute inset-0 bg-black" />
-      <div className="relative z-[9999] min-h-screen flex items-center justify-center px-6">
-        <div className="max-w-lg w-full text-center text-white p-12 rounded">
+    <div className="fixed inset-0 z-[100000] pointer-events-auto overflow-auto bg-black">
+      <div className="relative z-[9999] min-h-screen flex items-center justify-center px-6 py-12">
+        <div className="max-w-lg w-full text-center text-white p-12 rounded overflow-auto max-h-[calc(100vh-6rem)]">
           <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" className="w-16 h-16 mx-auto mb-4 text-white" fill="none" stroke="currentColor" strokeWidth={1.5}>
             <rect x="3" y="10" width="18" height="11" rx="2" />
             <path d="M7 10V7a5 5 0 0110 0v3" strokeLinecap="round" strokeLinejoin="round" />

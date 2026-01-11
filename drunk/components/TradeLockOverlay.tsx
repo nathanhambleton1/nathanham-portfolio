@@ -143,10 +143,9 @@ export default function TradeLockOverlay({
   const expired = remainingMs !== null ? remainingMs <= 0 : false;
 
   return (
-    <div className="fixed inset-0 z-[99999] pointer-events-auto">
-      <div className="absolute inset-0 bg-black" />
-      <div className="relative z-[99999] min-h-screen flex items-center justify-center px-6">
-        <div className={`max-w-lg w-full text-center text-white p-12 rounded`}>
+    <div className="fixed inset-0 z-[99999] pointer-events-auto overflow-auto bg-black">
+      <div className="relative z-[99999] min-h-screen flex items-center justify-center px-6 py-12">
+        <div className={`max-w-lg w-full text-center text-white p-12 rounded overflow-auto max-h-[calc(100vh-6rem)]`}>
           <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" className="w-16 h-16 mx-auto mb-4 text-white" fill="none" stroke="currentColor" strokeWidth={1.5}>
             <path strokeLinecap="round" strokeLinejoin="round" d="M12 15v2" />
             <rect x="4" y="10" width="16" height="10" rx="2" strokeWidth={1.5} />

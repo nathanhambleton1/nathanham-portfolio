@@ -370,13 +370,9 @@ const Drunkopoly = () => {
 
         const inserts = [];
         for (const r of recipients) {
-          const hasPending = (r.pending_sips || 0) > 0;
           const isInJail = !!r.in_jail;
-          const amt = (hasPending || isInJail) ? 0 : amountPer;
-          let desc: string | null = null;
-          if (hasPending) desc = opts.description || `Recipient has pending sips; no money was sent`;
-          else if (isInJail) desc = opts.description || `Recipient is in jail; no money was sent`;
-          else desc = opts.description || null;
+          const amt = isInJail ? 0 : amountPer;
+          const desc: string | null = isInJail ? (opts.description || `Recipient is in jail; no money was sent`) : (opts.description || null);
 
           inserts.push({
             game_id: game.id,
@@ -470,9 +466,8 @@ const Drunkopoly = () => {
           }
 
           const recipient = rRows[0];
-          const hasPending = (recipient.pending_sips || 0) > 0;
           const isInJail = !!recipient.in_jail;
-          if (hasPending || isInJail) {
+          if (isInJail) {
             inserts.push({
               game_id: game.id,
               actor_player_id: actor_player_id,
@@ -480,7 +475,7 @@ const Drunkopoly = () => {
               to_player_id: p.to,
               amount: 0,
               type: opts.type || (freeParkingFlag ? 'tax' : 'manual'),
-              description: hasPending ? (opts.description || `Recipient has pending sips; no money was sent`) : (opts.description || `Recipient is in jail; no money was sent`),
+              description: opts.description || `Recipient is in jail; no money was sent`,
             });
             continue;
           }
@@ -2069,11 +2064,13 @@ const Drunkopoly = () => {
       </AlertDialog>
       {/* Top bar */}
       <div className="flex items-center justify-between px-6 py-4 z-50">
-        <div className="font-semibold text-lg text-foreground flex items-center gap-2">
-          <div>{player?.name ?? name}</div>
-          {(game?.sips_enabled ?? true) && (
-            <div className="text-sm text-muted-foreground">{(player?.total_sips ?? 0)} sips</div>
-          )}
+        <div className="flex items-center gap-2">
+          <div className="bg-black text-white px-3 py-1 rounded-md flex items-center gap-3">
+            <div className="font-semibold text-lg">{player?.name ?? name}</div>
+            {(game?.sips_enabled ?? true) && (
+              <div className="text-sm opacity-90">{(player?.total_sips ?? 0)} sips</div>
+            )}
+          </div>
         </div>
           <div className="flex items-center gap-2">
           {(game?.sips_enabled ?? true) && !isNarrow && (
@@ -2572,6 +2569,97 @@ const Drunkopoly = () => {
           onCollect={handleCollect}
         />
 
+        <TradeLockOverlay
+          open={!!game?.trade_locked}
+          expiresAt={game?.trade_timer_expires_at}
+          startedByName={playersList?.find((p: any) => p.id === game?.trade_started_by)?.name ?? null}
+          onDone={() => stopTradeTimer()}
+          currentBalance={player?.balance ?? 0}
+          players={playersList}
+          showBalances={game?.show_balances ?? true}
+          currentPlayerId={player?.id}
+          currentPlayer={player}
+          allowGiveSips={game?.sips_enabled ?? true}
+          onAssignSips={async (to, sip_count) => {
+            if (!game || !player) return;
+            if (Array.isArray(to)) {
+              for (const t of to) {
+                await assignSips(game.code, player.id, t, sip_count);
+              }
+            } else {
+              await assignSips(game.code, player.id, to, sip_count);
+            }
+            // Refresh state
+            const players = await fetchPlayers(game.code);
+            setPlayersList(players);
+            const updatedPlayer = players.find((p: any) => p.id === player.id);
+            if (updatedPlayer) setPlayer(updatedPlayer);
+          }}
+          onPaySubmit={async (payments, opts) => {
+            if (!game || !player) return;
+            try {
+              const result = await processPayments(game.code, player.id, payments, { ...(opts || {}), mode: opts?.mode || 'bank' });
+
+              // Check for blocked payments (pending sips / jailed recipients)
+              const blocked = (result.money_events || []).filter((me: any) => (Number(me.amount || 0) === 0) && me.to_player_id);
+              if (blocked.length > 0) {
+                const byReason: Record<string, any[]> = {};
+                for (const b of blocked) {
+                  const desc = (b.description || '').toLowerCase();
+                  const key = desc.includes('pending sips') ? 'sips' : desc.includes('in jail') || desc.includes('jail') ? 'jail' : 'other';
+                  if (!byReason[key]) byReason[key] = [];
+                  byReason[key].push(b);
+                }
+
+                const parts: string[] = [];
+                if (byReason.sips) {
+                  const names = byReason.sips.map((b: any) => {
+                    const found = (playersList || []).find((pl: any) => pl.id === b.to_player_id);
+                    return found ? found.name : b.to_player_id;
+                  }).join(', ');
+                  parts.push(`No money was sent to ${names} because they have pending sips. Congrats! 🎉`);
+                }
+                if (byReason.jail) {
+                  const names = byReason.jail.map((b: any) => {
+                    const found = (playersList || []).find((pl: any) => pl.id === b.to_player_id);
+                    return found ? found.name : b.to_player_id;
+                  }).join(', ');
+                  parts.push(`No money was sent to ${names} because they are in jail. Congrats! 🎉`);
+                }
+                if (byReason.other) {
+                  const names = byReason.other.map((b: any) => {
+                    const found = (playersList || []).find((pl: any) => pl.id === b.to_player_id);
+                    return found ? found.name : b.to_player_id;
+                  }).join(', ');
+                  parts.push(`No money was sent to ${names}.`);
+                }
+
+                setBlockedPaymentMessage(parts.join(' '));
+              }
+
+              // Refresh state
+              const players = await fetchPlayers(game.code);
+              setPlayersList(players);
+              const updatedPlayer = players.find((p: any) => p.id === player.id);
+              if (updatedPlayer) setPlayer(updatedPlayer);
+              const { data: gameData } = await supabase.from('games').select('*').eq('code', game.code).single();
+              if (gameData) setGame(gameData);
+            } catch (err: any) {
+              console.error('Pay submit error from TradeLockOverlay:', err);
+              const msg = err?.message || 'Failed to process payment';
+              if (msg && msg.toLowerCase().includes('insufficient')) {
+                try { toast({ title: 'Insufficient funds', description: "You don't have enough money to complete this payment.", variant: 'destructive' }); } catch (e) { alert(msg); }
+                setInsufficientFundsFlash(true);
+                window.setTimeout(() => setInsufficientFundsFlash(false), 900);
+              } else {
+                try { toast({ title: 'Payment failed', description: msg }); } catch (e) { alert(msg); }
+              }
+            }
+          }}
+          onOpenCollect={() => { setCollectModalOpen(true); setCollectMode('bank'); }}
+          onCollect={handleCollect}
+        />
+
         <SipsLockOverlay
           open={(player?.pending_sips ?? 0) > 0}
           sipCount={player?.pending_sips ?? 0}
@@ -2665,97 +2753,6 @@ const Drunkopoly = () => {
               if (gameData) setGame(gameData);
             } catch (err: any) {
               console.error('Pay submit error from SipsLockOverlay:', err);
-              const msg = err?.message || 'Failed to process payment';
-              if (msg && msg.toLowerCase().includes('insufficient')) {
-                try { toast({ title: 'Insufficient funds', description: "You don't have enough money to complete this payment.", variant: 'destructive' }); } catch (e) { alert(msg); }
-                setInsufficientFundsFlash(true);
-                window.setTimeout(() => setInsufficientFundsFlash(false), 900);
-              } else {
-                try { toast({ title: 'Payment failed', description: msg }); } catch (e) { alert(msg); }
-              }
-            }
-          }}
-          onOpenCollect={() => { setCollectModalOpen(true); setCollectMode('bank'); }}
-          onCollect={handleCollect}
-        />
-
-        <TradeLockOverlay
-          open={!!game?.trade_locked}
-          expiresAt={game?.trade_timer_expires_at}
-          startedByName={playersList?.find((p: any) => p.id === game?.trade_started_by)?.name ?? null}
-          onDone={() => stopTradeTimer()}
-          currentBalance={player?.balance ?? 0}
-          players={playersList}
-          showBalances={game?.show_balances ?? true}
-          currentPlayerId={player?.id}
-          currentPlayer={player}
-          allowGiveSips={game?.sips_enabled ?? true}
-          onAssignSips={async (to, sip_count) => {
-            if (!game || !player) return;
-            if (Array.isArray(to)) {
-              for (const t of to) {
-                await assignSips(game.code, player.id, t, sip_count);
-              }
-            } else {
-              await assignSips(game.code, player.id, to, sip_count);
-            }
-            // Refresh state
-            const players = await fetchPlayers(game.code);
-            setPlayersList(players);
-            const updatedPlayer = players.find((p: any) => p.id === player.id);
-            if (updatedPlayer) setPlayer(updatedPlayer);
-          }}
-          onPaySubmit={async (payments, opts) => {
-            if (!game || !player) return;
-            try {
-              const result = await processPayments(game.code, player.id, payments, { ...(opts || {}), mode: opts?.mode || 'bank' });
-
-              // Check for blocked payments (pending sips / jailed recipients)
-              const blocked = (result.money_events || []).filter((me: any) => (Number(me.amount || 0) === 0) && me.to_player_id);
-              if (blocked.length > 0) {
-                const byReason: Record<string, any[]> = {};
-                for (const b of blocked) {
-                  const desc = (b.description || '').toLowerCase();
-                  const key = desc.includes('pending sips') ? 'sips' : desc.includes('in jail') || desc.includes('jail') ? 'jail' : 'other';
-                  if (!byReason[key]) byReason[key] = [];
-                  byReason[key].push(b);
-                }
-
-                const parts: string[] = [];
-                if (byReason.sips) {
-                  const names = byReason.sips.map((b: any) => {
-                    const found = (playersList || []).find((pl: any) => pl.id === b.to_player_id);
-                    return found ? found.name : b.to_player_id;
-                  }).join(', ');
-                  parts.push(`No money was sent to ${names} because they have pending sips. Congrats! 🎉`);
-                }
-                if (byReason.jail) {
-                  const names = byReason.jail.map((b: any) => {
-                    const found = (playersList || []).find((pl: any) => pl.id === b.to_player_id);
-                    return found ? found.name : b.to_player_id;
-                  }).join(', ');
-                  parts.push(`No money was sent to ${names} because they are in jail. Congrats! 🎉`);
-                }
-                if (byReason.other) {
-                  const names = byReason.other.map((b: any) => {
-                    const found = (playersList || []).find((pl: any) => pl.id === b.to_player_id);
-                    return found ? found.name : b.to_player_id;
-                  }).join(', ');
-                  parts.push(`No money was sent to ${names}.`);
-                }
-
-                setBlockedPaymentMessage(parts.join(' '));
-              }
-
-              // Refresh state
-              const players = await fetchPlayers(game.code);
-              setPlayersList(players);
-              const updatedPlayer = players.find((p: any) => p.id === player.id);
-              if (updatedPlayer) setPlayer(updatedPlayer);
-              const { data: gameData } = await supabase.from('games').select('*').eq('code', game.code).single();
-              if (gameData) setGame(gameData);
-            } catch (err: any) {
-              console.error('Pay submit error from TradeLockOverlay:', err);
               const msg = err?.message || 'Failed to process payment';
               if (msg && msg.toLowerCase().includes('insufficient')) {
                 try { toast({ title: 'Insufficient funds', description: "You don't have enough money to complete this payment.", variant: 'destructive' }); } catch (e) { alert(msg); }
@@ -2971,6 +2968,7 @@ function AnimatedNumber({ value, soundEnabled = true, maskIfGameHidden = false, 
 
 function GameCodePopover({ code, onLogout, players, currentPlayer, game, onRemovePlayer, soundEnabled, onToggleSound, showBalances = true, onToggleShowBalances, onToggleSipsEnabled, onToggleExpansion, showRulesInPopover }: { code: string; onLogout?: () => void; players?: any[]; currentPlayer?: any; game?: any; onRemovePlayer?: (id: string) => Promise<void>; soundEnabled?: boolean; onToggleSound?: (enabled: boolean) => void; showBalances?: boolean; onToggleShowBalances?: (enabled: boolean) => void; onToggleSipsEnabled?: (enabled: boolean) => void; onToggleExpansion?: (enabled: boolean) => void; showRulesInPopover?: boolean }) {
   const [settingsOpen, setSettingsOpen] = useState(false);
+  const [settingsOpenSection, setSettingsOpenSection] = useState<'game' | 'players' | null>(null);
   const [confirmOpen, setConfirmOpen] = useState(false);
   const [qrCodeOpen, setQrCodeOpen] = useState(false);
   const [pendingRemove, setPendingRemove] = useState<{ id: string; name?: string } | null>(null);
@@ -3092,90 +3090,130 @@ function GameCodePopover({ code, onLogout, players, currentPlayer, game, onRemov
         </DialogHeader>
         
         <div className="space-y-4 mt-2">
-          {/* Game settings container - App Sounds lives here, below the header. */}
-          <div className="pt-4 border-b">
-            <h3 className="text-sm font-semibold mb-3">Game Settings</h3>
-
-            <div className="flex items-center justify-between py-2 px-3 rounded-lg bg-muted/30">
-              <div className="flex-1">
-                <div className="font-medium text-sm">App Sounds</div>
-                <div className="text-xs text-muted-foreground">Play sounds for money changes</div>
+          <div>
+            <button
+              type="button"
+              onClick={() => setSettingsOpenSection((v) => (v === 'game' ? null : 'game'))}
+              className="w-full flex items-center justify-between gap-3 p-3 rounded bg-muted/30 hover:bg-muted/40"
+              aria-expanded={settingsOpenSection === 'game'}
+            >
+              <div className="flex items-center gap-3">
+                <div className="text-left">
+                  <div className="font-medium">Game Settings</div>
+                  <div className="text-sm text-muted-foreground">App-wide game options</div>
+                </div>
               </div>
-              <Switch
-                checked={soundEnabled ?? true}
-                onCheckedChange={(checked) => {
-                  if (onToggleSound) onToggleSound(checked);
-                }}
+              <ChevronDown
+                className="w-5 h-5 transform-gpu"
+                style={{ transform: settingsOpenSection === 'game' ? 'rotate(180deg)' : 'rotate(0deg)', transition: 'transform 200ms ease-in-out', willChange: 'transform' }}
               />
-            </div>
+            </button>
 
-            {/* Commissioner-only settings */}
-            {currentPlayer && currentPlayer.is_commissioner && (
-              <>
-                <div className="flex items-center justify-between py-2 px-3 rounded-lg bg-muted/30 mt-2">
-                  <div className="flex-1">
-                    <div className="font-medium text-sm">Show Player Balances</div>
-                    <div className="text-xs text-muted-foreground">Allow players to see each other's money</div>
+            {settingsOpenSection === 'game' && (
+              <div className="mt-3 px-0">
+                <div className="rounded bg-muted/30 border border-muted p-3 space-y-2">
+                  <div className="flex items-center justify-between py-2 px-3 rounded-lg bg-muted/10">
+                    <div className="flex-1">
+                      <div className="font-medium text-sm">App Sounds</div>
+                      <div className="text-xs text-muted-foreground">Play sounds for money changes</div>
+                    </div>
+                    <Switch
+                      checked={soundEnabled ?? true}
+                      onCheckedChange={(checked) => { if (onToggleSound) onToggleSound(checked); }}
+                    />
                   </div>
-                  <Switch
-                    checked={!!(game?.show_balances ?? showBalances)}
-                    onCheckedChange={(checked) => { if (onToggleShowBalances) onToggleShowBalances(checked); }}
-                  />
+
+                  {currentPlayer && currentPlayer.is_commissioner && (
+                    <>
+                      <div className="flex items-center justify-between py-2 px-3 rounded-lg bg-muted/10">
+                        <div className="flex-1">
+                          <div className="font-medium text-sm">Show Player Balances</div>
+                          <div className="text-xs text-muted-foreground">Allow players to see each other's money</div>
+                        </div>
+                        <Switch
+                          checked={!!(game?.show_balances ?? showBalances)}
+                          onCheckedChange={(checked) => { if (onToggleShowBalances) onToggleShowBalances(checked); }}
+                        />
+                      </div>
+                      <div className="flex items-center justify-between py-2 px-3 rounded-lg bg-muted/10">
+                        <div className="flex-1">
+                          <div className="font-medium text-sm">Play With Sips</div>
+                          <div className="text-xs text-muted-foreground">Enable sip counters and Give Sips features</div>
+                        </div>
+                        <Switch
+                          checked={!!(game?.sips_enabled ?? true)}
+                          onCheckedChange={(checked) => { if (onToggleSipsEnabled) onToggleSipsEnabled(checked); }}
+                        />
+                      </div>
+                      <div className="flex items-center justify-between py-2 px-3 rounded-lg bg-muted/10">
+                        <div className="flex-1">
+                          <div className="font-medium text-sm">Expansion Pack</div>
+                          <div className="text-xs text-muted-foreground">Route payments to the bank into Free Parking</div>
+                        </div>
+                        <Switch
+                          checked={!!(game?.expansion_enabled ?? false)}
+                          onCheckedChange={(checked) => { if (onToggleExpansion) onToggleExpansion(checked); }}
+                        />
+                      </div>
+                    </>
+                  )}
                 </div>
-                <div className="flex items-center justify-between py-2 px-3 rounded-lg bg-muted/30 mt-2">
-                  <div className="flex-1">
-                    <div className="font-medium text-sm">Play With Sips</div>
-                    <div className="text-xs text-muted-foreground">Enable sip counters and Give Sips features</div>
-                  </div>
-                  <Switch
-                    checked={!!(game?.sips_enabled ?? true)}
-                    onCheckedChange={(checked) => { if (onToggleSipsEnabled) onToggleSipsEnabled(checked); }}
-                  />
-                </div>
-                <div className="flex items-center justify-between py-2 px-3 rounded-lg bg-muted/30 mt-2">
-                  <div className="flex-1">
-                    <div className="font-medium text-sm">Expansion Pack</div>
-                    <div className="text-xs text-muted-foreground">Route payments to the bank into Free Parking</div>
-                  </div>
-                  <Switch
-                    checked={!!(game?.expansion_enabled ?? false)}
-                    onCheckedChange={(checked) => { if (onToggleExpansion) onToggleExpansion(checked); }}
-                  />
-                </div>
-              </>
+              </div>
             )}
           </div>
-          {/* Players Section */}
+
           <div>
-            <h3 className="text-sm font-semibold mb-3">Players</h3>
-            <div className="space-y-2">
-              {(players && players.length > 0) ? (
-                players.map((p: any) => {
-                  const isSelf = currentPlayer && String(currentPlayer.id) === String(p.id);
-                  const isCommissioner = !!p.is_commissioner;
-                  const canRemove = currentPlayer && (currentPlayer.is_commissioner || currentPlayer.is_commissioner === true) && !isCommissioner && !isSelf;
-                  // Show balance if showBalances is enabled
-                  const canSeeBalance = showBalances;
-                  return (
-                    <div key={p.id} className="flex items-center gap-3 py-2 px-2 border rounded">
-                      <div className="flex-1">
-                        <div className="font-medium">{p.name}{isCommissioner ? ' • Commissioner' : isSelf ? ' • You' : ''}</div>
-                        {canSeeBalance && (
-                          <div className="text-sm text-muted-foreground">Balance: ${Number(p.balance || 0).toLocaleString()}</div>
-                        )}
-                      </div>
-                      <div>
-                        <Button size="sm" variant="destructive" disabled={!canRemove} onClick={() => requestRemove(p.id, p.name)}>
-                          Remove
-                        </Button>
-                      </div>
-                    </div>
-                  );
-                })
-              ) : (
-                <div className="text-sm text-muted-foreground">No players found.</div>
-              )}
-            </div>
+            <button
+              type="button"
+              onClick={() => setSettingsOpenSection((v) => (v === 'players' ? null : 'players'))}
+              className="w-full flex items-center justify-between gap-3 p-3 rounded bg-muted/30 hover:bg-muted/40"
+              aria-expanded={settingsOpenSection === 'players'}
+            >
+              <div className="flex items-center gap-3">
+                <div className="text-left">
+                  <div className="font-medium">Players</div>
+                  <div className="text-sm text-muted-foreground">Manage players in this game</div>
+                </div>
+              </div>
+              <ChevronDown
+                className="w-5 h-5 transform-gpu"
+                style={{ transform: settingsOpenSection === 'players' ? 'rotate(180deg)' : 'rotate(0deg)', transition: 'transform 200ms ease-in-out', willChange: 'transform' }}
+              />
+            </button>
+
+            {settingsOpenSection === 'players' && (
+              <div className="mt-3 px-0">
+                <div className="rounded bg-muted/30 border border-muted p-3 space-y-2">
+                  <div className="space-y-2">
+                    {(players && players.length > 0) ? (
+                      players.map((p: any) => {
+                        const isSelf = currentPlayer && String(currentPlayer.id) === String(p.id);
+                        const isCommissioner = !!p.is_commissioner;
+                        const canRemove = currentPlayer && (currentPlayer.is_commissioner || currentPlayer.is_commissioner === true) && !isCommissioner && !isSelf;
+                        const canSeeBalance = showBalances;
+                        return (
+                          <div key={p.id} className="flex items-center gap-3 py-2 px-2 border rounded">
+                            <div className="flex-1">
+                              <div className="font-medium">{p.name}{isCommissioner ? ' • Commissioner' : isSelf ? ' • You' : ''}</div>
+                              {canSeeBalance && (
+                                <div className="text-sm text-muted-foreground">Balance: ${Number(p.balance || 0).toLocaleString()}</div>
+                              )}
+                            </div>
+                            <div>
+                              <Button size="sm" variant="destructive" disabled={!canRemove} onClick={() => requestRemove(p.id, p.name)}>
+                                Remove
+                              </Button>
+                            </div>
+                          </div>
+                        );
+                      })
+                    ) : (
+                      <div className="text-sm text-muted-foreground">No players found.</div>
+                    )}
+                  </div>
+                </div>
+              </div>
+            )}
           </div>
         </div>
         

@@ -114,8 +114,17 @@ export default function PayPopup({
     onOpenChange(false);
   };
 
-  // Slider should be either 100 or the player's balance if it is lower than 100
-  const visibleSliderMax = Math.min(100, Math.max(0, Number(currentPlayer?.balance ?? 100)));
+  // Compute player's numeric balance and determine slider max.
+  const balance = Math.max(0, Number(currentPlayer?.balance ?? 0));
+  // Slider should be either 100 or the player's balance if it is lower than 100.
+  // For player-mode with recipients selected, cap per-player slider to floor(balance / count)
+  let visibleSliderMax = Math.min(100, balance);
+  if (mode === 'players' && count > 0) {
+    visibleSliderMax = Math.min(100, Math.max(0, Math.floor(balance / count)));
+  }
+
+  // Determine if the player has insufficient funds for the total payment
+  const insufficientFunds = total > balance;
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -255,18 +264,21 @@ export default function PayPopup({
         <DialogFooter>
           <div className="flex gap-2 w-full justify-end">
             <Button variant="secondary" onClick={() => onOpenChange(false)}>Cancel</Button>
-            <Button 
-              onClick={handleSubmit} 
-              className={`bg-primary${(roundedLive > (currentPlayer?.balance ?? 0)) ? ' opacity-60 cursor-not-allowed' : ''}`}
+            <Button
+              onClick={handleSubmit}
+              className={`bg-primary${insufficientFunds ? ' opacity-60 cursor-not-allowed' : ''}`}
               disabled={
                 (mode === 'players' && selectedIds.size === 0) ||
-                (roundedLive > (currentPlayer?.balance ?? 0))
+                insufficientFunds
               }
             >
               Pay
             </Button>
           </div>
         </DialogFooter>
+        {insufficientFunds && (
+          <div className="mt-3 text-sm text-destructive">Insufficient funds — you have ${balance.toLocaleString()}</div>
+        )}
         </DialogContent>
       </DialogPortal>
     </Dialog>

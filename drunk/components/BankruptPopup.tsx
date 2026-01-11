@@ -153,7 +153,7 @@ export default function BankruptPopup({
               )}
             </div>
 
-            <DialogFooter className="mt-6">
+            <DialogFooter className="mt-6 flex gap-3 w-full justify-end">
               <Button variant="outline" onClick={() => onOpenChange(false)}>
                 Cancel
               </Button>
@@ -161,7 +161,7 @@ export default function BankruptPopup({
                 variant="destructive"
                 onClick={handleSubmit}
                 disabled={!selectedId}
-                className="ring-2 ring-red-500/10 shadow-sm shadow-red-500/20"
+                className="px-4 py-2 ring-2 ring-red-500/10 shadow-sm shadow-red-500/20"
               >
                 Declare Bankruptcy
               </Button>
@@ -179,11 +179,11 @@ export default function BankruptPopup({
                 <p className="font-semibold text-destructive mt-4 text-white">This action cannot be undone!</p>
             </AlertDialogDescription>
           </AlertDialogHeader>
-          <AlertDialogFooter>
+          <AlertDialogFooter className="flex gap-3 w-full justify-end">
             <AlertDialogCancel>Cancel</AlertDialogCancel>
-              <AlertDialogAction onClick={handleConfirm} className="bg-destructive hover:bg-destructive/90 text-white">
-                Yes, I'm Bankrupt
-              </AlertDialogAction>
+            <AlertDialogAction onClick={handleConfirm} className="px-4 py-2 bg-destructive hover:bg-destructive/90 text-white">
+              Yes, I'm Bankrupt
+            </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>

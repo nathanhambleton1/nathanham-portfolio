@@ -243,6 +243,8 @@ export default function ActivityLog({
                   height: 30,
                   verticalAlign: 'middle',
                   overflow: 'visible',
+                  pointerEvents: 'none',
+                  zIndex: 0,
                 }}
                 aria-hidden="true"
               >
@@ -257,7 +259,8 @@ export default function ActivityLog({
                     boxShadow: '0 0 6px rgba(16,185,129,0.6)',
                     animation: 'nhp-live-scale 1200ms ease-in-out infinite',
                     transformOrigin: 'center',
-                    zIndex: 1,
+                    zIndex: 0,
+                    pointerEvents: 'none',
                   }}
                 />
               </span>
