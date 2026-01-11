@@ -2,8 +2,10 @@ import { useEffect, useState, useRef } from "react";
 import PayPopup from "../components/PayPopup";
 import JailPopup from "../components/JailPopup";
 import BankruptPopup from "../components/BankruptPopup";
+import BankruptStatus from "../components/BankruptStatus";
 import SipsLockOverlay from "../components/SipsLockOverlay";
-import { UserPlus, DollarSign, Users, Percent, Crown, PiggyBank, Clock, Copy, Settings, QrCode, ChevronDown, Info, Eye, EyeOff } from "lucide-react";
+import PropertiesPopup from "../components/PropertiesPopup";
+import { UserPlus, DollarSign, Users, Percent, Crown, PiggyBank, Clock, Copy, Settings, QrCode, ChevronDown, Info, Eye, EyeOff, Building2 } from "lucide-react";
 import { QRCodeSVG } from "qrcode.react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "../components/ui/dialog";
 import CollectPopup from "../components/CollectPopup";
@@ -40,6 +42,17 @@ import { useNavigate } from "react-router-dom";
 import { toast } from "../components/ui/use-toast";
 import { Toaster } from "../components/ui/toaster";
 import useLockBodyScroll from "../hooks/use-lock-body-scroll";
+import {
+  initializePlayerStats,
+  trackMoneyFromGo,
+  trackMoneyFromFreeParking,
+  trackMoneyFromBank,
+  trackMoneyFromPlayer,
+  trackMoneyToBank,
+  trackMoneyToPlayer,
+  trackJailPayment,
+  trackWentToJail
+} from "../lib/playerStatsTracking";
 
 // Initialize Supabase client
 const supabaseUrl = 'https://kcyrvubzhsphpxfsewii.supabase.co';
@@ -82,6 +95,7 @@ const Drunkopoly = () => {
   const [tradeTimerModalOpen, setTradeTimerModalOpen] = useState(false);
   const [tradeTimerSelected, setTradeTimerSelected] = useState<number>(60);
   const [jailModalOpen, setJailModalOpen] = useState(false);
+  const [propertiesModalOpen, setPropertiesModalOpen] = useState(false);
   const [payProcessing, setPayProcessing] = useState(false);
   const [cardProcessing, setCardProcessing] = useState(false);
   const [insufficientFundsFlash, setInsufficientFundsFlash] = useState(false);
@@ -90,6 +104,7 @@ const Drunkopoly = () => {
   const [collectModalOpen, setCollectModalOpen] = useState(false);
   const [collectMode, setCollectMode] = useState<'bank'|'pass_go'|'free_parking'|null>(null);
   const [bankruptModalOpen, setBankruptModalOpen] = useState(false);
+  const [bankruptStatusOpen, setBankruptStatusOpen] = useState(false);
   const [blockedPaymentMessage, setBlockedPaymentMessage] = useState<string | null>(null);
   const prevBalanceRef = useRef<number | null>(null);
   const navigate = useNavigate();
@@ -519,6 +534,11 @@ const Drunkopoly = () => {
             .from('players')
             .update({ balance: newBal })
             .eq('id', ins.to_player_id);
+          
+          // Track money received by recipient from payer
+          const isRent = (opts.type === 'rent' || opts.description?.toLowerCase().includes('rent'));
+          await trackMoneyFromPlayer(game.id, ins.to_player_id, ins.amount, isRent);
+          
           // If a description/message was provided, mark recipient with new messenger data
           try {
             const formatted = opts.description ? `[from:${actor.name}] ${opts.description}` : null;
@@ -542,6 +562,20 @@ const Drunkopoly = () => {
         .from('players')
         .update({ balance: (actor.balance || 0) - total })
         .eq('id', actor_player_id);
+      
+      // Track money spent by actor
+      if (total > 0) {
+        // Determine if payment is to players or bank
+        const hasPlayerRecipients = meData.some((me: any) => me.to_player_id);
+        const isTax = (opts.type === 'tax' || opts.mode === 'tax');
+        const isRent = (opts.type === 'rent' || opts.description?.toLowerCase().includes('rent'));
+        
+        if (hasPlayerRecipients) {
+          await trackMoneyToPlayer(game.id, actor_player_id, total, isRent);
+        } else {
+          await trackMoneyToBank(game.id, actor_player_id, total, isTax);
+        }
+      }
 
       // Handle free parking
       if (freeParkingFlag) {
@@ -607,6 +641,9 @@ const Drunkopoly = () => {
         
         if (meErr) throw meErr;
         meRow = meData;
+        
+        // Track money from bank
+        await trackMoneyFromBank(game.id, actor_player_id, amount);
       } else if (opts.type === 'pass_go') {
         const base = Number(game.pass_go_amount || 200);
         const doubled = !!opts.doubled;
@@ -628,6 +665,9 @@ const Drunkopoly = () => {
         
         if (meErr) throw meErr;
         meRow = meData;
+        
+        // Track money from passing Go
+        await trackMoneyFromGo(game.id, actor_player_id, amount);
       } else if (opts.type === 'free_parking') {
         const pot = Number(game.free_parking_balance || 0);
         if (pot <= 0) throw new Error('Free parking pot is empty');
@@ -655,6 +695,9 @@ const Drunkopoly = () => {
           .from('games')
           .update({ free_parking_balance: 0 })
           .eq('id', game.id);
+        
+        // Track money from free parking
+        await trackMoneyFromFreeParking(game.id, actor_player_id, amount);
       } else {
         throw new Error('Invalid collect type');
       }
@@ -709,6 +752,32 @@ const Drunkopoly = () => {
           mode: 'players',
           description: `${player.name} declared bankruptcy`
         });
+      }
+
+      // Transfer all properties (clear houses and transfer ownership) to recipient
+      try {
+        const { data: ownedProps, error: ownedErr } = await supabase
+          .from('property_ownership')
+          .select('*')
+          .eq('game_id', game.id)
+          .eq('player_id', player.id);
+
+        if (ownedErr) throw ownedErr;
+
+        if (ownedProps && ownedProps.length) {
+          for (const p of ownedProps) {
+            try {
+              await supabase
+                .from('property_ownership')
+                .update({ player_id: recipientId, houses: 0, updated_at: new Date().toISOString() })
+                .eq('id', p.id);
+            } catch (uErr) {
+              console.warn('Failed to transfer property', p.id, uErr);
+            }
+          }
+        }
+      } catch (propErr) {
+        console.warn('Property transfer during bankruptcy failed:', propErr);
       }
 
       // Mark player as bankrupt
@@ -1064,6 +1133,9 @@ const Drunkopoly = () => {
 
       if (error) throw error;
 
+      // Track going to jail
+      await trackWentToJail(game.id, targetPlayerId);
+
       // Log the event for activity
       try {
         await supabase.from('money_events').insert([{
@@ -1109,6 +1181,9 @@ const Drunkopoly = () => {
     try {
       // Deduct $50 from the jailed player and send it to Free Parking
       await processPayments(game.code, player.id, [{ to: null, amount: 50 }], { type: 'jail_payment', freeParking: true });
+      
+      // Track jail payment
+      await trackJailPayment(game.id, player.id, 50);
 
       // Clear jail flag
       await supabase.from('players').update({ in_jail: false, jail_started_by: null, jail_started_at: null }).eq('id', player.id);
@@ -1280,6 +1355,9 @@ const Drunkopoly = () => {
             
             if (newErr) throw newErr;
             player = newPlayer;
+
+            // Initialize player statistics
+            await initializePlayerStats(game.id, player.id);
 
             // Set host if first player
             if (isFirstPlayer && !game.host_player_id) {
@@ -1814,6 +1892,9 @@ const Drunkopoly = () => {
                       if (newErr) throw newErr;
                       newOrExistingPlayer = createdPlayer;
 
+                      // Initialize player statistics
+                      await initializePlayerStats(localGame.id, newOrExistingPlayer.id);
+
                       // Set host if first player
                       if (isFirstPlayer && !localGame.host_player_id) {
                         await supabase
@@ -1937,6 +2018,9 @@ const Drunkopoly = () => {
                     .single();
 
                   if (joinErr) throw joinErr;
+
+                  // Initialize player statistics
+                  await initializePlayerStats(newGame.id, newPlayer.id);
 
                   // Set host on game record
                   await supabase
@@ -2163,8 +2247,30 @@ const Drunkopoly = () => {
                   <Users className="h-5 w-5" />
                   Jail
                 </Button>
+                <Button
+                  variant="secondary"
+                  className="w-full py-6"
+                  onClick={() => setPropertiesModalOpen(true)}
+                >
+                  <Building2 className="h-5 w-5" />
+                  Properties
+                </Button>
+                <Button
+                  variant="secondary"
+                  className="w-full py-6"
+                  onClick={() => setBankruptStatusOpen(true)}
+                >
+                  <Info className="h-5 w-5" />
+                  View Stats
+                </Button>
               </div>
             </Section>
+            <BankruptStatus
+              open={bankruptStatusOpen}
+              onOpenChange={setBankruptStatusOpen}
+              currentPlayer={player}
+              gameId={game?.id}
+            />
           </>
         ) : (
           /* Normal UI for active players */
@@ -2282,6 +2388,14 @@ const Drunkopoly = () => {
                 >
                   <Users className="h-5 w-5" />
                   Jail
+                </Button>
+                <Button
+                  variant="secondary"
+                  className="w-full py-6"
+                  onClick={() => setPropertiesModalOpen(true)}
+                >
+                  <Building2 className="h-5 w-5" />
+                  Properties
                 </Button>
                 {!player?.is_bankrupt && (
                   <Button
@@ -2467,6 +2581,14 @@ const Drunkopoly = () => {
           players={playersList}
           showBalances={game?.show_balances ?? true}
           onSubmit={handleBankrupt}
+          gameId={game?.id}
+        />
+
+        <PropertiesPopup
+          open={propertiesModalOpen}
+          onOpenChange={(v) => setPropertiesModalOpen(v)}
+          gameCode={gameCode}
+          players={playersList}
         />
 
         <JailLockOverlay

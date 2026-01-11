@@ -26,6 +26,8 @@ import {
 
 type Player = { id: string; name: string; balance?: number };
 
+// Stats were moved to a dedicated BankruptStatus popup component
+
 export default function BankruptPopup({
   open,
   onOpenChange,
@@ -33,6 +35,7 @@ export default function BankruptPopup({
   players = [],
   showBalances = true,
   onSubmit,
+  gameId,
 }: {
   open: boolean;
   onOpenChange: (v: boolean) => void;
@@ -40,6 +43,7 @@ export default function BankruptPopup({
   players?: Player[];
   showBalances?: boolean;
   onSubmit: (recipientId: string) => void;
+  gameId?: string | null;
 }) {
   const others = useMemo(() => {
     if (!players) return [];
@@ -57,6 +61,7 @@ export default function BankruptPopup({
 
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [confirmOpen, setConfirmOpen] = useState(false);
+  
 
   // Initialize popup state only when the dialog actually opens
   const prevOpenRef = React.useRef<boolean>(false);
@@ -65,6 +70,7 @@ export default function BankruptPopup({
     if (!prev && open) {
       setSelectedId(null);
       setConfirmOpen(false);
+      // stats are shown on the dedicated BankruptStatus screen after bankruptcy
     }
     prevOpenRef.current = open;
   }, [open]);
@@ -92,7 +98,7 @@ export default function BankruptPopup({
 
   return (
     <>
-      <Dialog open={open && !confirmOpen} onOpenChange={onOpenChange}>
+      <Dialog open={open} onOpenChange={onOpenChange}>
         <DialogPortal>
           <DialogOverlay />
           <DialogPrimitive.Content className="fixed left-1/2 top-1/2 z-50 w-full max-w-md -translate-x-1/2 -translate-y-1/2 border bg-background p-6 shadow-lg sm:rounded-lg md:w-full">
@@ -152,6 +158,7 @@ export default function BankruptPopup({
                 </div>
               )}
             </div>
+            {/* Game stats moved to the BankruptStatus component (shown after declaring bankruptcy) */}
 
             <DialogFooter className="mt-6 flex gap-3 w-full justify-end">
               <Button variant="outline" onClick={() => onOpenChange(false)}>
@@ -177,6 +184,8 @@ export default function BankruptPopup({
             <AlertDialogDescription className="space-y-2">
               <p>This will: Transfer all ${currentBalance.toLocaleString()} to {selectedPlayer?.name}, put you in ghost mode (spectator), and prevent you from participating in payments.</p>
                 <p className="font-semibold text-destructive mt-4 text-white">This action cannot be undone!</p>
+
+              {/* Stats moved to main bankruptcy dialog */}
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter className="flex gap-3 w-full justify-end">
