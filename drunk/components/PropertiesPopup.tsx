@@ -58,7 +58,7 @@ const PropertiesPopup = ({ open, onOpenChange, gameCode, players }: PropertiesPo
   const [ownerships, setOwnerships] = useState<PropertyOwnership[]>([]);
   const [expandedProperty, setExpandedProperty] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
-  const [activeTab, setActiveTab] = useState<'properties' | 'rankings'>('properties');
+  
   const [gameId, setGameId] = useState<string | null>(null);
   const [filterOwner, setFilterOwner] = useState<string>('all');
   const [playerStats, setPlayerStats] = useState<Map<string, PlayerStats>>(new Map());
@@ -662,212 +662,50 @@ const PropertiesPopup = ({ open, onOpenChange, gameCode, players }: PropertiesPo
           </DialogTitle>
         </DialogHeader>
         
-        <Tabs value={activeTab} onValueChange={(v) => setActiveTab(v as any)} className="w-full">
-          <TabsList className="grid w-full grid-cols-2">
-            <TabsTrigger value="properties">
-              <Building2 className="w-4 h-4 mr-2" />
-              Properties
-            </TabsTrigger>
-            <TabsTrigger value="rankings">
-              <TrendingUp className="w-4 h-4 mr-2" />
-              Rankings
-            </TabsTrigger>
-          </TabsList>
-          
-          <TabsContent value="properties" className="mt-4 space-y-4">
-            {loading ? (
-              <div className="text-center py-8 text-muted-foreground">Loading properties...</div>
-            ) : (
-                (() => {
-                  return (
-                    <div>
-                      <div className="flex items-center justify-between mb-3">
-                        <div className="text-sm font-medium">Filter</div>
-                        <select
-                          value={filterOwner}
-                          onChange={(e) => setFilterOwner(e.target.value)}
-                          className="px-2 py-1 border rounded bg-background text-sm"
-                          aria-label="Filter properties by owner"
-                        >
-                          <option value="all">All</option>
-                          <option value="unowned">Unowned</option>
-                          {players.filter(p => !(p as any).is_bankrupt).map(p => (
-                            <option key={p.id} value={p.id}>{p.name}</option>
-                          ))}
-                        </select>
-                      </div>
-
-                      {(() => {
-                        const orderedProps: MonopolyProperty[] = [];
-                        colorOrder.forEach(color => {
-                          const props = (groupedProperties[color] || []).slice().sort((a, b) => (a.position || 0) - (b.position || 0));
-                          props.forEach(p => {
-                            const ownership = getOwnership(p.id);
-                            const ownerId = ownership?.player_id ?? null;
-                            if (filterOwner === 'all') {
-                              orderedProps.push(p);
-                            } else if (filterOwner === 'unowned') {
-                              if (!ownerId) orderedProps.push(p);
-                            } else {
-                              if (ownerId === filterOwner) orderedProps.push(p);
-                            }
-                          });
-                        });
-                        return orderedProps.map(property => (
-                          <PropertyCard key={property.id} property={property} />
-                        ));
-                      })()}
-                    </div>
-                  );
-                })()
-              )}
-          </TabsContent>
-          
-          <TabsContent value="rankings" className="mt-4">
-            <div className="space-y-3">
-              <div className="text-sm text-muted-foreground mb-4">
-                Advanced win probability based on assets, strategy, game phase, and luck factors
+        <div className="mt-4 space-y-4">
+          {loading ? (
+            <div className="text-center py-8 text-muted-foreground">Loading properties...</div>
+          ) : (
+            <div>
+              <div className="flex items-center justify-between mb-3">
+                <div className="text-sm font-medium">Filter</div>
+                <select
+                  value={filterOwner}
+                  onChange={(e) => setFilterOwner(e.target.value)}
+                  className="px-2 py-1 border rounded bg-background text-sm"
+                  aria-label="Filter properties by owner"
+                >
+                  <option value="all">All</option>
+                  <option value="unowned">Unowned</option>
+                  {players.filter(p => !(p as any).is_bankrupt).map(p => (
+                    <option key={p.id} value={p.id}>{p.name}</option>
+                  ))}
+                </select>
               </div>
-              
+
               {(() => {
-                // Merge rankings with win probabilities
-                const rankings = calculateRankings();
-                const rankedWithProbs = rankings.map(rank => {
-                  const prob = winProbabilities.find(p => p.playerId === rank.player.id);
-                  return {
-                    ...rank,
-                    winProbability: prob?.winProbability || 0,
-                    breakdown: prob?.breakdown
-                  };
-                }).sort((a, b) => b.winProbability - a.winProbability);
-                
-                return rankedWithProbs.map((rank, index) => (
-                  <Card key={rank.player.id} className="p-4">
-                    <div className="space-y-3">
-                      {/* Header Row */}
-                      <div className="flex items-center gap-3">
-                        <div className="text-2xl font-bold text-muted-foreground w-8">
-                          #{index + 1}
-                        </div>
-                        {index === 0 && <Crown className="w-5 h-5 text-yellow-500" />}
-                        
-                        <div className="flex-1">
-                          <div className="font-semibold text-lg">{rank.player.name}</div>
-                          <div className="text-sm text-muted-foreground">
-                            {rank.propertyCount} propert{rank.propertyCount !== 1 ? 'ies' : 'y'}
-                            {gameInfo?.sips_enabled && rank.player.total_sips ? 
-                              ` • ${rank.player.total_sips} sips` : ''}
-                          </div>
-                        </div>
-                        
-                        <div className="text-right">
-                          {/* Win Probability - Large and Prominent */}
-                          <div className="text-3xl font-bold text-primary flex items-center gap-2">
-                            {rank.winProbability > 0 ? (
-                              <>
-                                {rank.winProbability.toFixed(1)}%
-                                {rank.winProbability > 50 && <Zap className="w-6 h-6 text-yellow-500" />}
-                              </>
-                            ) : (
-                              <span className="text-muted-foreground">—</span>
-                            )}
-                          </div>
-                          <div className="text-xs text-muted-foreground mt-1">
-                            Win Probability
-                          </div>
-                        </div>
-                      </div>
-                      
-                      {/* Asset Breakdown */}
-                      <div className="grid grid-cols-2 gap-3 pt-3 border-t">
-                        <div>
-                          <div className="text-xs text-muted-foreground">Total Value</div>
-                          <div className="text-lg font-semibold">
-                            ${rank.totalValue.toLocaleString()}
-                          </div>
-                        </div>
-                        <div>
-                          <div className="text-xs text-muted-foreground">Cash</div>
-                          <div className="text-lg font-semibold">
-                            ${rank.balance.toLocaleString()}
-                          </div>
-                        </div>
-                        <div>
-                          <div className="text-xs text-muted-foreground">Properties</div>
-                          <div className="text-lg font-semibold">
-                            ${rank.propertyValue.toLocaleString()}
-                          </div>
-                        </div>
-                        {rank.breakdown && (
-                          <div>
-                            <div className="text-xs text-muted-foreground">Strategy Score</div>
-                            <div className="text-lg font-semibold">
-                              {rank.breakdown.strategyScore.toFixed(0)}
-                            </div>
-                          </div>
-                        )}
-                      </div>
-                      
-                      {/* Detailed Breakdown (if available) */}
-                      {rank.breakdown && (
-                        <div className="pt-3 border-t">
-                          <div className="text-xs font-semibold mb-2 text-muted-foreground">Score Breakdown</div>
-                          <div className="grid grid-cols-2 gap-2 text-xs">
-                            <div className="flex justify-between">
-                              <span className="text-muted-foreground">Assets:</span>
-                              <span className="font-medium">{rank.breakdown.assetScore.toFixed(0)}</span>
-                            </div>
-                            <div className="flex justify-between">
-                              <span className="text-muted-foreground">Strategy:</span>
-                              <span className="font-medium">{rank.breakdown.strategyScore.toFixed(0)}</span>
-                            </div>
-                            <div className="flex justify-between">
-                              <span className="text-muted-foreground">Luck:</span>
-                              <span className={`font-medium ${rank.breakdown.luckScore >= 0 ? 'text-green-600' : 'text-red-600'}`}>
-                                {rank.breakdown.luckScore >= 0 ? '+' : ''}{rank.breakdown.luckScore.toFixed(0)}
-                              </span>
-                            </div>
-                            {gameInfo?.sips_enabled && rank.breakdown.sipPenalty !== 0 && (
-                              <div className="flex justify-between">
-                                <span className="text-muted-foreground">Sip Penalty:</span>
-                                <span className="font-medium text-orange-600">
-                                  {rank.breakdown.sipPenalty.toFixed(0)}
-                                </span>
-                              </div>
-                            )}
-                            <div className="flex justify-between">
-                              <span className="text-muted-foreground">Game Phase:</span>
-                              <span className="font-medium">
-                                {rank.breakdown.gamePhaseScore === 0 ? 'Early' :
-                                 rank.breakdown.gamePhaseScore === 1 ? 'Mid' : 'Late'}
-                              </span>
-                            </div>
-                          </div>
-                        </div>
-                      )}
-                      
-                      {/* Win Probability Bar */}
-                      <div className="pt-2">
-                        <div className="w-full bg-muted rounded-full h-2 overflow-hidden">
-                          <div
-                            className="h-full bg-green-500 transition-all duration-500"
-                            style={{ width: `${Math.max(2, Math.min(100, rank.winProbability || 0))}%` }}
-                          />
-                        </div>
-                      </div>
-                    </div>
-                  </Card>
+                const orderedProps: MonopolyProperty[] = [];
+                colorOrder.forEach(color => {
+                  const props = (groupedProperties[color] || []).slice().sort((a, b) => (a.position || 0) - (b.position || 0));
+                  props.forEach(p => {
+                    const ownership = getOwnership(p.id);
+                    const ownerId = ownership?.player_id ?? null;
+                    if (filterOwner === 'all') {
+                      orderedProps.push(p);
+                    } else if (filterOwner === 'unowned') {
+                      if (!ownerId) orderedProps.push(p);
+                    } else {
+                      if (ownerId === filterOwner) orderedProps.push(p);
+                    }
+                  });
+                });
+                return orderedProps.map(property => (
+                  <PropertyCard key={property.id} property={property} />
                 ));
               })()}
-              
-              {winProbabilities.length === 0 && !loading && (
-                <div className="text-center py-8 text-muted-foreground">
-                  No players in the game yet
-                </div>
-              )}
             </div>
-          </TabsContent>
-        </Tabs>
+          )}
+        </div>
       </DialogContent>
     </Dialog>
   );

@@ -5,6 +5,7 @@ import BankruptPopup from "../components/BankruptPopup";
 import BankruptStatus from "../components/BankruptStatus";
 import SipsLockOverlay from "../components/SipsLockOverlay";
 import PropertiesPopup from "../components/PropertiesPopup";
+import RankingsPopup from "../components/RankingsPopup";
 import { UserPlus, DollarSign, Users, Percent, Crown, PiggyBank, Clock, Copy, Settings, QrCode, ChevronDown, Info, Eye, EyeOff, Building2 } from "lucide-react";
 import { QRCodeSVG } from "qrcode.react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "../components/ui/dialog";
@@ -14,6 +15,7 @@ import TradeTimerControl from "../components/TradeTimerControl";
 import TradeLockOverlay from "../components/TradeLockOverlay";
 import JailLockOverlay from "../components/JailLockOverlay";
 import ActivityLog from "../components/ActivityLog";
+import { ThemeSelector } from "../../src/components/ThemeSelector";
 import {
   Card,
   CardHeader,
@@ -96,6 +98,7 @@ const Drunkopoly = () => {
   const [tradeTimerSelected, setTradeTimerSelected] = useState<number>(60);
   const [jailModalOpen, setJailModalOpen] = useState(false);
   const [propertiesModalOpen, setPropertiesModalOpen] = useState(false);
+  const [rankingsModalOpen, setRankingsModalOpen] = useState(false);
   const [payProcessing, setPayProcessing] = useState(false);
   const [cardProcessing, setCardProcessing] = useState(false);
   const [insufficientFundsFlash, setInsufficientFundsFlash] = useState(false);
@@ -2149,13 +2152,16 @@ const Drunkopoly = () => {
       {/* Top bar */}
       <div className="flex items-center justify-between px-6 py-4 z-50">
         <div className="flex items-center gap-2">
-          <div className="bg-black text-white px-3 py-1 rounded-md flex items-center gap-3">
-            <div className="font-semibold text-lg">{player?.name ?? name}</div>
-            {(game?.sips_enabled ?? true) && (
-              <div className="text-sm opacity-90">{(player?.total_sips ?? 0)} sips</div>
-            )}
+            <div
+              className="px-3 py-1 rounded-md flex items-center gap-3"
+              style={{ backgroundColor: 'hsl(var(--background))', color: 'hsl(var(--foreground))' }}
+            >
+              <div className="font-semibold text-lg">{player?.name ?? name}</div>
+              {(game?.sips_enabled ?? true) && (
+                <div className="text-sm opacity-90">{(player?.total_sips ?? 0)} sips</div>
+              )}
+            </div>
           </div>
-        </div>
           <div className="flex items-center gap-2">
           {(game?.sips_enabled ?? true) && !isNarrow && (
             <Button variant="ghost" size="sm" onClick={() => navigate('/drunk/drunkopoly/rules')}>Rules</Button>
@@ -2254,6 +2260,14 @@ const Drunkopoly = () => {
                 >
                   <Building2 className="h-5 w-5" />
                   Properties
+                </Button>
+                <Button
+                  variant="secondary"
+                  className="w-full py-6"
+                  onClick={() => setRankingsModalOpen(true)}
+                >
+                  <Crown className="h-5 w-5" />
+                  Rankings
                 </Button>
                 <Button
                   variant="secondary"
@@ -2396,6 +2410,14 @@ const Drunkopoly = () => {
                 >
                   <Building2 className="h-5 w-5" />
                   Properties
+                </Button>
+                <Button
+                  variant="secondary"
+                  className="w-full py-6"
+                  onClick={() => setRankingsModalOpen(true)}
+                >
+                  <Crown className="h-5 w-5" />
+                  Rankings
                 </Button>
                 {!player?.is_bankrupt && (
                   <Button
@@ -2587,6 +2609,13 @@ const Drunkopoly = () => {
         <PropertiesPopup
           open={propertiesModalOpen}
           onOpenChange={(v) => setPropertiesModalOpen(v)}
+          gameCode={gameCode}
+          players={playersList}
+        />
+
+        <RankingsPopup
+          open={rankingsModalOpen}
+          onOpenChange={(v) => setRankingsModalOpen(v)}
           gameCode={gameCode}
           players={playersList}
         />
@@ -3075,7 +3104,8 @@ function AnimatedNumber({ value, soundEnabled = true, maskIfGameHidden = false, 
           aria-pressed={localShown}
           aria-label={localShown ? 'Hide balance' : 'Show balance'}
           title={localShown ? 'Hide balance' : 'Show balance'}
-          className="drunk-eye-toggle inline-flex items-center justify-center -ml-4 mt-8 w-9 h-9 rounded-full border border-white/16 shadow-[0_6px_18px_rgba(0,0,0,0.45)] text-white bg-transparent transition-transform duration-150 hover:-translate-y-1 focus:outline-none focus:ring-2 focus:ring-white/10"
+          className="drunk-eye-toggle inline-flex items-center justify-center -ml-4 mt-8 w-9 h-9 rounded-full border border-border text-foreground bg-transparent transition-transform duration-150 hover:-translate-y-1 focus:outline-none focus:ring-2"
+          style={{ boxShadow: 'var(--shadow-card)' }}
         >
           {localShown ? (
             <Eye className="w-4 h-4" />
@@ -3234,6 +3264,8 @@ function GameCodePopover({ code, onLogout, players, currentPlayer, game, onRemov
             {settingsOpenSection === 'game' && (
               <div className="mt-3 px-0">
                 <div className="rounded bg-muted/30 border border-muted p-3 space-y-2">
+                  <ThemeSelector />
+                  
                   <div className="flex items-center justify-between py-2 px-3 rounded-lg bg-muted/10">
                     <div className="flex-1">
                       <div className="font-medium text-sm">App Sounds</div>

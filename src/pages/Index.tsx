@@ -4,8 +4,11 @@ import Header from '../components/Header';
 import SkillDetailModal from '../components/SkillDetailModal';
 import LiquorBotDetailModal from '../components/LiquorBotDetailModal';
 import skillsData from '../lib/skills';
-import { Github, Linkedin, Heart } from 'lucide-react';
+import { Github, Linkedin, Heart, Palette } from 'lucide-react';
 import WheelNavigation from '../components/WheelNavigation';
+import { useTheme, ThemeName } from '@/contexts/ThemeContext';
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { Button } from "@/components/ui/button";
 
 import Timeline from '../components/Timeline';
 import { useRef } from 'react';
@@ -15,7 +18,16 @@ import LiquorBotModelCanvas from '../components/LiquorBotModel';
 import { IoPhonePortraitOutline, IoConstructOutline, IoCodeSlashOutline } from 'react-icons/io5';
 import FordExperience from '../components/FordExperience';
 
+const themeOptions: { value: ThemeName; label: string; color: string }[] = [
+  { value: 'dark', label: 'Dark', color: 'hsl(250, 24%, 9%)' },
+  { value: 'light', label: 'Light', color: 'hsl(0, 0%, 100%)' },
+  { value: 'red', label: 'Red', color: 'hsl(0, 84%, 60%)' },
+  { value: 'blue', label: 'Blue', color: 'hsl(210, 100%, 60%)' },
+  { value: 'green', label: 'Green', color: 'hsl(142, 76%, 45%)' },
+];
+
 const Index = () => {
+  const { theme, setTheme } = useTheme();
   // Drink Machine Detail Modal State
   const [drinkMachineModalOpen, setDrinkMachineModalOpen] = useState(false);
   const [drinkMachineDetailType, setDrinkMachineDetailType] = useState<'mobile' | 'hardware' | 'firmware' | null>(null);
@@ -176,6 +188,48 @@ const Index = () => {
   return (
     <div className="min-h-screen bg-black text-foreground">
       <WheelNavigation />
+
+      {/* Floating Theme Selector */}
+      <div className="fixed top-6 right-6 z-50">
+        <Popover>
+          <PopoverTrigger asChild>
+            <Button 
+              variant="outline" 
+              size="icon" 
+              className="bg-card/80 backdrop-blur-sm border-minimal-border hover:border-minimal-accent shadow-lg"
+            >
+              <Palette className="h-5 w-5" />
+            </Button>
+          </PopoverTrigger>
+          <PopoverContent align="end" className="w-56">
+            <div className="space-y-2">
+              <p className="text-sm font-medium">Choose Theme</p>
+              <div className="flex gap-2 flex-wrap">
+                {themeOptions.map((option) => (
+                  <button
+                    key={option.value}
+                    onClick={() => setTheme(option.value)}
+                    className={`
+                      flex items-center gap-2 px-3 py-2 rounded-md text-sm flex-1 min-w-[45%] transition-all
+                      ${theme === option.value 
+                        ? 'bg-primary text-primary-foreground' 
+                        : 'bg-muted hover:bg-muted/80'
+                      }
+                    `}
+                    title={option.label}
+                  >
+                    <div 
+                      className="w-4 h-4 rounded-full border border-border"
+                      style={{ backgroundColor: option.color }}
+                    />
+                    {option.label}
+                  </button>
+                ))}
+              </div>
+            </div>
+          </PopoverContent>
+        </Popover>
+      </div>
 
       {/* About Section */}
       <section

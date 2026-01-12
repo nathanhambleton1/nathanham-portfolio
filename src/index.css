@@ -5,7 +5,9 @@
 /* Tech Portfolio Design System - Black & Minimalistic */
 
 @layer base {
-  :root {
+  /* Default theme (Dark / Portfolio Black) */
+  :root,
+  .theme-dark {
     /* Minimalistic Black & White Theme */
     --background: 0 0% 0%;
     --foreground: 0 0% 98%;
@@ -52,6 +54,166 @@
     /* Smooth transitions */
     --transition-smooth: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
     --transition-wheel: transform 0.6s cubic-bezier(0.4, 0, 0.2, 1);
+  }
+
+  /* Light theme */
+  .theme-light {
+    --background: 0 0% 100%;
+    --foreground: 0 0% 5%;
+
+    --card: 0 0% 98%;
+    --card-foreground: 0 0% 5%;
+
+    --popover: 0 0% 100%;
+    --popover-foreground: 0 0% 5%;
+
+    --primary: 0 0% 5%;
+    --primary-foreground: 0 0% 100%;
+
+    --secondary: 0 0% 92%;
+    --secondary-foreground: 0 0% 10%;
+
+    --muted: 0 0% 96%;
+    --muted-foreground: 0 0% 40%;
+
+    --accent: 0 0% 90%;
+    --accent-foreground: 0 0% 5%;
+
+    --destructive: 0 84% 50%;
+    --destructive-foreground: 0 0% 100%;
+
+    --border: 0 0% 90%;
+    --input: 0 0% 90%;
+    --ring: 0 0% 5%;
+
+    --minimal-accent: 0 0% 60%;
+    --minimal-border: 0 0% 85%;
+    
+    --gradient-subtle: linear-gradient(135deg, hsl(var(--card)), hsl(var(--muted)));
+    --gradient-border: linear-gradient(90deg, transparent, hsl(var(--minimal-accent) / 0.3), transparent);
+    
+    --shadow-minimal: 0 2px 10px hsl(0 0% 0% / 0.05);
+    --shadow-hover: 0 4px 20px hsl(0 0% 0% / 0.1);
+  }
+
+  /* Red theme */
+  .theme-red {
+    --background: 0 20% 10%;
+    --foreground: 0 0% 98%;
+
+    --card: 0 15% 14%;
+    --card-foreground: 0 0% 98%;
+
+    --popover: 0 15% 14%;
+    --popover-foreground: 0 0% 98%;
+
+    --primary: 0 84% 60%;
+    --primary-foreground: 0 0% 100%;
+
+    --secondary: 0 60% 25%;
+    --secondary-foreground: 0 0% 98%;
+
+    --muted: 0 12% 22%;
+    --muted-foreground: 0 5% 65%;
+
+    --accent: 0 84% 50%;
+    --accent-foreground: 0 0% 100%;
+
+    --destructive: 0 84% 60%;
+    --destructive-foreground: 0 0% 100%;
+
+    --border: 0 12% 25%;
+    --input: 0 12% 25%;
+    --ring: 0 84% 60%;
+
+    --minimal-accent: 0 70% 50%;
+    --minimal-border: 0 15% 25%;
+    
+    --gradient-subtle: linear-gradient(135deg, hsl(var(--card)), hsl(var(--muted)));
+    --gradient-border: linear-gradient(90deg, transparent, hsl(var(--minimal-accent) / 0.3), transparent);
+    
+    --shadow-minimal: 0 2px 10px hsl(0 84% 60% / 0.2);
+    --shadow-hover: 0 4px 20px hsl(0 84% 60% / 0.3);
+  }
+
+  /* Blue theme */
+  .theme-blue {
+    --background: 220 30% 10%;
+    --foreground: 0 0% 98%;
+
+    --card: 220 25% 14%;
+    --card-foreground: 0 0% 98%;
+
+    --popover: 220 25% 14%;
+    --popover-foreground: 0 0% 98%;
+
+    --primary: 210 100% 60%;
+    --primary-foreground: 0 0% 100%;
+
+    --secondary: 220 30% 25%;
+    --secondary-foreground: 0 0% 98%;
+
+    --muted: 220 20% 22%;
+    --muted-foreground: 220 10% 65%;
+
+    --accent: 210 100% 50%;
+    --accent-foreground: 0 0% 100%;
+
+    --destructive: 0 84% 60%;
+    --destructive-foreground: 0 0% 100%;
+
+    --border: 220 20% 25%;
+    --input: 220 20% 25%;
+    --ring: 210 100% 60%;
+
+    --minimal-accent: 210 90% 55%;
+    --minimal-border: 220 20% 25%;
+    
+    --gradient-subtle: linear-gradient(135deg, hsl(var(--card)), hsl(var(--muted)));
+    --gradient-border: linear-gradient(90deg, transparent, hsl(var(--minimal-accent) / 0.3), transparent);
+    
+    --shadow-minimal: 0 2px 10px hsl(210 100% 60% / 0.2);
+    --shadow-hover: 0 4px 20px hsl(210 100% 60% / 0.3);
+  }
+
+  /* Green theme */
+  .theme-green {
+    --background: 140 25% 10%;
+    --foreground: 0 0% 98%;
+
+    --card: 140 20% 14%;
+    --card-foreground: 0 0% 98%;
+
+    --popover: 140 20% 14%;
+    --popover-foreground: 0 0% 98%;
+
+    --primary: 142 76% 45%;
+    --primary-foreground: 0 0% 100%;
+
+    --secondary: 140 25% 25%;
+    --secondary-foreground: 0 0% 98%;
+
+    --muted: 140 15% 22%;
+    --muted-foreground: 140 10% 65%;
+
+    --accent: 142 76% 40%;
+    --accent-foreground: 0 0% 100%;
+
+    --destructive: 0 84% 60%;
+    --destructive-foreground: 0 0% 100%;
+
+    --border: 140 15% 25%;
+    --input: 140 15% 25%;
+    --ring: 142 76% 45%;
+
+    --minimal-accent: 142 70% 45%;
+    --minimal-border: 140 15% 25%;
+    
+    --gradient-subtle: linear-gradient(135deg, hsl(var(--card)), hsl(var(--muted)));
+    --gradient-border: linear-gradient(90deg, transparent, hsl(var(--minimal-accent) / 0.3), transparent);
+    
+    --shadow-minimal: 0 2px 10px hsl(142 76% 45% / 0.2);
+    --shadow-hover: 0 4px 20px hsl(142 76% 45% / 0.3);
   }
 
   .dark {

@@ -23,7 +23,7 @@ export default function TradeTimerControl({
             key={s}
             variant={sel === s ? 'default' : 'ghost'}
             size="sm"
-            className={`px-3 py-1 rounded ${sel === s ? 'bg-primary text-black' : ''}`}
+            className={`px-3 py-1 rounded ${sel === s ? 'bg-primary text-white' : ''}`}
             onClick={() => onSelect && onSelect(s)}
             disabled={tradeLocked}
           >

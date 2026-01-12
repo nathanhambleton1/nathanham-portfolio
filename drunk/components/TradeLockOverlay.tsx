@@ -143,10 +143,10 @@ export default function TradeLockOverlay({
   const expired = remainingMs !== null ? remainingMs <= 0 : false;
 
   return (
-    <div className="fixed inset-0 z-[99999] pointer-events-auto overflow-auto bg-black">
+    <div className="fixed inset-0 z-[99999] pointer-events-auto overflow-auto" style={{ backgroundColor: 'hsl(var(--background))' }}>
       <div className="relative z-[99999] min-h-screen flex items-center justify-center px-6 py-12">
-        <div className={`max-w-lg w-full text-center text-white p-12 rounded overflow-auto max-h-[calc(100vh-6rem)]`}>
-          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" className="w-16 h-16 mx-auto mb-4 text-white" fill="none" stroke="currentColor" strokeWidth={1.5}>
+        <div className={`max-w-lg w-full text-center p-12 rounded overflow-auto max-h-[calc(100vh-6rem)]`} style={{ background: 'hsl(var(--background))', color: 'hsl(var(--foreground))' }}>
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" className="w-16 h-16 mx-auto mb-4" fill="none" stroke="currentColor" strokeWidth={1.5}>
             <path strokeLinecap="round" strokeLinejoin="round" d="M12 15v2" />
             <rect x="4" y="10" width="16" height="10" rx="2" strokeWidth={1.5} />
             <path strokeLinecap="round" strokeLinejoin="round" d="M7 10V8a5 5 0 0110 0v2" />
@@ -154,7 +154,7 @@ export default function TradeLockOverlay({
 
           <div className="text-2xl font-bold mb-2">Trade Timer Countdown</div>
           <h2
-            className={`text-5xl font-extrabold mb-2 transition-all duration-300 ${expired ? 'text-red-600' : 'text-white'}`}
+            className={`text-5xl font-extrabold mb-2 transition-all duration-300 ${expired ? 'text-red-600' : ''}`}
             style={
               expired
                 ? (flash 
@@ -238,7 +238,8 @@ export default function TradeLockOverlay({
 
           <div className="w-full">
             <button
-              className={`w-full px-4 py-3 rounded text-lg bg-white text-black border border-transparent`}
+              className={`w-full px-4 py-3 rounded text-lg border border-transparent`}
+              style={{ background: 'hsl(var(--primary))', color: 'hsl(var(--primary-foreground))' }}
               onClick={() => {
                 // stop alarm when user dismisses
                 if (audioRef.current) {
@@ -308,7 +309,7 @@ function BalancesAndInfo({
               <MoreVertical className="w-5 h-5" />
               <div className="text-left">
                 <div className="font-medium">Actions</div>
-                <div className="text-sm text-white/80">{actionsCaption}</div>
+                <div className="text-sm" style={{ color: 'hsl(var(--popover-foreground) / 0.8)' }}>{actionsCaption}</div>
               </div>
             </div>
             <ChevronDown
@@ -318,15 +319,15 @@ function BalancesAndInfo({
           </button>
 
           {openSection === 'actions' && (
-            <div className="mt-3 px-0">
-              <div className="rounded bg-white/5 border border-white/8 p-3">
+              <div className="mt-3 px-0">
+              <div className="rounded p-3" style={{ background: 'hsl(var(--card) / 0.06)', border: '1px solid hsl(var(--minimal-border) / 0.08)' }}>
                 <div className="space-y-2">
                   {/* If player is bankrupt, hide collect/pay buttons and only show Give Sips */}
                   {(allowGiveSips || isBankrupt) && (
                     <button
                       type="button"
                       onClick={() => { onOpenSip && onOpenSip(); }}
-                      className={`w-full text-left p-2 rounded bg-transparent flex items-center gap-2 hover:bg-white/6`}
+                      className={`w-full text-left p-2 rounded bg-transparent flex items-center gap-2`}
                     >
                       <UserPlus className="w-4 h-4" />
                       <span>Give Sips</span>
@@ -338,7 +339,7 @@ function BalancesAndInfo({
                       <button
                         type="button"
                         onClick={() => onOpenCollect && onOpenCollect()}
-                        className="w-full text-left p-2 rounded bg-transparent flex items-center gap-2 hover:bg-white/6"
+                        className="w-full text-left p-2 rounded bg-transparent flex items-center gap-2"
                       >
                         <DollarSign className="w-4 h-4" />
                         <span>Collect From Bank</span>
@@ -347,7 +348,7 @@ function BalancesAndInfo({
                       <button
                         type="button"
                         onClick={() => onOpenPay && onOpenPay('bank')}
-                        className="w-full text-left p-2 rounded bg-transparent flex items-center gap-2 hover:bg-white/6"
+                        className="w-full text-left p-2 rounded bg-transparent flex items-center gap-2"
                       >
                         <DollarSign className="w-4 h-4" />
                         <span>Pay Bank</span>
@@ -356,7 +357,7 @@ function BalancesAndInfo({
                       <button
                         type="button"
                         onClick={() => onOpenPay && onOpenPay('players')}
-                        className="w-full text-left p-2 rounded bg-transparent flex items-center gap-2 hover:bg-white/6"
+                        className="w-full text-left p-2 rounded bg-transparent flex items-center gap-2"
                       >
                         <Users className="w-4 h-4" />
                         <span>Pay Players</span>
@@ -374,14 +375,15 @@ function BalancesAndInfo({
           <button
             type="button"
             onClick={() => setOpenSection((v) => (v === 'balances' ? null : 'balances'))}
-            className="w-full flex items-center justify-between gap-3 p-3 rounded bg-white/5 hover:bg-white/8"
+            className="w-full flex items-center justify-between gap-3 p-3 rounded"
+            style={{ background: 'hsl(var(--card) / 0.06)' }}
             aria-expanded={openSection === 'balances'}
           >
             <div className="flex items-center gap-3">
               <DollarSign className="w-5 h-5" />
               <div className="text-left">
                 <div className="font-medium">Balances</div>
-                <div className="text-sm text-white/80">Your balance and others</div>
+                <div className="text-sm" style={{ color: 'hsl(var(--popover-foreground) / 0.8)' }}>Your balance and others</div>
               </div>
             </div>
             <ChevronDown
@@ -391,11 +393,11 @@ function BalancesAndInfo({
           </button>
 
           {openSection === 'balances' && (
-            <div className="mt-3 px-0">
-              <div className="rounded bg-white/5 border border-white/8 p-3">
+              <div className="mt-3 px-0">
+              <div className="rounded p-3" style={{ background: 'hsl(var(--card) / 0.06)', border: '1px solid hsl(var(--minimal-border) / 0.08)' }}>
                 {/* unified list: current player first, then others */}
-                <div className="text-sm font-medium text-white/80 mb-2">Player balances</div>
-                <div className="divide-y divide-white/6 max-h-40 overflow-auto">
+                <div className="text-sm font-medium mb-2" style={{ color: 'hsl(var(--popover-foreground) / 0.8)' }}>Player balances</div>
+                <div className="divide-y max-h-40 overflow-auto" style={{ borderColor: 'hsl(var(--minimal-border) / 0.06)' }}>
                   {(activePlayers && activePlayers.length > 0) ? (
                     showBalances ? (
                       // put current (active) player first
@@ -406,7 +408,7 @@ function BalancesAndInfo({
                           return (a.name || '').toString().localeCompare((b.name || '').toString());
                         });
                         return sorted.map((p) => (
-                          <div key={p.id} className="flex items-center justify-between py-2 text-sm text-white/80">
+                          <div key={p.id} className="flex items-center justify-between py-2 text-sm" style={{ color: 'hsl(var(--popover-foreground) / 0.8)' }}>
                             <div className={`${String(p.id) === String(currentPlayerId) ? 'font-medium' : ''}`}>
                               {p.name}{String(p.id) === String(currentPlayerId) ? ' • You' : ''}
                             </div>
@@ -419,7 +421,7 @@ function BalancesAndInfo({
                         const currentActive = activePlayers.find((p) => String(p.id) === String(currentPlayerId));
                         if (currentActive) {
                           return (
-                            <div key={currentActive.id} className="flex items-center justify-between py-2 text-sm text-white/80">
+                            <div key={currentActive.id} className="flex items-center justify-between py-2 text-sm" style={{ color: 'hsl(var(--popover-foreground) / 0.8)' }}>
                               <div className="font-medium">{currentActive.name} • You</div>
                               <div>${Number(currentActive.balance ?? 0).toLocaleString()}</div>
                             </div>
@@ -427,17 +429,17 @@ function BalancesAndInfo({
                         }
                         // If current player is bankrupt or no active current player, don't show balances
                         if (isBankrupt) {
-                          return <div className="text-sm text-white/70">You are bankrupt — balances hidden.</div>;
+                          return <div className="text-sm" style={{ color: 'hsl(var(--popover-foreground) / 0.7)' }}>You are bankrupt — balances hidden.</div>;
                         }
-                        return <div className="text-sm text-white/70">Other players' balances are hidden by game settings.</div>;
+                        return <div className="text-sm" style={{ color: 'hsl(var(--popover-foreground) / 0.7)' }}>Other players' balances are hidden by game settings.</div>;
                       })()
                     )
                   ) : (
-                    <div className="text-sm text-white/70">No active players</div>
+                    <div className="text-sm" style={{ color: 'hsl(var(--popover-foreground) / 0.7)' }}>No active players</div>
                   )}
                 </div>
                 {!showBalances && (
-                  <div className="mt-2 text-sm text-white/70">Other players' balances are hidden by game settings.</div>
+                  <div className="mt-2 text-sm" style={{ color: 'hsl(var(--popover-foreground) / 0.7)' }}>Other players' balances are hidden by game settings.</div>
                 )}
               </div>
             </div>
@@ -448,14 +450,15 @@ function BalancesAndInfo({
           <button
             type="button"
             onClick={() => setOpenSection((v) => (v === 'info' ? null : 'info'))}
-            className="w-full flex items-center justify-between gap-3 p-3 rounded bg-white/5 hover:bg-white/8"
+            className="w-full flex items-center justify-between gap-3 p-3 rounded"
+            style={{ background: 'hsl(var(--card) / 0.06)' }}
             aria-expanded={openSection === 'info'}
           >
             <div className="flex items-center gap-3">
               <Info className="w-5 h-5" />
               <div className="text-left">
                 <div className="font-medium">Info</div>
-                <div className="text-sm text-white/80">Hints and status</div>
+                <div className="text-sm" style={{ color: 'hsl(var(--popover-foreground) / 0.8)' }}>Hints and status</div>
               </div>
             </div>
             <ChevronDown
@@ -466,7 +469,7 @@ function BalancesAndInfo({
 
           {openSection === 'info' && (
             <div className="mt-3 px-0">
-              <div className="rounded bg-white/5 border border-white/8 p-3 text-sm text-white/90">
+              <div className="rounded p-3 text-sm" style={{ background: 'hsl(var(--card) / 0.06)', border: '1px solid hsl(var(--minimal-border) / 0.08)', color: 'hsl(var(--popover-foreground) / 0.9)' }}>
                 {startedByName && <div className="mb-2">Started by {startedByName}</div>}
                 <div>The trade UI is locked for the duration. When finished, press <strong>Done</strong> to unlock for everyone.</div>
               </div>
