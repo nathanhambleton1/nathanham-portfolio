@@ -67,6 +67,7 @@ const BeerBall = () => {
     thirdPlaceMatch: false,
     byeStrategy: "top-seeds",
     grandFinalReset: false,
+    seedingStrategy: "random",
   });
   
   // Bracket State
@@ -196,6 +197,11 @@ const BeerBall = () => {
       const shuffled = [...players].sort(() => Math.random() - 0.5).map((p) => p.name);
       const numTeams = Math.floor(shuffled.length / teamSize);
 
+      if (numTeams < 1) {
+        toast.error("Need at least 2 players to create a team");
+        return;
+      }
+
       for (let i = 0; i < numTeams; i++) {
         generatedTeams.push({
           id: `team-${i + 1}`,
@@ -204,13 +210,11 @@ const BeerBall = () => {
         });
       }
 
-      // Handle leftover players
+      // Warn about leftover players (don't add them to teams)
       const leftover = shuffled.slice(numTeams * teamSize);
-      leftover.forEach((player, idx) => {
-        if (generatedTeams[idx % generatedTeams.length]) {
-          generatedTeams[idx % generatedTeams.length].players.push(player);
-        }
-      });
+      if (leftover.length > 0) {
+        toast.warning(`${leftover.join(", ")} couldn't be placed (need even number of players for 2v2)`);
+      }
     } else {
       // Skill-based: snake draft using three rankings
       const numTeams = Math.floor(players.length / teamSize);
@@ -253,7 +257,11 @@ const BeerBall = () => {
       let currentTeamIndex = 0;
       let direction = 1;
 
-      ranked.forEach((player) => {
+      // Only assign players that fit into complete teams
+      const playersToAssign = ranked.slice(0, numTeams * teamSize);
+      const leftoverPlayers = ranked.slice(numTeams * teamSize);
+
+      playersToAssign.forEach((player) => {
         generatedTeams[currentTeamIndex].players.push(player.name);
 
         if (direction === 1) {
@@ -270,6 +278,10 @@ const BeerBall = () => {
           }
         }
       });
+
+      if (leftoverPlayers.length > 0) {
+        toast.warning(`${leftoverPlayers.map(p => p.name).join(", ")} couldn't be placed (need even number of players for 2v2)`);
+      }
     }
 
     setTeams(generatedTeams);
@@ -282,6 +294,13 @@ const BeerBall = () => {
   const generateBracket = () => {
     if (teams.length < 2) {
       toast.error("Need at least 2 teams to generate a bracket");
+      return;
+    }
+
+    // Validate all teams have exactly 2 players
+    const invalidTeams = teams.filter(t => t.players.length !== 2);
+    if (invalidTeams.length > 0) {
+      toast.error(`All teams must have exactly 2 players. Fix: ${invalidTeams.map(t => t.name).join(", ")}`);
       return;
     }
 
@@ -763,22 +782,50 @@ const BeerBall = () => {
             </h3>
 
             <div className="space-y-6">
-              {bracketRounds.map((round) => (
-                <div key={`round-${round.roundIndex}`} className="space-y-3">
-                  <div className="flex items-center justify-between">
-                    <h4 className="font-bold text-lg text-foreground">
-                      {round.roundName}
-                      {round.isLowerBracket && (
-                        <span className="ml-2 text-sm font-normal text-orange-400">(Lower Bracket)</span>
-                      )}
-                    </h4>
-                    <span className="text-sm text-muted-foreground">
-                      {round.matches.length} {round.matches.length === 1 ? 'match' : 'matches'}
-                    </span>
-                  </div>
+              {bracketRounds.map((round) => {
+                // Filter out bye matches (auto-advanced)
+                const actualMatches = round.matches.filter(m => {
+                  // Hide bye matches
+                  if (m.isBye) return false;
+                  // Keep matches where both teams are present
+                  if (m.teamA && m.teamB) return true;
+                  // Keep matches where both are TBD (waiting for previous round)
+                  if (!m.teamA && !m.teamB) return true;
+                  // Hide matches where one is null and winner is already set (auto-bye)
+                  if (m.winner) return false;
+                  // Keep everything else
+                  return true;
+                });
 
-                  <div className="grid gap-3 md:grid-cols-2">
-                    {round.matches.map((match) => (
+                // Get bye teams for display
+                const byeMatches = round.matches.filter(m => m.isBye && m.winner);
+
+                return (
+                  <div key={`round-${round.roundIndex}`} className="space-y-3">
+                    <div className="flex items-center justify-between">
+                      <h4 className="font-bold text-lg text-foreground">
+                        {round.roundName}
+                        {round.isLowerBracket && (
+                          <span className="ml-2 text-sm font-normal text-orange-400">(Lower Bracket)</span>
+                        )}
+                      </h4>
+                      <span className="text-sm text-muted-foreground">
+                        {actualMatches.length} {actualMatches.length === 1 ? 'match' : 'matches'}
+                        {byeMatches.length > 0 && ` • ${byeMatches.length} bye${byeMatches.length > 1 ? 's' : ''}`}
+                      </span>
+                    </div>
+
+                    {/* Show bye information if any */}
+                    {byeMatches.length > 0 && (
+                      <div className="bg-blue-500/10 border border-blue-500/20 rounded-lg p-3">
+                        <div className="text-sm text-blue-300">
+                          <strong>Byes:</strong> {byeMatches.map(m => m.winner?.name).join(', ')} advance{byeMatches.length === 1 ? 's' : ''} automatically
+                        </div>
+                      </div>
+                    )}
+
+                    <div className="grid gap-3 md:grid-cols-2">
+                      {actualMatches.map((match) => (
                       <div 
                         key={match.id} 
                         className="bg-muted p-4 rounded-lg border border-border"
@@ -843,7 +890,8 @@ const BeerBall = () => {
                     ))}
                   </div>
                 </div>
-              ))}
+              );
+              })}
 
               {/* Champion Display */}
               {champion && (
@@ -868,7 +916,7 @@ const BeerBall = () => {
                           const teamPoints: Record<string, number> = {};
                           
                           teams.forEach((team) => {
-                            const stats = calculateTeamStats(bracketRounds, team);
+                            const stats = calculateTeamStats(bracketRounds, team, tournamentSettings);
                             // Award points: 10 per win, bonus for champion
                             let points = stats.wins * 10;
                             if (team.id === champion.id) {
@@ -961,7 +1009,7 @@ const BeerBall = () => {
             <h3 className="text-xl font-bold text-foreground mb-4">Team Statistics</h3>
             <div className="grid gap-3 md:grid-cols-2 lg:grid-cols-3">
               {teams.map((team) => {
-                const stats = calculateTeamStats(bracketRounds, team);
+                const stats = calculateTeamStats(bracketRounds, team, tournamentSettings);
                 return (
                   <div key={team.id} className="bg-muted p-4 rounded-lg">
                     <h4 className="font-bold text-foreground mb-2">{team.name}</h4>
@@ -977,7 +1025,7 @@ const BeerBall = () => {
                       <div className="flex justify-between">
                         <span className="text-muted-foreground">Status:</span>
                         <span className={stats.isEliminated ? "text-red-400" : "text-green-400"}>
-                          {stats.isEliminated ? "Eliminated" : "Active"}
+                          {stats.placement}
                         </span>
                       </div>
                     </div>
