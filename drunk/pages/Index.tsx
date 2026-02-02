@@ -10,6 +10,12 @@ const Index = () => {
       path: "drunkopoly",
     },
     {
+      title: "Blackjack",
+      description: "Classic card game with drinking penalties.",
+      icon: Dices,
+      path: "blackjack",
+    },
+    {
       title: "Power Hour",
       description: "Sip of beer every minute for an hour.",
       icon: Clock,
