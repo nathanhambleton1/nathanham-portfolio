@@ -28,12 +28,6 @@ const Index = () => {
       path: "kings-cup",
     },
     {
-      title: "Sip Roulette",
-      description: "Randomly pick players and sip prompts.",
-      icon: Dices,
-      path: "sip-roulette",
-    },
-    {
       title: "Beer Pong Scoreboard",
       description: "Track cups and scores for beer pong.",
       icon: Trophy,

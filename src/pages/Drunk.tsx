@@ -5,7 +5,6 @@ import Index from "../../drunk/pages/Index";
 import PowerHour from "../../drunk/pages/PowerHour";
 import BeerPong from "../../drunk/pages/BeerPong";
 import KingsCup from "../../drunk/pages/KingsCup";
-import SipRoulette from "../../drunk/pages/SipRoulette";
 import BeerBall from "../../drunk/pages/BeerBall";
 import Drunkopoly from "../../drunk/pages/Drunkopoly";
 import Rules from "../../drunk/pages/Rules";
@@ -55,7 +54,6 @@ const Drunk = () => {
         <Route path="power-hour" element={<PowerHour />} />
         <Route path="beer-pong" element={<BeerPong />} />
         <Route path="kings-cup" element={<KingsCup />} />
-        <Route path="sip-roulette" element={<SipRoulette />} />
         <Route path="beer-ball" element={<BeerBall />} />
         <Route path="*" element={<NotFound />} />
       </Routes>
