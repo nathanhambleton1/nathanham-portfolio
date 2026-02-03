@@ -1,23 +1,22 @@
 import { useEffect, useState, useRef, useCallback } from "react";
-import { Users, Settings, QrCode, Copy, ChevronDown, Info, Crown, Plus, Minus, Play, RefreshCw, UserPlus, DollarSign, Clock, Check, X } from "lucide-react";
-import { QRCodeSVG } from "qrcode.react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from "../components/ui/dialog";
-import {
-  Card,
-  CardHeader,
-  CardTitle,
-  CardContent,
-  CardFooter,
-  CardDescription,
-} from "../components/ui/card";
-import { Input } from "../components/ui/input";
 import { Button } from "../components/ui/button";
-import { Popover, PopoverTrigger, PopoverContent } from "../components/ui/popover";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "../components/ui/card";
+import { Input } from "../components/ui/input";
 import { Switch } from "../components/ui/switch";
+import { Badge } from "../components/ui/badge";
+import { QRCodeSVG } from "qrcode.react";
+import { Copy, QrCode, Users, Crown, DollarSign, Plus, Minus, Play, Clock, Check, X } from "lucide-react";
 import { createClient } from '@supabase/supabase-js';
 import { useNavigate } from "react-router-dom";
 import { toast } from "../components/ui/use-toast";
 import { Toaster } from "../components/ui/toaster";
+import JoinCreateScreen from "../../drunk/components/blackjack/JoinCreateScreen";
+import EnterNameScreen from "../../drunk/components/blackjack/EnterNameScreen";
+import ConfirmSettingsScreen from "../../drunk/components/blackjack/ConfirmSettingsScreen";
+import LobbyScreen from "../../drunk/components/blackjack/LobbyScreen";
+import DealerGameView from "../../drunk/components/blackjack/DealerGameView";
+import PlayerGameView from "../../drunk/components/blackjack/PlayerGameView";
 
 // Initialize Supabase client
 const supabaseUrl = 'https://kcyrvubzhsphpxfsewii.supabase.co';
@@ -25,7 +24,7 @@ const supabaseAnonKey = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYm
 const supabase = createClient(supabaseUrl, supabaseAnonKey);
 
 type Screen = "join-create" | "enter-name" | "confirm-settings" | "lobby" | "game";
-type GameStatus = "lobby" | "betting" | "dealing" | "playing" | "dealer_turn" | "resolving" | "finished";
+type GameStatus = "lobby" | "betting" | "dealing" | "playing" | "dealer_turn" | "resolving" | "finished" | "table_idle";
 
 // Types for our data
 interface BlackjackGame {
@@ -154,6 +153,9 @@ const Blackjack = () => {
   const channelRef = useRef<any>(null);
   const refreshTimerRef = useRef<number | null>(null);
   const playersListRef = useRef<BlackjackPlayer[]>([]);
+  const gameRef = useRef<BlackjackGame | null>(null);
+  const playerRef = useRef<BlackjackPlayer | null>(null);
+  const dealingTriggeredRef = useRef<boolean>(false);
 
   // ============================================================================
   // HELPER FUNCTIONS
@@ -358,6 +360,18 @@ const Blackjack = () => {
     playersListRef.current = playersList;
   }, [playersList]);
 
+  useEffect(() => {
+    gameRef.current = game;
+    // If game left betting state, clear the dealing trigger
+    if (gameRef.current && gameRef.current.status !== 'betting') {
+      dealingTriggeredRef.current = false;
+    }
+  }, [game]);
+
+  useEffect(() => {
+    playerRef.current = player;
+  }, [player]);
+
   // ============================================================================
   // REALTIME SUBSCRIPTIONS
   // ============================================================================
@@ -390,6 +404,26 @@ const Blackjack = () => {
               const updated = prev.map(p => 
                 p.id === payload.new.id ? payload.new as BlackjackPlayer : p
               );
+
+              // If we're in a betting round, detect whether all non-dealer players
+              // have placed bets. If so, the dealer client should automatically
+              // start dealing.
+              try {
+                const allBetsIn = updated.filter(pl => !pl.is_dealer).length > 0 &&
+                  updated.filter(pl => !pl.is_dealer).every(pl => pl.has_placed_bet);
+                const g = gameRef.current;
+                const p = playerRef.current;
+                if (allBetsIn && g && g.status === 'betting' && p && p.is_dealer && !dealingTriggeredRef.current) {
+                  // Prevent duplicate triggers
+                  dealingTriggeredRef.current = true;
+                  // Fire-and-forget: dealer starts dealing automatically
+                  // eslint-disable-next-line @typescript-eslint/no-floating-promises
+                  handleDealCards();
+                }
+              } catch (e) {
+                // ignore any runtime issues here
+              }
+
               return updated;
             });
             // Update current player if it's them
@@ -483,12 +517,28 @@ const Blackjack = () => {
     };
   }, [game?.id, game?.code, screen, player?.id, scheduleRefresh]);
 
+  // Auto-navigate players based on game status changes
+  useEffect(() => {
+    if (!game || !player) return;
+
+    // If a betting round starts and the user is currently in the lobby screen,
+    // bring them into the game automatically.
+    if (game.status === 'betting' && screen === 'lobby') {
+      setScreen('game');
+    }
+
+    // If the dealer forces everyone back to the lobby (status set to 'lobby')
+    if (game.status === 'lobby' && screen === 'game') {
+      setScreen('lobby');
+    }
+  }, [game?.status, screen, player?.id]);
+
   useEffect(() => {
     if (!game?.id || (screen !== 'lobby' && screen !== 'game')) return;
 
     const pollTimer = window.setInterval(() => {
       refreshGameState();
-    }, 2000);
+    }, 500); // Changed from 2000ms to 500ms for faster updates
 
     return () => {
       clearInterval(pollTimer);
@@ -923,6 +973,23 @@ const Blackjack = () => {
     }
   };
 
+  const handleUpdatePlayerOrder = async (orderedPlayerIds: string[]) => {
+    if (!game || !player?.is_dealer) return;
+
+    try {
+      // Update the turn_order in the game
+      await supabase
+        .from('blackjack_games')
+        .update({ turn_order: orderedPlayerIds })
+        .eq('id', game.id);
+
+      toast({ title: 'Order updated', description: 'Player dealing order set' });
+    } catch (e) {
+      console.error('Update player order error:', e);
+      toast({ title: 'Error', description: 'Failed to update player order' });
+    }
+  };
+
   // ============================================================================
   // PLAYER ACTIONS
   // ============================================================================
@@ -1035,11 +1102,12 @@ const Blackjack = () => {
 
     setLoading(true);
     try {
-      // Ensure turn_order is set before dealing
+      // Determine turn order - use existing turn_order if set, otherwise use seat order
       let turnOrder = game.turn_order && game.turn_order.length > 0 
-        ? game.turn_order 
+        ? game.turn_order.filter(id => activePlayers.find(p => p.id === id)) // Filter to only active players
         : activePlayers.sort((a, b) => (a.seat_position || 0) - (b.seat_position || 0)).map(p => p.id);
       
+      // If turn_order wasn't set, save it now
       if (!game.turn_order || game.turn_order.length === 0) {
         await supabase
           .from('blackjack_games')
@@ -1048,16 +1116,20 @@ const Blackjack = () => {
       }
 
       let deck = [...game.remaining_cards];
-      let sequenceNum = 1;
+      if (deck.length < (activePlayers.length * 2 + 2)) {
+        // Need to reshuffle
+        deck = generateDeck(game.settings.num_decks);
+        toast({ title: 'Reshuffling deck', description: 'Not enough cards remaining' });
+      }
 
-      // Deduct bets from player balances and create hands
+      // Deduct bets from player balances and create hand records
       for (const p of activePlayers) {
         await supabase
           .from('blackjack_players')
           .update({ balance: p.balance - p.current_bet })
           .eq('id', p.id);
 
-        // Create hand record
+        // Create hand record with empty cards initially
         await supabase
           .from('blackjack_hands')
           .insert([{
@@ -1071,14 +1143,20 @@ const Blackjack = () => {
           }]);
       }
 
-      // Deal first card to each player (in turn order)
+      // Helper function to deal a card with delay
+      const dealCardWithDelay = async (delayMs: number) => {
+        return new Promise(resolve => setTimeout(resolve, delayMs));
+      };
+
+      let sequenceNum = 1;
       const orderedPlayers = turnOrder.map(id => activePlayers.find(p => p.id === id)).filter(Boolean) as BlackjackPlayer[];
 
+      // ROUND 1: Deal first card to each player (clockwise)
       for (const p of orderedPlayers) {
         if (deck.length === 0) break;
         const card = deck.pop()!;
         
-        // Update hand
+        // Fetch the hand
         const { data: handData } = await supabase
           .from('blackjack_hands')
           .select('*')
@@ -1092,21 +1170,24 @@ const Blackjack = () => {
             .from('blackjack_hands')
             .update({ cards: [...handData.cards, card] })
             .eq('id', handData.id);
+
+          // Log action
+          await supabase.from('blackjack_actions').insert([{
+            game_id: game.id,
+            round_id: game.current_round_id,
+            player_id: p.id,
+            hand_id: handData.id,
+            action_type: 'card_dealt_player',
+            card,
+            sequence_number: sequenceNum++
+          }]);
         }
 
-        // Log action
-        await supabase.from('blackjack_actions').insert([{
-          game_id: game.id,
-          round_id: game.current_round_id,
-          player_id: p.id,
-          hand_id: handData?.id,
-          action_type: 'card_dealt_player',
-          card,
-          sequence_number: sequenceNum++
-        }]);
+        // Wait 1 second before dealing next card
+        await dealCardWithDelay(1000);
       }
 
-      // Deal first card to dealer (face up)
+      // Deal first card to dealer (face up) - everyone sees this
       const dealerCard1 = deck.pop()!;
       await supabase.from('blackjack_actions').insert([{
         game_id: game.id,
@@ -1116,7 +1197,15 @@ const Blackjack = () => {
         sequence_number: sequenceNum++
       }]);
 
-      // Deal second card to each player
+      // Update game state so the first dealer card is visible immediately
+      await supabase
+        .from('blackjack_games')
+        .update({ remaining_cards: deck, dealer_hand: [dealerCard1], dealer_visible_card: dealerCard1 })
+        .eq('id', game.id);
+
+      await dealCardWithDelay(1000);
+
+      // ROUND 2: Deal second card to each player
       for (const p of orderedPlayers) {
         if (deck.length === 0) break;
         const card = deck.pop()!;
@@ -1141,17 +1230,20 @@ const Blackjack = () => {
               status: isBlackjack ? 'blackjack' : 'active'
             })
             .eq('id', handData.id);
+
+          // Log action
+          await supabase.from('blackjack_actions').insert([{
+            game_id: game.id,
+            round_id: game.current_round_id,
+            player_id: p.id,
+            hand_id: handData.id,
+            action_type: 'card_dealt_player',
+            card,
+            sequence_number: sequenceNum++
+          }]);
         }
 
-        await supabase.from('blackjack_actions').insert([{
-          game_id: game.id,
-          round_id: game.current_round_id,
-          player_id: p.id,
-          hand_id: handData?.id,
-          action_type: 'card_dealt_player',
-          card,
-          sequence_number: sequenceNum++
-        }]);
+        await dealCardWithDelay(1000);
       }
 
       // Deal second card to dealer (face down - hidden)
@@ -1164,26 +1256,61 @@ const Blackjack = () => {
         sequence_number: sequenceNum++
       }]);
 
-      // Update game state
+      // Update game state with dealer's first card and a hidden placeholder
+      // so UIs show the second card face-down immediately after it's dealt.
       await supabase
         .from('blackjack_games')
         .update({
           remaining_cards: deck,
-          dealer_hand: [dealerCard1, dealerCard2],
+          dealer_hand: [dealerCard1, '__HIDDEN__'],
           dealer_visible_card: dealerCard1,
           status: 'playing',
           current_turn_index: 0
         })
         .eq('id', game.id);
 
-      // Set first player's hand as active
-      if (orderedPlayers.length > 0) {
-        await supabase
+      // Find first active player (skip those with blackjack)
+      let firstActiveFound = false;
+      for (let i = 0; i < orderedPlayers.length; i++) {
+        const p = orderedPlayers[i];
+        const { data: handData } = await supabase
           .from('blackjack_hands')
-          .update({ is_active: true })
+          .select('*')
           .eq('round_id', game.current_round_id)
-          .eq('player_id', orderedPlayers[0].id)
-          .eq('hand_index', 0);
+          .eq('player_id', p.id)
+          .eq('hand_index', 0)
+          .single();
+
+        if (!handData) continue;
+
+        // Only activate if the hand is still 'active' (not blackjack/busted)
+        if (handData.status === 'active') {
+          await supabase
+            .from('blackjack_hands')
+            .update({ is_active: true })
+            .eq('id', handData.id);
+
+          await supabase
+            .from('blackjack_games')
+            .update({ current_turn_index: i })
+            .eq('id', game.id);
+
+          firstActiveFound = true;
+          break;
+        }
+      }
+
+      // If no active players (everyone has blackjack), move to dealer turn
+      if (!firstActiveFound) {
+        await supabase
+          .from('blackjack_games')
+          .update({ status: 'dealer_turn', current_turn_index: null })
+          .eq('id', game.id);
+
+        // Refresh and play dealer hand
+        const refreshed = await fetchGame(game.code);
+        if (refreshed) setGame(refreshed);
+        await playDealerHand();
       }
 
       // Update round status
@@ -1407,6 +1534,25 @@ const Blackjack = () => {
 
     try {
       let dealerCards = [...game.dealer_hand];
+      // If second card is a hidden placeholder, fetch the real hidden card from actions
+      if (dealerCards.length >= 2 && dealerCards[1] === '__HIDDEN__') {
+        try {
+          const { data: hiddenAction } = await supabase
+            .from('blackjack_actions')
+            .select('card')
+            .eq('round_id', game.current_round_id)
+            .eq('action_type', 'card_dealt_dealer_hidden')
+            .order('sequence_number', { ascending: false })
+            .limit(1)
+            .maybeSingle();
+
+          if (hiddenAction && hiddenAction.card) {
+            dealerCards[1] = hiddenAction.card;
+          }
+        } catch (e) {
+          console.error('Failed to fetch hidden dealer card from actions', e);
+        }
+      }
       let deck = [...game.remaining_cards];
       
       // Reveal hidden card
@@ -1484,7 +1630,7 @@ const Blackjack = () => {
         } else if (hand.status === 'blackjack') {
           if (dealerValue === 21 && dealerCards.length === 2) {
             result = 'push';
-            payout = hand.bet_amount;
+            payout = 0;
           } else {
             result = 'blackjack';
             payout = Math.floor(hand.bet_amount * (1 + game.settings.blackjack_payout));
@@ -1500,7 +1646,7 @@ const Blackjack = () => {
           payout = 0;
         } else {
           result = 'push';
-          payout = hand.bet_amount;
+          payout = 0;
         }
 
         // Update hand with result
@@ -1590,10 +1736,10 @@ const Blackjack = () => {
         })
         .eq('id', game.current_round_id);
 
-      // Reset game to lobby for next round
+      // Reset game to table_idle for next round
       await supabase
         .from('blackjack_games')
-        .update({ status: 'lobby' })
+        .update({ status: 'table_idle' })
         .eq('id', game.id);
 
       // Reset player betting state
@@ -1605,6 +1751,19 @@ const Blackjack = () => {
       toast({ title: 'Round Complete', description: 'Results have been calculated' });
     } catch (e) {
       console.error('Resolve round error:', e);
+    }
+  };
+
+  const handleGoToLobby = async () => {
+    if (!game || !player?.is_dealer) return;
+    try {
+      await supabase
+        .from('blackjack_games')
+        .update({ status: 'lobby' })
+        .eq('id', game.id);
+      setScreen('lobby');
+    } catch (e) {
+      console.error('Go to lobby error:', e);
     }
   };
 
@@ -1632,999 +1791,181 @@ const Blackjack = () => {
   };
 
   // ============================================================================
-  // RENDER FUNCTIONS
-  // ============================================================================
-
-  const renderJoinCreate = () => (
-    <div className="min-h-screen bg-gradient-bg flex items-center justify-center p-4">
-      <Card className="w-full max-w-md">
-        <CardHeader>
-          <CardTitle className="text-3xl">Blackjack</CardTitle>
-          <CardDescription>
-            Join an existing table or create a new one as dealer.
-          </CardDescription>
-        </CardHeader>
-        <CardContent>
-          <div className="flex flex-col gap-8">
-            <form
-              className="flex flex-col gap-4"
-              onSubmit={(e) => {
-                e.preventDefault();
-                handleJoinGame();
-              }}
-            >
-              <Input
-                placeholder="Enter game code"
-                value={gameCode}
-                onChange={(e) => setGameCode(e.target.value.toUpperCase())}
-                maxLength={6}
-                autoFocus
-              />
-              <Button className="w-full py-4 text-lg font-semibold shadow-md" size="lg" type="submit" disabled={!gameCode.trim() || loading}>
-                {loading ? 'Looking for game...' : 'Join Table'}
-              </Button>
-              {error && screen === 'join-create' && <div className="text-destructive text-sm text-center">{error}</div>}
-            </form>
-            <div className="flex items-center gap-2">
-              <div className="flex-1 border-t border-border" />
-              <span className="text-muted-foreground text-xs">or</span>
-              <div className="flex-1 border-t border-border" />
-            </div>
-            <Button
-              className="w-full py-4 text-lg font-semibold shadow-md"
-              size="lg"
-              onClick={() => {
-                setMode("create");
-                setScreen("enter-name");
-              }}
-            >
-              <Crown className="w-5 h-5 mr-2" />
-              Create Table (Dealer)
-            </Button>
-            {recentGames && recentGames.length > 0 && (
-              <div className="mt-6">
-                <div className="text-sm text-muted-foreground mb-2">Recent games</div>
-                <div className="flex gap-2">
-                  {recentGames.map((c) => (
-                    <Button key={c} variant="outline" className="px-3" onClick={() => handleRecentGameSelect(c)}>
-                      {c}
-                    </Button>
-                  ))}
-                </div>
-              </div>
-            )}
-          </div>
-        </CardContent>
-      </Card>
-    </div>
-  );
-
-  const renderEnterName = () => (
-    <div className="min-h-screen bg-gradient-bg flex items-center justify-center p-4">
-      <Card className="w-full max-w-md">
-        <CardHeader>
-          <CardTitle className="text-2xl mb-2">
-            {mode === "create" ? "Dealer Name" : "Enter Your Name"}
-          </CardTitle>
-          <CardDescription>
-            {mode === "create"
-              ? "You'll be the dealer for this table."
-              : `Joining table: ${gameCode}`}
-          </CardDescription>
-        </CardHeader>
-        <CardContent>
-          <form
-            className="space-y-4"
-            onSubmit={(e) => {
-              e.preventDefault();
-              handleNameSubmit();
-            }}
-          >
-            <Input
-              placeholder="Your name"
-              value={name}
-              onChange={(e) => {
-                const raw = e.target.value ?? '';
-                const upper = raw.toUpperCase();
-                let filtered = upper.replace(/[^A-Z ]+/g, '');
-                if (filtered.length > 10) filtered = filtered.slice(0, 10);
-                setName(filtered);
-              }}
-              maxLength={10}
-              autoFocus
-            />
-            <div className="flex flex-col gap-2">
-              <Button className="w-full" type="submit" disabled={!/^[A-Z ]{1,10}$/.test((name||'').trim()) || loading}>
-                {loading ? "Please wait..." : "Continue"}
-              </Button>
-              {error && <div className="text-destructive text-sm">{error}</div>}
-            </div>
-          </form>
-        </CardContent>
-      </Card>
-    </div>
-  );
-
-  const renderConfirmSettings = () => (
-    <div className="min-h-screen bg-gradient-bg flex items-center justify-center p-4">
-      <Card className="w-full max-w-md">
-        <CardHeader>
-          <CardTitle className="text-center">Table Settings</CardTitle>
-          <CardDescription className="text-center">Configure the rules for your blackjack table</CardDescription>
-        </CardHeader>
-        <CardContent className="space-y-4">
-          <div className="flex items-center justify-between">
-            <label>Dealer stands on soft 17</label>
-            <Switch
-              checked={tempDealerStandsOnSoft17}
-              onCheckedChange={setTempDealerStandsOnSoft17}
-            />
-          </div>
-          <div className="flex items-center justify-between">
-            <label>Insurance enabled</label>
-            <Switch
-              checked={tempInsuranceEnabled}
-              onCheckedChange={setTempInsuranceEnabled}
-            />
-          </div>
-          <div className="flex items-center justify-between">
-            <label>Double down enabled</label>
-            <Switch
-              checked={tempDoubleDownEnabled}
-              onCheckedChange={setTempDoubleDownEnabled}
-            />
-          </div>
-          <div className="flex items-center justify-between">
-            <label>Split enabled</label>
-            <Switch
-              checked={tempSplitEnabled}
-              onCheckedChange={setTempSplitEnabled}
-            />
-          </div>
-          {tempSplitEnabled && (
-            <div className="space-y-2">
-              <label className="text-sm">Max splits per hand</label>
-              <div className="flex gap-2">
-                {[1, 2, 3].map((num) => (
-                  <Button
-                    key={num}
-                    type="button"
-                    variant={parseInt(tempMaxSplits) === num ? "default" : "outline"}
-                    size="sm"
-                    onClick={() => setTempMaxSplits(num.toString())}
-                    className="flex-1"
-                  >
-                    {num}
-                  </Button>
-                ))}
-              </div>
-            </div>
-          )}
-          <div className="space-y-2">
-            <label className="text-sm">Number of decks</label>
-            <div className="flex gap-2">
-              {[4, 6, 8].map((num) => (
-                <Button
-                  key={num}
-                  type="button"
-                  variant={parseInt(tempNumberOfDecks) === num ? "default" : "outline"}
-                  size="sm"
-                  onClick={() => setTempNumberOfDecks(num.toString())}
-                  className="flex-1"
-                >
-                  {num}
-                </Button>
-              ))}
-            </div>
-          </div>
-          {error && <div className="text-destructive text-sm text-center">{error}</div>}
-          <Button onClick={handleSettingsConfirm} className="w-full" disabled={loading}>
-            {loading ? 'Creating...' : 'Create Table'}
-          </Button>
-        </CardContent>
-      </Card>
-    </div>
-  );
-
-  const renderLobby = () => {
-    const nonDealerPlayers = playersList.filter(p => !p.is_dealer);
-    const isDealer = player?.is_dealer;
-    const inviteUrl = typeof window !== 'undefined' ? `${window.location.origin}${window.location.pathname}?code=${game?.code}` : '';
-
-    return (
-      <div className="min-h-screen bg-gradient-bg p-4">
-        <div className="max-w-2xl mx-auto space-y-4">
-          {/* Header Card */}
-          <Card>
-            <CardHeader className="pb-2">
-              <div className="flex items-center justify-between">
-                <div>
-                  <CardTitle className="text-2xl flex items-center gap-2">
-                    {isDealer && <Crown className="w-5 h-5 text-yellow-500" />}
-                    {game?.name || 'Blackjack Table'}
-                  </CardTitle>
-                  <CardDescription className="font-mono text-lg mt-1">
-                    Code: <span className="text-primary font-bold">{game?.code}</span>
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      className="ml-2 h-6 w-6 p-0"
-                      onClick={() => {
-                        navigator.clipboard.writeText(game?.code || '');
-                        toast({ title: 'Copied!', description: 'Game code copied to clipboard' });
-                      }}
-                    >
-                      <Copy className="w-3 h-3" />
-                    </Button>
-                  </CardDescription>
-                </div>
-                <Button variant="outline" size="sm" onClick={() => setQrDialogOpen(true)}>
-                  <QrCode className="w-4 h-4 mr-1" />
-                  QR
-                </Button>
-              </div>
-            </CardHeader>
-            <CardContent>
-              <div className="flex items-center gap-4 text-sm text-muted-foreground">
-                <div className="flex items-center gap-1">
-                  <Users className="w-4 h-4" />
-                  {nonDealerPlayers.length} player{nonDealerPlayers.length !== 1 ? 's' : ''}
-                </div>
-                <div className="flex items-center gap-1">
-                  <Settings className="w-4 h-4" />
-                  {game?.settings?.num_decks} decks
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-
-          {/* Players List */}
-          <Card>
-            <CardHeader>
-              <CardTitle className="text-lg flex items-center gap-2">
-                <Users className="w-5 h-5" />
-                Players at Table
-              </CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-3">
-              {nonDealerPlayers.length === 0 ? (
-                <div className="text-center py-8 text-muted-foreground">
-                  <UserPlus className="w-12 h-12 mx-auto mb-2 opacity-50" />
-                  <p>Waiting for players to join...</p>
-                  <p className="text-sm">Share the code: <span className="font-mono font-bold">{game?.code}</span></p>
-                </div>
-              ) : (
-                nonDealerPlayers.map((p, idx) => (
-                  <div
-                    key={p.id}
-                    className={`flex items-center justify-between p-3 rounded-lg ${
-                      p.id === player?.id ? 'bg-primary/10 border border-primary/20' : 'bg-muted/40'
-                    }`}
-                  >
-                    <div className="flex items-center gap-3">
-                      <div className={`w-8 h-8 rounded-full flex items-center justify-center text-sm font-bold ${
-                        p.is_online ? 'bg-green-500/20 text-green-500' : 'bg-muted text-muted-foreground'
-                      }`}>
-                        {idx + 1}
-                      </div>
-                      <div>
-                        <p className="font-medium">{p.name}</p>
-                        <p className="text-xs text-muted-foreground">
-                          Balance: ${p.balance}
-                        </p>
-                      </div>
-                    </div>
-                    {isDealer && (
-                      <div className="flex items-center gap-2">
-                        <Button
-                          size="sm"
-                          variant="outline"
-                          onClick={() => handleGiveChips(p.id, 100)}
-                        >
-                          <Plus className="w-3 h-3 mr-1" />
-                          $100
-                        </Button>
-                      </div>
-                    )}
-                  </div>
-                ))
-              )}
-            </CardContent>
-          </Card>
-
-          {/* Chip Requests (Dealer Only) */}
-          {isDealer && chipRequests.length > 0 && (
-            <Card>
-              <CardHeader>
-                <CardTitle className="text-lg flex items-center gap-2">
-                  <DollarSign className="w-5 h-5" />
-                  Chip Requests
-                </CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-2">
-                {chipRequests.map(req => {
-                  const reqPlayer = playersList.find(p => p.id === req.player_id);
-                  return (
-                    <div key={req.id} className="flex items-center justify-between p-3 bg-yellow-500/10 rounded-lg border border-yellow-500/20">
-                      <div>
-                        <p className="font-medium">{reqPlayer?.name || 'Unknown'}</p>
-                        <p className="text-sm text-muted-foreground">Requesting ${req.amount}</p>
-                      </div>
-                      <div className="flex gap-2">
-                        <Button size="sm" variant="default" onClick={() => handleApproveChipRequest(req.id, true)}>
-                          <Check className="w-4 h-4" />
-                        </Button>
-                        <Button size="sm" variant="destructive" onClick={() => handleApproveChipRequest(req.id, false)}>
-                          <X className="w-4 h-4" />
-                        </Button>
-                      </div>
-                    </div>
-                  );
-                })}
-              </CardContent>
-            </Card>
-          )}
-
-          {/* Your Info (Player) */}
-          {!isDealer && player && (
-            <Card>
-              <CardHeader>
-                <CardTitle className="text-lg">Your Status</CardTitle>
-              </CardHeader>
-              <CardContent>
-                <div className="grid grid-cols-2 gap-4">
-                  <div className="p-4 bg-muted/40 rounded-lg text-center">
-                    <p className="text-xs uppercase text-muted-foreground mb-1">Name</p>
-                    <p className="font-semibold">{player.name}</p>
-                  </div>
-                  <div className="p-4 bg-primary/10 rounded-lg text-center border border-primary/20">
-                    <p className="text-xs uppercase text-muted-foreground mb-1">Balance</p>
-                    <p className="font-bold text-primary text-xl">${player.balance}</p>
-                  </div>
-                </div>
-                <Button
-                  className="w-full mt-4"
-                  variant="outline"
-                  onClick={() => setChipRequestDialogOpen(true)}
-                >
-                  <DollarSign className="w-4 h-4 mr-2" />
-                  Request Chips
-                </Button>
-              </CardContent>
-            </Card>
-          )}
-
-          {/* Table Rules */}
-          <Card>
-            <CardHeader>
-              <CardTitle className="text-lg flex items-center gap-2">
-                <Settings className="w-5 h-5" />
-                Table Rules
-              </CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="grid grid-cols-2 gap-2 text-sm">
-                <div className="flex justify-between p-2 rounded bg-muted/20">
-                  <span className="text-muted-foreground">Dealer</span>
-                  <span>{game?.settings?.hit_on_soft_17 ? 'Hits Soft 17' : 'Stands All 17s'}</span>
-                </div>
-                <div className="flex justify-between p-2 rounded bg-muted/20">
-                  <span className="text-muted-foreground">Decks</span>
-                  <span>{game?.settings?.num_decks}</span>
-                </div>
-                <div className="flex justify-between p-2 rounded bg-muted/20">
-                  <span className="text-muted-foreground">Insurance</span>
-                  <span>{game?.settings?.insurance_enabled ? 'Yes' : 'No'}</span>
-                </div>
-                <div className="flex justify-between p-2 rounded bg-muted/20">
-                  <span className="text-muted-foreground">Double Down</span>
-                  <span>{game?.settings?.double_down_enabled ? 'Yes' : 'No'}</span>
-                </div>
-                <div className="flex justify-between p-2 rounded bg-muted/20">
-                  <span className="text-muted-foreground">Split</span>
-                  <span>{game?.settings?.split_enabled ? `Up to ${game?.settings?.max_splits}` : 'No'}</span>
-                </div>
-                <div className="flex justify-between p-2 rounded bg-muted/20">
-                  <span className="text-muted-foreground">Blackjack Pays</span>
-                  <span>3:2</span>
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-
-          {/* Actions */}
-          <div className="flex flex-col gap-2">
-            {isDealer ? (
-              <Button
-                className="w-full py-6 text-lg"
-                disabled={nonDealerPlayers.length === 0}
-                onClick={handleStartBetting}
-              >
-                <Play className="w-5 h-5 mr-2" />
-                Start Betting Round
-              </Button>
-            ) : (
-              <div className="bg-primary/5 p-4 rounded-lg flex items-start gap-4">
-                <Clock className="w-5 h-5 text-primary mt-0.5" />
-                <div>
-                  <p className="font-medium">Waiting for Dealer</p>
-                  <p className="text-sm text-muted-foreground">The dealer will start the game when ready.</p>
-                </div>
-              </div>
-            )}
-            <Button
-              variant="ghost"
-              className="w-full text-muted-foreground hover:text-destructive"
-              onClick={handleLogout}
-            >
-              Leave Table
-            </Button>
-          </div>
-        </div>
-
-        {/* QR Dialog */}
-        <Dialog open={qrDialogOpen} onOpenChange={setQrDialogOpen}>
-          <DialogContent>
-            <DialogHeader>
-              <DialogTitle>Share Table</DialogTitle>
-            </DialogHeader>
-            <div className="flex flex-col items-center gap-4 py-4">
-              <QRCodeSVG value={inviteUrl} size={200} />
-              <p className="text-2xl font-mono font-bold">{game?.code}</p>
-              <Button
-                variant="outline"
-                onClick={() => {
-                  navigator.clipboard.writeText(inviteUrl);
-                  toast({ title: 'Copied!', description: 'Invite link copied to clipboard' });
-                }}
-              >
-                <Copy className="w-4 h-4 mr-2" />
-                Copy Link
-              </Button>
-            </div>
-          </DialogContent>
-        </Dialog>
-
-        {/* Chip Request Dialog */}
-        <Dialog open={chipRequestDialogOpen} onOpenChange={setChipRequestDialogOpen}>
-          <DialogContent>
-            <DialogHeader>
-              <DialogTitle>Request Chips</DialogTitle>
-            </DialogHeader>
-            <div className="space-y-4 py-4">
-              <div className="space-y-2">
-                <label className="text-sm font-medium">Amount</label>
-                <Input
-                  type="number"
-                  value={chipRequestAmount}
-                  onChange={(e) => setChipRequestAmount(e.target.value)}
-                  placeholder="Enter amount"
-                />
-              </div>
-              <div className="flex gap-2">
-                {[50, 100, 200, 500].map(amt => (
-                  <Button
-                    key={amt}
-                    variant={chipRequestAmount === amt.toString() ? 'default' : 'outline'}
-                    size="sm"
-                    className="flex-1"
-                    onClick={() => setChipRequestAmount(amt.toString())}
-                  >
-                    ${amt}
-                  </Button>
-                ))}
-              </div>
-            </div>
-            <DialogFooter>
-              <Button variant="outline" onClick={() => setChipRequestDialogOpen(false)}>Cancel</Button>
-              <Button onClick={handleRequestChips}>Send Request</Button>
-            </DialogFooter>
-          </DialogContent>
-        </Dialog>
-
-        <Toaster />
-      </div>
-    );
-  };
-
-  const renderGame = () => {
-    const isDealer = player?.is_dealer;
-    const nonDealerPlayers = playersList.filter(p => !p.is_dealer);
-    const anyBetsPlaced = nonDealerPlayers.some(p => p.has_placed_bet);
-    const myHand = hands.find(h => h.player_id === player?.id && h.hand_index === 0);
-    const dealerHandValue = game?.dealer_hand ? calculateHandValue(game.dealer_hand) : null;
-    const showFullDealerHand =
-      !!isDealer ||
-      ['dealer_turn', 'resolving', 'finished'].includes(game?.status || '') ||
-      ['playing', 'stood', 'busted', 'blackjack'].includes(game?.dealer_status || '');
-    const dealerDisplayCards = (() => {
-      const cards = game?.dealer_hand || [];
-      if (cards.length === 0) return [];
-      if (showFullDealerHand) return cards;
-
-      const faceUp = game?.dealer_visible_card || cards[0];
-      return [faceUp, '__HIDDEN__'];
-    })();
-
-    return (
-      <div className="min-h-screen bg-gradient-bg flex flex-col">
-        {isDealer ? (
-          <>
-            {/* Top Bar (dealer view) */}
-            <div className="p-4 border-b bg-card/50 backdrop-blur">
-              <div className="max-w-4xl mx-auto flex items-center justify-between">
-                <div>
-                  <p className="text-sm text-muted-foreground">Table {game?.code}</p>
-                  <p className="font-semibold capitalize">{player?.name?.toLowerCase()}</p>
-                </div>
-                <div className="flex items-center gap-4">
-                  <div className="text-right">
-                    <p className="text-xs text-muted-foreground">Balance</p>
-                    <p className="font-bold text-primary">${player?.balance}</p>
-                  </div>
-                </div>
-              </div>
-            </div>
-
-            {/* Main Game Area (dealer view) */}
-            <div className="flex-1 p-4">
-              <div className="max-w-4xl mx-auto space-y-6">
-                {/* Dealer Area */}
-                <Card className="bg-green-900/20 border-green-900/30">
-                  <CardContent className="py-4">
-                    <div className="text-center">
-                      <p className="text-xs uppercase text-muted-foreground mb-2">Dealer</p>
-                      {dealerDisplayCards.length > 0 ? (
-                        <div className="flex justify-center gap-2 mb-2">
-                          {dealerDisplayCards.map((card: string, idx: number) => {
-                            const isHidden = card === '__HIDDEN__';
-                            const isRed = !isHidden && isRedSuit(card);
-                            return (
-                              <div
-                                key={idx}
-                                className={`w-12 h-16 rounded-lg flex items-center justify-center text-lg font-bold ${
-                                  isHidden ? 'bg-primary/30 border border-dashed border-primary/60 text-primary' :
-                                  isRed ? 'bg-white text-red-600' : 'bg-white text-black'
-                                }`}
-                                aria-label={isHidden ? 'Hidden dealer card' : 'Dealer card'}
-                              >
-                                {isHidden ? '?' : formatCard(card)}
-                              </div>
-                            );
-                          })}
-                        </div>
-                      ) : (
-                        <div className="flex justify-center gap-2 mb-2">
-                          <div className="w-12 h-16 rounded-lg bg-primary/20 border-2 border-dashed border-primary/30" />
-                          <div className="w-12 h-16 rounded-lg bg-primary/20 border-2 border-dashed border-primary/30" />
-                        </div>
-                      )}
-                      {dealerHandValue && showFullDealerHand && (
-                        <p className="text-sm font-medium">
-                          {dealerHandValue.soft ? 'Soft ' : ''}{dealerHandValue.value}
-                        </p>
-                      )}
-                    </div>
-                  </CardContent>
-                </Card>
-
-                {/* Player Hands (dealer view) */}
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  {nonDealerPlayers.map(p => {
-                    const playerHand = hands.find(h => h.player_id === p.id && h.hand_index === 0);
-                    const rawCards = playerHand?.cards || [];
-                    const hasUnknownCard = rawCards.some(c => !c || typeof c !== 'string' || c.length < 2);
-                    const visibleCards = rawCards.filter(c => typeof c === 'string' && c.length >= 2);
-                    const handValue = visibleCards.length > 0 ? calculateHandValue(visibleCards) : null;
-                    const isCurrentPlayer = p.id === player?.id;
-                    
-                    return (
-                      <Card 
-                        key={p.id} 
-                        className={isCurrentPlayer ? 'border-primary/50 bg-primary/5' : ''}
-                      >
-                        <CardContent className="py-4">
-                          <div className="flex items-center justify-between mb-3">
-                            <div className="flex items-center gap-2">
-                              <div className={`w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold ${
-                                p.is_online ? 'bg-green-500/20 text-green-500' : 'bg-muted'
-                              }`}>
-                                {p.seat_position || '?'}
-                              </div>
-                              <span className="font-medium">{p.name}</span>
-                              {isCurrentPlayer && <span className="text-xs text-primary">(You)</span>}
-                            </div>
-                            <div className="text-right">
-                              <p className="text-xs text-muted-foreground">Bet</p>
-                              <p className="font-bold">${p.current_bet || 0}</p>
-                            </div>
-                          </div>
-                          
-                          {/* Cards */}
-                          {rawCards.length > 0 ? (
-                            <div className="flex gap-1 mb-2">
-                              {rawCards.map((card, idx) => {
-                                const isValid = typeof card === 'string' && card.length >= 2;
-                                const isRed = isValid && isRedSuit(card);
-                                return (
-                                  <div
-                                    key={idx}
-                                    className={`w-10 h-14 rounded flex items-center justify-center text-sm font-bold ${
-                                      !isValid ? 'bg-muted/50 border border-dashed text-muted-foreground' :
-                                      isRed ? 'bg-white text-red-600' : 'bg-white text-black'
-                                    }`}
-                                    aria-label={isValid ? 'Player card' : 'Card pending'}
-                                  >
-                                    {isValid ? formatCard(card) : '?'}
-                                  </div>
-                                );
-                              })}
-                            </div>
-                          ) : (
-                            <div className="flex gap-1 mb-2">
-                              <div className="w-10 h-14 rounded bg-muted/50 border border-dashed" />
-                              <div className="w-10 h-14 rounded bg-muted/50 border border-dashed" />
-                            </div>
-                          )}
-                          
-                          {handValue && !hasUnknownCard && (
-                            <p className="text-sm">
-                              {handValue.soft ? 'Soft ' : ''}{handValue.value}
-                              {handValue.value === 21 && playerHand?.cards?.length === 2 && ' - Blackjack!'}
-                            </p>
-                          )}
-                          
-                          {game?.status === 'betting' && (
-                            <p className="text-xs text-muted-foreground mt-1">
-                              {p.has_placed_bet ? '✓ Bet placed' : 'Waiting for bet...'}
-                            </p>
-                          )}
-                        </CardContent>
-                      </Card>
-                    );
-                  })}
-                </div>
-              </div>
-            </div>
-          </>
-        ) : (
-          <>
-            {/* Main Game Area (player view) */}
-            <div className="flex-1 p-4">
-              <div className="max-w-4xl mx-auto space-y-8">
-                {/* Dealer Cards (standalone) */}
-                <div className="flex flex-col items-center text-center">
-                  <p className="text-xs uppercase text-muted-foreground mb-2">Dealer</p>
-                  {dealerDisplayCards.length > 0 ? (
-                    <div className="flex justify-center gap-3 mb-2">
-                      {dealerDisplayCards.map((card: string, idx: number) => {
-                        const isHidden = card === '__HIDDEN__';
-                        const isRed = !isHidden && isRedSuit(card);
-                        return (
-                          <div
-                            key={idx}
-                            className={`w-14 h-20 rounded-lg flex items-center justify-center text-xl font-bold ${
-                              isHidden ? 'bg-primary/30 border border-dashed border-primary/60 text-primary' :
-                              isRed ? 'bg-white text-red-600' : 'bg-white text-black'
-                            }`}
-                            aria-label={isHidden ? 'Hidden dealer card' : 'Dealer card'}
-                          >
-                            {isHidden ? '?' : formatCard(card)}
-                          </div>
-                        );
-                      })}
-                    </div>
-                  ) : (
-                    <div className="flex justify-center gap-3 mb-2">
-                      <div className="w-14 h-20 rounded-lg bg-primary/20 border-2 border-dashed border-primary/30" />
-                      <div className="w-14 h-20 rounded-lg bg-primary/20 border-2 border-dashed border-primary/30" />
-                    </div>
-                  )}
-                  {dealerHandValue && showFullDealerHand && (
-                    <p className="text-sm font-medium">
-                      {dealerHandValue.soft ? 'Soft ' : ''}{dealerHandValue.value}
-                    </p>
-                  )}
-                </div>
-
-                {/* Current Player (centered, large) */}
-                <div className="flex flex-col items-center text-center">
-                  <div className="text-xs uppercase text-muted-foreground mb-2">Your Hand</div>
-                  <div className="flex gap-3 mb-3">
-                    {(myHand?.cards && myHand.cards.length > 0 ? myHand.cards : [null, null]).map((card, idx) => {
-                      const isValid = typeof card === 'string' && card.length >= 2;
-                      const isRed = isValid && isRedSuit(card);
-                      return (
-                        <div
-                          key={idx}
-                          className={`w-20 h-28 rounded-lg flex items-center justify-center text-2xl font-bold ${
-                            !isValid ? 'bg-muted/50 border border-dashed text-muted-foreground' :
-                            isRed ? 'bg-white text-red-600' : 'bg-white text-black'
-                          }`}
-                          aria-label={isValid ? 'Your card' : 'Card pending'}
-                        >
-                          {isValid ? formatCard(card) : '?'}
-                        </div>
-                      );
-                    })}
-                  </div>
-                  <div className="text-lg font-semibold">
-                    Bet: ${player?.current_bet || 0}
-                  </div>
-                </div>
-              </div>
-            </div>
-          </>
-        )}
-
-        {/* Bottom Action Bar */}
-        <div className="p-4 border-t bg-card/50 backdrop-blur">
-          <div className="max-w-4xl mx-auto">
-            {game?.status === 'betting' && !isDealer && !player?.has_placed_bet && (
-              <div className="space-y-4">
-                <div className="flex items-center justify-center gap-2">
-                  <Button
-                    size="sm"
-                    variant="outline"
-                    onClick={() => setSelectedBet(Math.max(1, selectedBet - 1))}
-                    disabled={selectedBet <= 1}
-                  >
-                    <Minus className="w-4 h-4" />
-                  </Button>
-                  <div className="px-6 py-2 bg-muted rounded-lg min-w-[80px] text-center">
-                    <span className="text-2xl font-bold">${selectedBet}</span>
-                  </div>
-                  <Button
-                    size="sm"
-                    variant="outline"
-                    onClick={() => setSelectedBet(Math.min(player?.balance || 100, selectedBet + 1))}
-                    disabled={selectedBet >= (player?.balance || 0)}
-                  >
-                    <Plus className="w-4 h-4" />
-                  </Button>
-                </div>
-                <div className="flex gap-2 justify-center">
-                  {[1, 5, 10, 25].map(amt => (
-                    <Button
-                      key={amt}
-                      variant={selectedBet === amt ? 'default' : 'outline'}
-                      size="sm"
-                      onClick={() => setSelectedBet(Math.min(amt, player?.balance || 0))}
-                      disabled={amt > (player?.balance || 0)}
-                    >
-                      ${amt}
-                    </Button>
-                  ))}
-                </div>
-                <Button
-                  className="w-full"
-                  onClick={() => handlePlaceBet(selectedBet)}
-                  disabled={selectedBet > (player?.balance || 0) || selectedBet <= 0}
-                >
-                  Place Bet (${selectedBet})
-                </Button>
-              </div>
-            )}
-
-            {game?.status === 'betting' && !isDealer && player?.has_placed_bet && (
-              <div className="text-center py-4">
-                <p className="text-sm text-muted-foreground">Waiting for players to place bets...</p>
-              </div>
-            )}
-
-            {game?.status === 'betting' && isDealer && (
-              <Button
-                className="w-full"
-                disabled={!anyBetsPlaced || nonDealerPlayers.length === 0 || loading}
-                onClick={handleDealCards}
-              >
-                {loading ? 'Dealing...' : 'Deal Cards'}
-              </Button>
-            )}
-
-            {game?.status === 'playing' && !isDealer && (
-              <div className="flex gap-2">
-                <Button 
-                  className="flex-1" 
-                  variant="default"
-                  onClick={handleHit}
-                  disabled={!hands.find(h => h.player_id === player?.id && h.is_active)}
-                >
-                  Hit
-                </Button>
-                <Button 
-                  className="flex-1" 
-                  variant="outline"
-                  onClick={handleStand}
-                  disabled={!hands.find(h => h.player_id === player?.id && h.is_active)}
-                >
-                  Stand
-                </Button>
-                {game?.settings?.double_down_enabled && (
-                  <Button 
-                    className="flex-1" 
-                    variant="outline"
-                    onClick={handleDoubleDown}
-                    disabled={
-                      !hands.find(h => h.player_id === player?.id && h.is_active && h.cards.length === 2) ||
-                      (player?.balance || 0) < (hands.find(h => h.player_id === player?.id)?.bet_amount || 0)
-                    }
-                  >
-                    Double
-                  </Button>
-                )}
-              </div>
-            )}
-
-            {game?.status === 'playing' && isDealer && (
-              <div className="text-center py-4">
-                <p className="text-muted-foreground">Players are taking their turns...</p>
-                <p className="text-sm">
-                  Current turn: {
-                    game.turn_order && game.turn_order.length > 0 && typeof game.current_turn_index === 'number'
-                      ? playersList.find(p => p.id === game.turn_order[game.current_turn_index!])?.name || 'Unknown'
-                      : 'Setting up...'
-                  }
-                </p>
-              </div>
-            )}
-
-            {game?.status === 'dealer_turn' && (
-              <div className="text-center py-4">
-                <p className="font-medium">Dealer's Turn</p>
-                <p className="text-sm text-muted-foreground">Dealer is playing...</p>
-              </div>
-            )}
-
-            {game?.status === 'resolving' && (
-              <div className="text-center py-4">
-                <p className="font-medium">Resolving Round</p>
-                <p className="text-sm text-muted-foreground">Calculating results...</p>
-              </div>
-            )}
-
-            {game?.status === 'lobby' && screen === 'game' && (
-              <div className="space-y-2">
-                <div className="text-center py-2">
-                  <p className="font-medium">Round Complete!</p>
-                </div>
-                {isDealer ? (
-                  <Button className="w-full" onClick={handleStartBetting}>
-                    <Play className="w-4 h-4 mr-2" />
-                    Start New Round
-                  </Button>
-                ) : (
-                  <p className="text-center text-sm text-muted-foreground">Waiting for dealer to start next round...</p>
-                )}
-              </div>
-            )}
-          </div>
-        </div>
-
-        {/* Chip Request Dialog */}
-        <Dialog open={chipRequestDialogOpen} onOpenChange={setChipRequestDialogOpen}>
-          <DialogContent>
-            <DialogHeader>
-              <DialogTitle>Request Chips</DialogTitle>
-            </DialogHeader>
-            <div className="space-y-4 py-4">
-              <Input
-                type="number"
-                value={chipRequestAmount}
-                onChange={(e) => setChipRequestAmount(e.target.value)}
-                placeholder="Enter amount"
-              />
-              <div className="flex gap-2">
-                {[50, 100, 200, 500].map(amt => (
-                  <Button
-                    key={amt}
-                    variant={chipRequestAmount === amt.toString() ? 'default' : 'outline'}
-                    size="sm"
-                    className="flex-1"
-                    onClick={() => setChipRequestAmount(amt.toString())}
-                  >
-                    ${amt}
-                  </Button>
-                ))}
-              </div>
-            </div>
-            <DialogFooter>
-              <Button variant="outline" onClick={() => setChipRequestDialogOpen(false)}>Cancel</Button>
-              <Button onClick={handleRequestChips}>Request</Button>
-            </DialogFooter>
-          </DialogContent>
-        </Dialog>
-
-        <Toaster />
-      </div>
-    );
-  };
-
-  // ============================================================================
   // MAIN RENDER
   // ============================================================================
-  // persistent controls available on every screen (invite, settings, leave)
-  const persistentControls = (
-    <div className="fixed bottom-4 right-4 flex flex-col gap-2 z-50">
-      <Button className="px-3 py-2" onClick={() => setQrDialogOpen(true)}>
-        Invite
-      </Button>
-      <Button className="px-3 py-2" onClick={() => setSettingsDialogOpen(true)}>
-        Settings
-      </Button>
-      <Button variant="ghost" className="px-3 py-2 text-destructive" onClick={handleLogout}>
-        Leave Table
-      </Button>
-    </div>
-  );
-
-  const settingsDialog = (
-    <Dialog open={settingsDialogOpen} onOpenChange={setSettingsDialogOpen}>
-      <DialogContent>
-        <DialogHeader>
-          <DialogTitle>Table Settings</DialogTitle>
-          <DialogDescription>View table code and rules</DialogDescription>
-        </DialogHeader>
-
-        <div className="space-y-3 py-2">
-          <div className="flex items-center justify-between">
-            <div className="text-sm font-medium">Table Code</div>
-            <div className="flex items-center gap-2">
-              <div className="font-mono text-sm">{game?.code || '—'}</div>
-              <Button size="sm" onClick={copyInviteUrlToClipboard}>Copy Invite</Button>
-            </div>
-          </div>
-
-          {game?.settings ? (
-            <div className="text-sm space-y-1">
-              <div>Decks: {game.settings.num_decks}</div>
-              <div>Dealer hits on soft 17: {String(game.settings.hit_on_soft_17)}</div>
-              <div>Blackjack payout: {game.settings.blackjack_payout}</div>
-              <div>Insurance: {String(game.settings.insurance_enabled)}</div>
-              <div>Double down: {String(game.settings.double_down_enabled)}</div>
-              <div>Split enabled: {String(game.settings.split_enabled)}</div>
-              <div>Max splits: {game.settings.max_splits}</div>
-              <div>Min bet: {game.settings.min_bet}</div>
-              <div>Max bet: {game.settings.max_bet}</div>
-            </div>
-          ) : (
-            <div className="text-sm">No table selected</div>
-          )}
-        </div>
-
-        <DialogFooter>
-          <Button onClick={() => setSettingsDialogOpen(false)}>Close</Button>
-        </DialogFooter>
-      </DialogContent>
-    </Dialog>
-  );
-
-  let mainContent: JSX.Element;
-  switch (screen) {
-    case "join-create":
-      mainContent = renderJoinCreate();
-      break;
-    case "enter-name":
-      mainContent = renderEnterName();
-      break;
-    case "confirm-settings":
-      mainContent = renderConfirmSettings();
-      break;
-    case "lobby":
-      mainContent = renderLobby();
-      break;
-    case "game":
-      mainContent = renderGame();
-      break;
-    default:
-      mainContent = renderJoinCreate();
+  
+  if (screen === "join-create") {
+    return (
+      <>
+        <JoinCreateScreen
+          gameCode={gameCode}
+          setGameCode={setGameCode}
+          recentGames={recentGames}
+          loading={loading}
+          error={error}
+          onJoinGame={handleJoinGame}
+          onCreateGame={() => {
+            setMode("create");
+            setScreen("enter-name");
+          }}
+          onRecentGameSelect={handleRecentGameSelect}
+        />
+        <Toaster />
+      </>
+    );
   }
 
+  if (screen === "enter-name") {
+    return (
+      <>
+        <EnterNameScreen
+          mode={mode!}
+          gameCode={gameCode}
+          name={name}
+          setName={setName}
+          loading={loading}
+          error={error}
+          onSubmit={handleNameSubmit}
+          onBack={() => setScreen("join-create")}
+        />
+        <Toaster />
+      </>
+    );
+  }
+
+  if (screen === "confirm-settings") {
+    return (
+      <>
+        <ConfirmSettingsScreen
+          dealerStandsOnSoft17={tempDealerStandsOnSoft17}
+          setDealerStandsOnSoft17={setTempDealerStandsOnSoft17}
+          insuranceEnabled={tempInsuranceEnabled}
+          setInsuranceEnabled={setTempInsuranceEnabled}
+          doubleDownEnabled={tempDoubleDownEnabled}
+          setDoubleDownEnabled={setTempDoubleDownEnabled}
+          splitEnabled={tempSplitEnabled}
+          setSplitEnabled={setTempSplitEnabled}
+          maxSplits={tempMaxSplits}
+          setMaxSplits={setTempMaxSplits}
+          numberOfDecks={tempNumberOfDecks}
+          setNumberOfDecks={setTempNumberOfDecks}
+          loading={loading}
+          error={error}
+          onConfirm={handleSettingsConfirm}
+          onBack={() => setScreen("enter-name")}
+        />
+        <Toaster />
+      </>
+    );
+  }
+
+  if (screen === "lobby" && game && player) {
+    return (
+      <>
+          <LobbyScreen
+            game={game}
+            player={player}
+            playersList={playersList}
+            chipRequests={chipRequests}
+            qrDialogOpen={qrDialogOpen}
+            setQrDialogOpen={setQrDialogOpen}
+            chipRequestDialogOpen={chipRequestDialogOpen}
+            setChipRequestDialogOpen={setChipRequestDialogOpen}
+            chipRequestAmount={chipRequestAmount}
+            setChipRequestAmount={setChipRequestAmount}
+            onStartBetting={handleStartBetting}
+            onRequestChips={handleRequestChips}
+            onApproveChipRequest={handleApproveChipRequest}
+            onGiveChips={handleGiveChips}
+            onLogout={handleLogout}
+            onSitAtTable={() => setScreen('game')}
+            copyInviteUrlToClipboard={copyInviteUrlToClipboard}
+            onUpdatePlayerOrder={handleUpdatePlayerOrder}
+          />
+        <Toaster />
+      </>
+    );
+  }
+
+  if (screen === "game" && game && player) {
+    const myHand = hands.find(h => h.player_id === player.id && h.hand_index === 0);
+    const dealerHandValue = game.dealer_hand ? calculateHandValue(game.dealer_hand) : { value: 0, soft: false };
+    const showFullDealerHand =
+      player.is_dealer ||
+      ['dealer_turn', 'resolving', 'finished'].includes(game.status) ||
+      ['playing', 'stood', 'busted', 'blackjack'].includes(game.dealer_status);
+
+    if (player.is_dealer) {
+      return (
+        <>
+          <DealerGameView
+            dealerHand={game.dealer_hand || []}
+            dealerValue={dealerHandValue.value}
+            dealerSoft={dealerHandValue.soft}
+            dealerStatus={game.dealer_status}
+            players={playersList}
+            hands={hands}
+            gameStatus={game.status}
+            chipRequests={chipRequests}
+            calculateHandValue={calculateHandValue}
+            onDealCards={handleDealCards}
+            onStartBetting={handleStartBetting}
+            onApproveChipRequest={handleApproveChipRequest}
+            onGiveChips={handleGiveChips}
+            onForceLobby={handleGoToLobby}
+            onBackToLobby={() => setScreen('lobby')}
+            loading={loading}
+          />
+          <Toaster />
+        </>
+      );
+    } else {
+      const canDoubleDown = myHand?.cards.length === 2 && myHand.status === 'active';
+      
+      return (
+        <>
+          <PlayerGameView
+            player={player}
+            myHand={myHand}
+            dealerVisibleCard={game.dealer_visible_card}
+            dealerHand={game.dealer_hand || []}
+            gameStatus={game.status}
+            showFullDealerHand={showFullDealerHand}
+            selectedBet={selectedBet}
+            setSelectedBet={setSelectedBet}
+            betIncrements={game.settings.bet_increments || [1, 5, 10, 25, 50, 100]}
+            calculateHandValue={calculateHandValue}
+            onPlaceBet={handlePlaceBet}
+            onHit={handleHit}
+            onStand={handleStand}
+            onDoubleDown={handleDoubleDown}
+            doubleDownEnabled={game.settings.double_down_enabled}
+            canDoubleDown={canDoubleDown}
+            onBackToLobby={() => setScreen('lobby')}
+          />
+          <Toaster />
+        </>
+      );
+    }
+  }
+
+  // Fallback
   return (
     <>
-      {mainContent}
-      {persistentControls}
-      {settingsDialog}
+      <JoinCreateScreen
+        gameCode={gameCode}
+        setGameCode={setGameCode}
+        recentGames={recentGames}
+        loading={loading}
+        error={error}
+        onJoinGame={handleJoinGame}
+        onCreateGame={() => {
+          setMode("create");
+          setScreen("enter-name");
+        }}
+        onRecentGameSelect={handleRecentGameSelect}
+      />
+      <Toaster />
     </>
   );
 };
