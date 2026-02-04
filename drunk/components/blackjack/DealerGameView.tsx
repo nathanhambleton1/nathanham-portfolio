@@ -2,6 +2,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "../../components/ui/ca
 import { Button } from "../../components/ui/button";
 import { Badge } from "../../components/ui/badge";
 import { DollarSign } from "lucide-react";
+import { useEffect, useRef } from "react";
 import CardHand from "./CardHand";
 
 interface BlackjackPlayer {
@@ -64,6 +65,21 @@ const DealerGameView = ({
 }: DealerGameViewProps) => {
   const nonDealerPlayers = players.filter(p => !p.is_dealer);
   const anyBetsPlaced = nonDealerPlayers.some(p => p.has_placed_bet);
+  const allBetsPlaced = nonDealerPlayers.every(p => p.has_placed_bet);
+  const hasDealtRef = useRef(false);
+  
+  useEffect(() => {
+    if (gameStatus !== 'betting') {
+      hasDealtRef.current = false;
+    }
+  }, [gameStatus]);
+  
+  useEffect(() => {
+    if (gameStatus === 'betting' && allBetsPlaced && !hasDealtRef.current) {
+      onDealCards();
+      hasDealtRef.current = true;
+    }
+  }, [gameStatus, allBetsPlaced, onDealCards]);
   
   // Find the player whose turn it is
   const activeHand = hands.find(h => h.is_active && h.status === 'active');
@@ -90,29 +106,26 @@ const DealerGameView = ({
   }, 0 as number);
 
   return (
-    <div className="min-h-screen bg-gradient-bg flex flex-col">
-      {/* Top Bar */}
-      <div className="p-4 border-b bg-card/50 backdrop-blur">
+    <div className="flex-1 h-full flex flex-col transition-all overflow-hidden bg-gradient-bg">
+      {/* 1. Top Bar - Fixed Header Info */}
+      <div className="flex-shrink-0 p-4 border-b bg-card/60 backdrop-blur-md z-10">
         <div className="max-w-7xl mx-auto flex items-center justify-between">
-          <h2 className="text-xl font-bold">Dealer View</h2>
-          <div className="flex gap-2 items-center">
-            <Badge variant={gameStatus === 'betting' ? 'default' : 'secondary'}>
-              {gameStatus.toUpperCase()}
+          <Badge variant={gameStatus === 'betting' ? 'default' : 'secondary'} className="text-sm">
+            Status: {gameStatus.toUpperCase()}
+          </Badge>
+          {activePlayer && gameStatus === 'playing' && (
+            <Badge variant="outline" className="bg-red-500 text-white animate-pulse">
+              Current Turn: {activePlayer.name}
             </Badge>
-            {activePlayer && gameStatus === 'playing' && (
-              <Badge variant="outline" className="bg-red-500 text-white animate-pulse">
-                Turn: {activePlayer.name}
-              </Badge>
-            )}
-          </div>
+          )}
         </div>
       </div>
 
-      {/* Main Game Area */}
-      <div className="flex-1 p-4 overflow-auto">
-        <div className="max-w-7xl mx-auto space-y-6">
-          {/* Dealer's Hand - Large and Centered */}
-          <div className="flex justify-center">
+      {/* 2. Middle Scrollable Area */}
+      <div className="flex-1 overflow-y-auto p-4 min-h-0">
+        <div className="max-w-7xl mx-auto space-y-6 pb-4">
+          {/* Dealer's Hand - Top */}
+          <div className="flex justify-center flex-shrink-0">
             <CardHand
               cards={dealerHand}
               label="Dealer Hand"
@@ -123,101 +136,25 @@ const DealerGameView = ({
             />
           </div>
 
-          {/* Action / Status Box (moved above player cards) */}
-          <div className="p-4 border-t bg-card/50 backdrop-blur">
-            <div className="max-w-7xl mx-auto flex flex-col gap-2">
-              {/* Dealer payout shown here */}
-              <div className="flex items-center justify-center gap-3">
-                <div className="text-sm text-muted-foreground">Dealer Payout</div>
-                <div className={`text-lg font-bold ${dealerNet > 0 ? 'text-green-600' : (dealerNet < 0 ? 'text-red-600' : 'text-muted-foreground')}`}>
-                  {dealerNet > 0 ? `+$${dealerNet}` : (dealerNet < 0 ? `-$${Math.abs(dealerNet)}` : '$0')}
-                </div>
-              </div>
-
-              {gameStatus === 'betting' && anyBetsPlaced && (
-                <Button 
-                  onClick={onDealCards} 
-                  className="w-full" 
-                  size="lg"
-                  disabled={loading}
-                >
-                  Deal Cards
-                </Button>
-              )}
-              
-              {gameStatus === 'betting' && !anyBetsPlaced && (
-                <div className="text-center text-muted-foreground">
-                  Waiting for players to place bets...
-                </div>
-              )}
-
-              {['playing', 'dealer_turn', 'resolving'].includes(gameStatus) && (
-                <div className="text-center text-muted-foreground">
-                  Round in progress...
-                </div>
-              )}
-
-              {gameStatus === 'table_idle' && (
-                <div className="flex flex-col gap-2">
-                  <Button 
-                    onClick={onStartBetting} 
-                    className="w-full" 
-                    size="lg"
-                  >
-                    Start Next Round
-                  </Button>
-                  <div className="flex gap-2">
-                    <Button 
-                      onClick={onBackToLobby} 
-                      variant="outline"
-                      className="flex-1"
-                    >
-                      Local Lobby
-                    </Button>
-                    {onForceLobby && (
-                      <Button 
-                        onClick={onForceLobby} 
-                        variant="destructive"
-                        className="flex-1"
-                      >
-                        Force All to Lobby
-                      </Button>
-                    )}
-                  </div>
-                </div>
-              )}
-
-              {gameStatus === 'lobby' && (
-                <div className="flex flex-col gap-2">
-                  <div className="text-center text-muted-foreground">Waiting in lobby...</div>
-                  {onBackToLobby && (
-                    <Button className="w-full" onClick={onBackToLobby} variant="outline">Back to Lobby Screen</Button>
-                  )}
-                </div>
-              )}
-            </div>
-          </div>
-
-          {/* Chip Requests */}
+          {/* Chip Requests - High Visibility */}
           {chipRequests.length > 0 && (
-            <Card className="border-yellow-500">
-              <CardHeader>
-                <CardTitle className="text-lg">Pending Chip Requests</CardTitle>
+            <Card className="border-yellow-500 bg-yellow-500/10">
+              <CardHeader className="py-2">
+                <CardTitle className="text-sm">Pending Chip Requests</CardTitle>
               </CardHeader>
-              <CardContent className="space-y-2">
+              <CardContent className="space-y-2 py-2">
                 {chipRequests.map((req) => {
                   const player = players.find(p => p.id === req.player_id);
                   return (
-                    <div key={req.id} className="flex items-center justify-between p-3 bg-muted rounded-lg">
-                      <div>
-                        <div className="font-semibold">{player?.name}</div>
-                        <div className="text-sm text-muted-foreground">${req.amount}</div>
+                    <div key={req.id} className="flex items-center justify-between p-2 bg-muted/50 rounded-lg">
+                      <div className="text-xs">
+                        <span className="font-bold">{player?.name}:</span> ${req.amount}
                       </div>
                       <div className="flex gap-2">
-                        <Button size="sm" onClick={() => onApproveChipRequest(req.id, true)}>
+                        <Button size="sm" className="h-7 text-[10px]" onClick={() => onApproveChipRequest(req.id, true)}>
                           Approve
                         </Button>
-                        <Button size="sm" variant="destructive" onClick={() => onApproveChipRequest(req.id, false)}>
+                        <Button size="sm" variant="destructive" className="h-7 text-[10px]" onClick={() => onApproveChipRequest(req.id, false)}>
                           Deny
                         </Button>
                       </div>
@@ -229,7 +166,7 @@ const DealerGameView = ({
           )}
 
           {/* Player Hands Grid */}
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
             {nonDealerPlayers.map((player) => {
               const playerHand = hands.find(h => h.player_id === player.id);
               const handValue = playerHand ? calculateHandValue(playerHand.cards) : null;
@@ -237,56 +174,54 @@ const DealerGameView = ({
               const isWin = playerHand?.result === 'win' || playerHand?.result === 'blackjack';
               const isLoss = playerHand?.result === 'loss';
 
-              // Compute displayed payout per player: losses shown as negative bet amount
               const displayPayout = playerHand
-                ? (isLoss ? -(playerHand.bet_amount ?? 0) : (playerHand.payout ?? 0))
+                ? (isWin ? -(playerHand.payout ?? 0) : isLoss ? (playerHand.bet_amount ?? 0) : 0)
                 : 0;
 
-              const payoutClass = displayPayout > 0 ? 'text-green-600' : 'text-red-600';
+              const payoutClass = displayPayout > 0 ? 'text-green-600' : displayPayout < 0 ? 'text-red-600' : 'text-white';
 
-              // Card border: active player's box is red; winning players get green border
-              // Determine border based on state priority and actual bet value:
-              // 1) active player's turn -> strong red
-              // 2) winning -> green
-              // 3) bet placed (current_bet > 0 or has_placed_bet) -> green outline
-              // 4) no bet -> red dashed outline
               const hasBet = (player.current_bet && player.current_bet > 0) || player.has_placed_bet;
-              let cardClass = 'border border-muted';
+              let cardClass = 'border transition-all duration-300';
               if (isPlayersTurn) {
-                cardClass = '!border-4 !border-red-600 !border-solid';
+                cardClass += ' border-red-600 border-4 shadow-xl shadow-red-500/20';
               } else if (isWin) {
-                cardClass = '!border-2 !border-green-600';
+                cardClass += ' border-green-600 border-2';
               } else if (hasBet) {
-                cardClass = '!border-2 !border-green-500';
+                cardClass += ' border-green-500/50 border-2';
               } else {
-                cardClass = '!border-2 !border-red-500 border-dashed';
+                cardClass += ' border-red-500/30 border-dashed border-2';
               }
-
-              const cardStyle = isPlayersTurn ? { borderColor: '#dc2626', borderWidth: 4, borderStyle: 'solid' } : {};
 
               return (
                 <Card 
                   key={player.id} 
                   className={cardClass}
-                  style={cardStyle}
                 >
-                  <CardHeader className="pb-3">
+                  <CardHeader className="p-3 pb-1">
                     <div className="flex items-center justify-between">
-                      <CardTitle className="text-lg">
+                      <CardTitle className="text-sm font-bold truncate pr-2">
                         {player.name}
                       </CardTitle>
-                      <Badge variant={player.is_online ? 'default' : 'secondary'}>
-                        {player.is_online ? 'Online' : 'Offline'}
-                      </Badge>
+                      <div
+                        className={`w-3 h-3 rounded-full border-2
+                          ${gameStatus === 'betting'
+                            ? (player.has_placed_bet === true
+                                ? 'bg-green-500 border-green-600'
+                                : 'bg-red-500 border-red-600')
+                            : (player.is_online
+                                ? 'bg-green-500 border-green-600'
+                                : 'bg-gray-400 border-gray-500')}
+                        `}
+                      />
                     </div>
-                    <div className="flex items-center gap-4 text-sm text-muted-foreground">
-                      <div>Balance: ${player.balance}</div>
-                      {player.current_bet > 0 && <div>Bet: ${player.current_bet}</div>}
+                    <div className="flex items-center justify-between text-[10px] text-muted-foreground font-mono">
+                      <div>${player.balance}</div>
+                      {player.current_bet > 0 && <Badge variant="outline" className="h-4 px-1 text-[8px]">BET: ${player.current_bet}</Badge>}
                     </div>
                   </CardHeader>
-                  <CardContent>
+                  <CardContent className="p-3">
                     {playerHand && playerHand.cards.length > 0 ? (
-                      <div className="flex justify-center">
+                      <div className="flex justify-center scale-90 origin-top">
                         <CardHand
                           cards={playerHand.cards}
                           value={handValue?.value}
@@ -294,20 +229,15 @@ const DealerGameView = ({
                           animateNewCards={true}
                         />
                       </div>
-                    ) : player.has_placed_bet ? (
-                      <div className="text-center text-muted-foreground py-8">
-                        Waiting for cards...
-                      </div>
                     ) : (
-                      <div className="text-center text-muted-foreground py-8">
-                        No bet placed
+                      <div className="text-center text-[10px] text-muted-foreground py-4 italic">
+                        {player.has_placed_bet ? 'Waiting for cards...' : 'No bet placed'}
                       </div>
                     )}
                     
                     {playerHand?.result && (
-                      <div className="mt-3 flex items-center justify-center gap-2">
-                        <div className="text-sm text-muted-foreground">Payout</div>
-                        <div className={`text-lg font-bold ${payoutClass}`}>
+                      <div className="mt-2 text-center">
+                        <div className={`text-base font-black ${payoutClass}`}>
                           {displayPayout > 0 ? `+$${displayPayout}` : (displayPayout < 0 ? `-$${Math.abs(displayPayout)}` : '$0')}
                         </div>
                       </div>
@@ -320,7 +250,82 @@ const DealerGameView = ({
         </div>
       </div>
 
-      {/* Bottom Action Bar removed (moved above player cards) */}
+      {/* 3. Fixed Bottom Bar - Action / Status Box */}
+      <div className="flex-shrink-0 p-4 border-t bg-card/70 backdrop-blur-md shadow-lg z-10">
+        <div className="max-w-7xl mx-auto">
+          <div className="flex flex-col gap-2">
+            {/* Dealer payout info */}
+            <div className="flex items-center justify-center gap-3 py-1">
+              <div className="text-xs font-bold uppercase tracking-widest opacity-70">Dealer Payout</div>
+              <div className={`text-lg font-black ${dealerNet > 0 ? 'text-green-600' : dealerNet < 0 ? 'text-red-600' : 'text-white'}`}>
+                {dealerNet > 0 ? `+$${dealerNet}` : (dealerNet < 0 ? `-$${Math.abs(dealerNet)}` : '$0')}
+              </div>
+            </div>
+
+            {gameStatus === 'betting' && anyBetsPlaced && !allBetsPlaced && (
+              <Button 
+                onClick={onDealCards} 
+                className="w-full font-black uppercase tracking-widest" 
+                size="lg"
+                disabled={loading}
+              >
+                Deal Cards
+              </Button>
+            )}
+            
+            {gameStatus === 'betting' && !anyBetsPlaced && (
+              <div className="text-center text-sm text-muted-foreground py-2 italic">
+                Waiting for players to place bets...
+              </div>
+            )}
+
+            {['playing', 'dealer_turn', 'resolving'].includes(gameStatus) && (
+              <div className="text-center text-sm font-bold animate-pulse text-primary py-2 uppercase tracking-tighter">
+                Round in progress...
+              </div>
+            )}
+
+            {gameStatus === 'table_idle' && (
+              <div className="flex flex-col gap-2">
+                <Button 
+                  onClick={onStartBetting} 
+                  className="w-full font-black uppercase tracking-widest" 
+                  size="lg"
+                >
+                  Start Next Round
+                </Button>
+                <div className="flex gap-2">
+                  <Button 
+                    onClick={onBackToLobby} 
+                    variant="outline"
+                    className="flex-1 text-xs"
+                  >
+                    Lobby
+                  </Button>
+                  {onForceLobby && (
+                    <Button 
+                      onClick={onForceLobby} 
+                      variant="destructive"
+                      className="flex-1 text-xs"
+                    >
+                      Force All Lobby
+                    </Button>
+                  )}
+                </div>
+              </div>
+            )}
+
+            {gameStatus === 'lobby' && (
+              <div className="flex flex-col gap-2">
+                <div className="text-center text-sm text-muted-foreground py-2">Waiting in lobby...</div>
+                {onBackToLobby && (
+                  <Button className="w-full" onClick={onBackToLobby} variant="outline">Exit Game View</Button>
+                )}
+              </div>
+            )}
+          </div>
+        </div>
+      </div>
     </div>
   );
 };

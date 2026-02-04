@@ -10,6 +10,7 @@ interface CardHandProps {
   soft?: boolean;
   className?: string;
   large?: boolean;
+  scale?: number; // optional scale override
   animateNewCards?: boolean;
 }
 
@@ -20,8 +21,10 @@ const CardHand = ({
   soft, 
   className,
   large = false,
+  scale: propScale,
   animateNewCards = false
 }: CardHandProps) => {
+  const scale = propScale !== undefined ? propScale : (large ? LARGE_SCALE : 1);
   return (
     <div className={cn("flex flex-col items-center gap-3", className)}>
       {label && (
@@ -33,14 +36,13 @@ const CardHand = ({
       {/* Cards */}
       <div
         className="relative flex items-center justify-center"
-        style={{ minHeight: `${BASE_HEIGHT * (large ? LARGE_SCALE : 1) + 24}px`,
+        style={{ minHeight: `${BASE_HEIGHT * scale + 24}px`,
                  // compute the width of the whole hand so absolute-positioned cards
                  // are contained and the group can be centered by the parent
-                 width: `${Math.max(0, ((cards.length - 1) * (OVERLAP_SPACING * (large ? LARGE_SCALE : 1))) + (BASE_WIDTH * (large ? LARGE_SCALE : 1)))}px`
+                 width: `${Math.max(0, ((cards.length - 1) * (OVERLAP_SPACING * scale)) + (BASE_WIDTH * scale))}px`
         }}
       >
         {cards.map((card, idx) => {
-          const scale = large ? LARGE_SCALE : 1;
           const left = idx * (OVERLAP_SPACING * scale);
           return (
           <div

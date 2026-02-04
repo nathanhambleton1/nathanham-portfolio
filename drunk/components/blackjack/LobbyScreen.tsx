@@ -3,9 +3,8 @@ import { Button } from "../../components/ui/button";
 import { Badge } from "../../components/ui/badge";
 import { Input } from "../../components/ui/input";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "../../components/ui/dialog";
-import { QRCodeSVG } from "qrcode.react";
-import { Copy, QrCode, Users, GripVertical } from "lucide-react";
-import { useState } from "react";
+import { Users, GripVertical } from "lucide-react";
+import { useState, useEffect } from "react";
 
 interface BlackjackPlayer {
   id: string;
@@ -27,6 +26,7 @@ interface BlackjackGame {
   code: string;
   name: string;
   settings: any;
+  turn_order?: string[];
 }
 
 interface LobbyScreenProps {
@@ -34,14 +34,9 @@ interface LobbyScreenProps {
   player: BlackjackPlayer;
   playersList: BlackjackPlayer[];
   chipRequests: ChipRequest[];
-  qrDialogOpen: boolean;
-  setQrDialogOpen: (open: boolean) => void;
-  chipRequestDialogOpen: boolean;
   setChipRequestDialogOpen: (open: boolean) => void;
-  chipRequestAmount: string;
   setChipRequestAmount: (amount: string) => void;
   onStartBetting: () => void;
-  onRequestChips: () => void;
   onApproveChipRequest: (requestId: string, approve: boolean) => void;
   onGiveChips: (playerId: string, amount: number) => void;
   onLogout: () => void;
@@ -55,14 +50,9 @@ const LobbyScreen = ({
   player,
   playersList,
   chipRequests,
-  qrDialogOpen,
-  setQrDialogOpen,
-  chipRequestDialogOpen,
   setChipRequestDialogOpen,
-  chipRequestAmount,
   setChipRequestAmount,
   onStartBetting,
-  onRequestChips,
   onApproveChipRequest,
   onGiveChips,
   onLogout,
@@ -70,7 +60,6 @@ const LobbyScreen = ({
   copyInviteUrlToClipboard,
   onUpdatePlayerOrder,
 }: LobbyScreenProps) => {
-  const nonDealerPlayers = playersList.filter(p => !p.is_dealer);
   const isDealer = player?.is_dealer;
   const inviteUrl = typeof window !== 'undefined' ? `${window.location.origin}${window.location.pathname}?code=${game?.code}` : '';
 
@@ -78,7 +67,31 @@ const LobbyScreen = ({
   const [draggedIndex, setDraggedIndex] = useState<number | null>(null);
   const [dragOverIndex, setDragOverIndex] = useState<number | null>(null);
 
-  const handleDragStart = (index: number) => {
+  // Ordered non-dealer players (optimistic local state for immediate UI updates)
+  const [orderedNonDealerPlayers, setOrderedNonDealerPlayers] = useState<BlackjackPlayer[]>([]);
+
+  // Compute canonical ordering: prefer game.turn_order if set, otherwise use seat_position
+  const computeOrdered = () => {
+    const nd = playersList.filter(p => !p.is_dealer);
+    if (game?.turn_order && game.turn_order.length > 0) {
+      const ordered = game.turn_order
+        .map((id: string) => nd.find(p => p.id === id))
+        .filter(Boolean) as BlackjackPlayer[];
+      const remaining = nd.filter(p => !(game.turn_order ?? []).includes(p.id));
+      return [...ordered, ...remaining];
+    }
+    return nd.sort((a, b) => (a.seat_position || 0) - (b.seat_position || 0));
+  };
+
+  useEffect(() => {
+    setOrderedNonDealerPlayers(computeOrdered());
+    setDraggedIndex(null);
+    setDragOverIndex(null);
+  }, [playersList, game?.turn_order]);
+
+  const handleDragStart = (e: React.DragEvent, index: number) => {
+    try { e.dataTransfer.setData('text/plain', String(index)); } catch (err) {}
+    e.dataTransfer.effectAllowed = 'move';
     setDraggedIndex(index);
   };
 
@@ -95,13 +108,16 @@ const LobbyScreen = ({
     e.preventDefault();
     if (draggedIndex === null || !isDealer || !onUpdatePlayerOrder) return;
 
-    const reorderedPlayers = [...nonDealerPlayers];
+    const reorderedPlayers = [...orderedNonDealerPlayers];
     const [draggedPlayer] = reorderedPlayers.splice(draggedIndex, 1);
     reorderedPlayers.splice(dropIndex, 0, draggedPlayer);
 
-    // Update the order
+    // Optimistically update UI
+    setOrderedNonDealerPlayers(reorderedPlayers);
+
+    // Persist new order
     onUpdatePlayerOrder(reorderedPlayers.map(p => p.id));
-    
+
     setDraggedIndex(null);
     setDragOverIndex(null);
   };
@@ -112,67 +128,33 @@ const LobbyScreen = ({
   };
 
   return (
-    <div className="min-h-screen bg-gradient-bg p-4">
-      <div className="max-w-2xl mx-auto space-y-4">
-        {/* Header Card */}
-        <Card>
-          <CardHeader className="pb-2">
-            <div className="flex items-center justify-between mb-2">
-              <CardTitle className="text-2xl">{game.name}</CardTitle>
-              <Badge variant="outline" className="text-lg px-3 py-1">
-                {game.code}
-              </Badge>
-            </div>
-            <CardDescription>
-              {isDealer ? "You are the dealer" : "Waiting in lobby"}
-            </CardDescription>
-          </CardHeader>
-          <CardContent>
-            <div className="flex gap-2">
-              <Button 
-                className="flex-1" 
-                variant="outline" 
-                onClick={() => setQrDialogOpen(true)}
-              >
-                <QrCode className="w-4 h-4 mr-2" />
-                Show QR Code
-              </Button>
-              <Button 
-                className="flex-1" 
-                variant="outline" 
-                onClick={copyInviteUrlToClipboard}
-              >
-                <Copy className="w-4 h-4 mr-2" />
-                Copy Invite
-              </Button>
-            </div>
-          </CardContent>
-        </Card>
+    <div className="flex-1 h-full overflow-y-auto bg-gradient-bg p-4">
+      <div className="max-w-2xl mx-auto space-y-4 pb-8">
 
         {/* Players List */}
         <Card>
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
               <Users className="w-5 h-5" />
-              Players ({nonDealerPlayers.length})
+              Players ({orderedNonDealerPlayers.length})
             </CardTitle>
-            {isDealer && nonDealerPlayers.length > 1 && (
+            {isDealer && orderedNonDealerPlayers.length > 1 && (
               <CardDescription>
                 Drag players to set dealing order (top to bottom)
               </CardDescription>
             )}
           </CardHeader>
           <CardContent className="space-y-3">
-            {nonDealerPlayers.length === 0 ? (
+            {orderedNonDealerPlayers.length === 0 ? (
               <div className="text-center text-muted-foreground py-8">
                 No players yet. Share the code to invite players!
               </div>
             ) : (
-              nonDealerPlayers.map((p, index) => (
+              orderedNonDealerPlayers.map((p, index) => (
                 <div
                   key={p.id}
                   draggable={isDealer && onUpdatePlayerOrder !== undefined}
-                  onDragStart={() => handleDragStart(index)}
+                  onDragStart={(e) => handleDragStart(e, index)}
                   onDragOver={(e) => handleDragOver(e, index)}
                   onDragLeave={handleDragLeave}
                   onDrop={(e) => handleDrop(e, index)}
@@ -205,16 +187,16 @@ const LobbyScreen = ({
                       <Button
                         size="sm"
                         variant="outline"
-                        onClick={() => onGiveChips(p.id, 100)}
+                        onClick={() => onGiveChips(p.id, 5)}
                       >
-                        +$100
+                        +$5
                       </Button>
                       <Button
                         size="sm"
                         variant="outline"
-                        onClick={() => onGiveChips(p.id, 500)}
+                        onClick={() => onGiveChips(p.id, 10)}
                       >
-                        +$500
+                        +$10
                       </Button>
                     </div>
                   )}
@@ -257,18 +239,13 @@ const LobbyScreen = ({
         {/* Your Info (Player) */}
         {!isDealer && player && (
           <Card>
-            <CardHeader>
-              <CardTitle>Your Info</CardTitle>
-            </CardHeader>
             <CardContent className="space-y-3">
-              <div className="flex items-center justify-between">
-                <span className="text-muted-foreground">Balance:</span>
-                <span className="text-xl font-bold">${player.balance}</span>
-              </div>
+            </CardContent>
+            <CardContent className="space-y-3">
               <Button 
                 className="w-full" 
                 variant="outline"
-                onClick={() => setChipRequestDialogOpen(true)}
+                onClick={() => { setChipRequestAmount(""); setChipRequestDialogOpen(true); }}
               >
                 Request Chips
               </Button>
@@ -317,96 +294,20 @@ const LobbyScreen = ({
                 className="w-full"
                 size="lg"
                 onClick={onStartBetting}
-                disabled={nonDealerPlayers.length === 0}
+                disabled={orderedNonDealerPlayers.length === 0}
               >
                 Start Betting Round
-              </Button>
-              <Button
-                className="w-full"
-                variant="secondary"
-                size="lg"
-                onClick={onSitAtTable}
-              >
-                Go to Table View
               </Button>
             </div>
           ) : (
             <div className="flex flex-col gap-2">
-              <Button
-                className="w-full"
-                size="lg"
-                onClick={onSitAtTable}
-              >
-                Sit at Table
-              </Button>
               <div className="text-center text-muted-foreground py-2">
                 Waiting for dealer to start the round...
               </div>
             </div>
           )}
-          <Button
-            variant="ghost"
-            className="w-full text-muted-foreground hover:text-destructive"
-            onClick={onLogout}
-          >
-            Leave Table
-          </Button>
         </div>
       </div>
-
-      {/* QR Dialog */}
-      <Dialog open={qrDialogOpen} onOpenChange={setQrDialogOpen}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>Invite Players</DialogTitle>
-          </DialogHeader>
-          <div className="flex flex-col items-center gap-4 py-4">
-            <QRCodeSVG value={inviteUrl} size={200} />
-            <div className="text-center">
-              <div className="text-sm text-muted-foreground">Game Code</div>
-              <div className="text-2xl font-bold">{game.code}</div>
-            </div>
-            <Button onClick={copyInviteUrlToClipboard} className="w-full">
-              Copy Invite Link
-            </Button>
-          </div>
-        </DialogContent>
-      </Dialog>
-
-      {/* Chip Request Dialog */}
-      <Dialog open={chipRequestDialogOpen} onOpenChange={setChipRequestDialogOpen}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>Request Chips</DialogTitle>
-          </DialogHeader>
-          <div className="space-y-4 py-4">
-            <Input
-              type="number"
-              placeholder="Amount"
-              value={chipRequestAmount}
-              onChange={(e) => setChipRequestAmount(e.target.value)}
-            />
-            <div className="flex gap-2">
-              {[100, 250, 500, 1000].map((amount) => (
-                <Button
-                  key={amount}
-                  variant="outline"
-                  size="sm"
-                  onClick={() => setChipRequestAmount(String(amount))}
-                  className="flex-1"
-                >
-                  ${amount}
-                </Button>
-              ))}
-            </div>
-          </div>
-          <DialogFooter>
-            <Button onClick={onRequestChips} className="w-full">
-              Request ${chipRequestAmount || '0'}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
     </div>
   );
 };

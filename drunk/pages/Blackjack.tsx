@@ -11,12 +11,13 @@ import { createClient } from '@supabase/supabase-js';
 import { useNavigate } from "react-router-dom";
 import { toast } from "../components/ui/use-toast";
 import { Toaster } from "../components/ui/toaster";
-import JoinCreateScreen from "../../drunk/components/blackjack/JoinCreateScreen";
-import EnterNameScreen from "../../drunk/components/blackjack/EnterNameScreen";
-import ConfirmSettingsScreen from "../../drunk/components/blackjack/ConfirmSettingsScreen";
-import LobbyScreen from "../../drunk/components/blackjack/LobbyScreen";
-import DealerGameView from "../../drunk/components/blackjack/DealerGameView";
-import PlayerGameView from "../../drunk/components/blackjack/PlayerGameView";
+import JoinCreateScreen from "../components/blackjack/JoinCreateScreen";
+import EnterNameScreen from "../components/blackjack/EnterNameScreen";
+import ConfirmSettingsScreen from "../components/blackjack/ConfirmSettingsScreen";
+import LobbyScreen from "../components/blackjack/LobbyScreen";
+import DealerGameView from "../components/blackjack/DealerGameView";
+import PlayerGameView from "../components/blackjack/PlayerGameView";
+import { BlackjackHeader } from "../components/blackjack/BlackjackHeader";
 
 // Initialize Supabase client
 const supabaseUrl = 'https://kcyrvubzhsphpxfsewii.supabase.co';
@@ -147,7 +148,7 @@ const Blackjack = () => {
   
   // Chip request dialog (for players)
   const [chipRequestDialogOpen, setChipRequestDialogOpen] = useState(false);
-  const [chipRequestAmount, setChipRequestAmount] = useState<string>("100");
+  const [chipRequestAmount, setChipRequestAmount] = useState<string>("");
 
   const navigate = useNavigate();
   const channelRef = useRef<any>(null);
@@ -591,7 +592,13 @@ const Blackjack = () => {
             .eq('id', storedPlayerId)
             .single();
 
-          if (playerData && playerData.game_id === gameData.id) {
+          // Only auto-restore if the stored player record matches the stored name
+          // (prevents another tab's stored player id -- e.g. the dealer's id --
+          // from being applied to this tab). If the name doesn't match, clear
+          // the cached player id so the user can join as a different player.
+          const storedName = localStorage.getItem(STORAGE_KEY_NAME);
+
+          if (playerData && playerData.game_id === gameData.id && storedName && playerData.name === storedName.toUpperCase()) {
             // Mark online
             await supabase
               .from('blackjack_players')
@@ -606,6 +613,13 @@ const Blackjack = () => {
             setPlayersList(players);
             
             setScreen(gameData.status === 'lobby' ? 'lobby' : 'game');
+          } else {
+            // If mismatch or missing name, clear the stale stored player id
+            try {
+              localStorage.removeItem(STORAGE_KEY_PLAYER_ID);
+            } catch (e) {
+              // ignore
+            }
           }
         } catch (e) {
           console.error('Session restore failed:', e);
@@ -613,6 +627,37 @@ const Blackjack = () => {
       })();
     }
   }, []);
+
+  // If the URL contains an invite or code param, auto-fill and go to enter-name
+  useEffect(() => {
+    try {
+      const params = new URLSearchParams(window.location.search);
+      const invite = params.get('invite') || params.get('code');
+      if (invite) {
+        // Clear any previously cached session so invite always forces join flow
+        try {
+          localStorage.removeItem(STORAGE_KEY_CODE);
+          localStorage.removeItem(STORAGE_KEY_NAME);
+          localStorage.removeItem(STORAGE_KEY_PLAYER_ID);
+        } catch (e) {
+          // ignore
+        }
+        setGameCode(invite.toUpperCase());
+        setMode('join');
+        // Ensure name input is empty for invite-join flows
+        setName('');
+        setScreen('enter-name');
+        // remove query params from URL to keep it clean
+        try {
+          navigate(window.location.pathname, { replace: true });
+        } catch (e) {
+          // ignore navigate errors
+        }
+      }
+    } catch (err) {
+      // ignore
+    }
+  }, [navigate]);
 
   // ============================================================================
   // GAME ACTIONS
@@ -637,6 +682,8 @@ const Blackjack = () => {
       setGame(gameData);
       setMode("join");
       pushRecentGame(gameCode.toUpperCase());
+      // Clear any previously typed name to avoid autofill from other sessions
+      setName("");
       setScreen("enter-name");
     } catch (err: any) {
       setError(err.message || "Failed to find game");
@@ -809,6 +856,9 @@ const Blackjack = () => {
       if (gameData) {
         setGame(gameData);
         setMode('join');
+        // Clear name when opening join flow for a recent game to prevent
+        // accidental prefilling with another player's name.
+        setName('');
         setScreen('enter-name');
       } else {
         setError("Game no longer exists.");
@@ -1859,22 +1909,18 @@ const Blackjack = () => {
     );
   }
 
-  if (screen === "lobby" && game && player) {
-    return (
-      <>
+  if ((screen === "lobby" || screen === "game") && game && player) {
+    const renderActiveView = () => {
+      if (screen === "lobby") {
+        return (
           <LobbyScreen
             game={game}
             player={player}
             playersList={playersList}
             chipRequests={chipRequests}
-            qrDialogOpen={qrDialogOpen}
-            setQrDialogOpen={setQrDialogOpen}
-            chipRequestDialogOpen={chipRequestDialogOpen}
             setChipRequestDialogOpen={setChipRequestDialogOpen}
-            chipRequestAmount={chipRequestAmount}
             setChipRequestAmount={setChipRequestAmount}
             onStartBetting={handleStartBetting}
-            onRequestChips={handleRequestChips}
             onApproveChipRequest={handleApproveChipRequest}
             onGiveChips={handleGiveChips}
             onLogout={handleLogout}
@@ -1882,22 +1928,18 @@ const Blackjack = () => {
             copyInviteUrlToClipboard={copyInviteUrlToClipboard}
             onUpdatePlayerOrder={handleUpdatePlayerOrder}
           />
-        <Toaster />
-      </>
-    );
-  }
+        );
+      }
 
-  if (screen === "game" && game && player) {
-    const myHand = hands.find(h => h.player_id === player.id && h.hand_index === 0);
-    const dealerHandValue = game.dealer_hand ? calculateHandValue(game.dealer_hand) : { value: 0, soft: false };
-    const showFullDealerHand =
-      player.is_dealer ||
-      ['dealer_turn', 'resolving', 'finished'].includes(game.status) ||
-      ['playing', 'stood', 'busted', 'blackjack'].includes(game.dealer_status);
+      const myHand = hands.find(h => h.player_id === player.id && h.hand_index === 0);
+      const dealerHandValue = game.dealer_hand ? calculateHandValue(game.dealer_hand) : { value: 0, soft: false };
+      const showFullDealerHand =
+        player.is_dealer ||
+        ['dealer_turn', 'resolving', 'finished'].includes(game.status) ||
+        ['playing', 'stood', 'busted', 'blackjack'].includes(game.dealer_status);
 
-    if (player.is_dealer) {
-      return (
-        <>
+      if (player.is_dealer) {
+        return (
           <DealerGameView
             dealerHand={game.dealer_hand || []}
             dealerValue={dealerHandValue.value}
@@ -1916,14 +1958,11 @@ const Blackjack = () => {
             onBackToLobby={() => setScreen('lobby')}
             loading={loading}
           />
-          <Toaster />
-        </>
-      );
-    } else {
-      const canDoubleDown = myHand?.cards.length === 2 && myHand.status === 'active';
-      
-      return (
-        <>
+        );
+      } else {
+        const canDoubleDown = myHand?.cards.length === 2 && myHand.status === 'active';
+        
+        return (
           <PlayerGameView
             player={player}
             myHand={myHand}
@@ -1943,10 +1982,101 @@ const Blackjack = () => {
             canDoubleDown={canDoubleDown}
             onBackToLobby={() => setScreen('lobby')}
           />
-          <Toaster />
-        </>
-      );
-    }
+        );
+      }
+    };
+
+    return (
+      <div className="min-h-screen flex flex-col">
+        <BlackjackHeader 
+          gameCode={game.code} 
+          player={player} 
+          onLogout={handleLogout}
+          onOpenSettings={() => setSettingsDialogOpen(true)}
+          onOpenChipRequest={() => { setChipRequestAmount(""); setChipRequestDialogOpen(true); }}
+        />
+        <div className="flex-1 overflow-hidden flex flex-col pt-16">
+          {renderActiveView()}
+        </div>
+
+        <Dialog open={settingsDialogOpen} onOpenChange={setSettingsDialogOpen}>
+          <DialogContent className="max-w-md">
+            <DialogHeader>
+              <DialogTitle>Game Settings</DialogTitle>
+              <DialogDescription>
+                View the current table rules.
+              </DialogDescription>
+            </DialogHeader>
+            <div className="space-y-4 py-4">
+              <div className="flex items-center justify-between">
+                <span className="font-medium">Dealer hits on Soft 17</span>
+                <span className="text-muted-foreground">{game.settings.hit_on_soft_17 ? 'Yes' : 'No'}</span>
+              </div>
+              <div className="flex items-center justify-between">
+                <span className="font-medium">Insurance</span>
+                <span className="text-muted-foreground">{game.settings.insurance_enabled ? 'Enabled' : 'Disabled'}</span>
+              </div>
+              <div className="flex items-center justify-between">
+                <span className="font-medium">Double Down</span>
+                <span className="text-muted-foreground">{game.settings.double_down_enabled ? 'Enabled' : 'Disabled'}</span>
+              </div>
+              <div className="flex items-center justify-between">
+                <span className="font-medium">Splitting</span>
+                <span className="text-muted-foreground">{game.settings.split_enabled ? 'Enabled' : 'Disabled'}</span>
+              </div>
+              <div className="flex items-center justify-between">
+                <span className="font-medium">Number of Decks</span>
+                <span className="text-muted-foreground">{game.settings.num_decks}</span>
+              </div>
+              <div className="flex items-center justify-between border-t pt-4">
+                <span className="font-medium text-xs text-muted-foreground uppercase tracking-wider">Note</span>
+                <span className="text-xs text-muted-foreground">Settings can only be changed during table creation.</span>
+              </div>
+            </div>
+            <DialogFooter>
+              <Button onClick={() => setSettingsDialogOpen(false)}>Close</Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+        
+        {/* Chip Request Dialog */}
+        <Dialog open={chipRequestDialogOpen} onOpenChange={setChipRequestDialogOpen}>
+          <DialogContent>
+            <DialogHeader>
+              <DialogTitle>Request Chips</DialogTitle>
+            </DialogHeader>
+            <div className="space-y-4 py-4">
+              <Input
+                type="number"
+                placeholder="Amount"
+                value={chipRequestAmount}
+                onChange={(e) => setChipRequestAmount(e.target.value)}
+              />
+              <div className="flex gap-2">
+                {[5, 10, 50, 100].map((amount) => (
+                  <Button
+                    key={amount}
+                    variant="outline"
+                    size="sm"
+                    onClick={() => setChipRequestAmount(String(amount))}
+                    className="flex-1"
+                  >
+                    ${amount}
+                  </Button>
+                ))}
+              </div>
+            </div>
+            <DialogFooter>
+              <Button onClick={handleRequestChips} className="w-full">
+                Request ${chipRequestAmount || '0'}
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+        
+        <Toaster />
+      </div>
+    );
   }
 
   // Fallback
