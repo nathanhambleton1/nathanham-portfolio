@@ -155,8 +155,11 @@ const PlayerGameView = ({
         return [];
       })();
   // const dealerValue = showFullDealerHand ? calculateHandValue(dealerHand) : null;
+  const dealerBlackjack = dealerHand.length === 2 && calculateHandValue(dealerHand).value === 21;
 
   const sortedHands = [...(myHands || [])].sort((a, b) => a.hand_index - b.hand_index);
+  const insuranceHand = sortedHands.find(h => h.hand_index === 0);
+  const insuranceBet = insuranceHand?.insurance_bet ?? 0;
   const hasActiveHand = sortedHands.some(h => h.status === 'active');
   const allHandsComplete = sortedHands.length > 0
     && sortedHands.every(h => ['stood', 'busted', 'doubled', 'blackjack'].includes(h.status));
@@ -199,19 +202,24 @@ const PlayerGameView = ({
            <div className="flex justify-center origin-center">
              <CardHand
                cards={dealerDisplayCards}
-               label="Dealer"
+               label={loaderMounted ? undefined : "Dealer"}
                // value and soft removed to hide hand value
                scale={cardScale}
                animateNewCards={true}
-               showEmptySlot={true}
+               showEmptySlot={!loaderMounted}
              />
            </div>
 
            {/* Player Hands - Center */}
-           {sortedHands.length > 0 && (
+           {sortedHands.length > 0 ? (
              <div className="flex flex-wrap justify-center gap-4">
                {sortedHands.map((hand) => {
                  const isActive = hand.is_active && hand.status === 'active';
+                 const isTurnHighlight = isMyTurn && isActive;
+                 const isWin = hand.result === 'win' || hand.result === 'blackjack';
+                 const isLoss = hand.result === 'loss';
+                 const isPush = hand.result === 'push';
+                 const isBusted = hand.status === 'busted';
                  const payoutDisplay = hand.payout > 0
                    ? `+$${hand.payout}`
                    : hand.payout < 0
@@ -223,34 +231,75 @@ const PlayerGameView = ({
                      ? 'text-red-600'
                      : 'text-white';
 
+                 const borderStateClass = isTurnHighlight
+                   ? 'border-red-500'
+                   : isWin
+                     ? 'border-green-500'
+                     : (isLoss || isBusted)
+                       ? 'border-red-500'
+                       : isPush
+                         ? 'border-border/80'
+                         : 'border-border/60';
+
+                 const pulseBorderClass = isTurnHighlight
+                   ? "relative after:content-[''] after:absolute after:inset-0 after:rounded-xl after:border-2 after:border-red-500 after:animate-pulse after:pointer-events-none"
+                   : '';
+
+                 const handClass = [
+                   'rounded-xl border bg-card/70 px-3 py-2 shadow-sm transition-all duration-300',
+                   borderStateClass,
+                   pulseBorderClass
+                 ].filter(Boolean).join(' ');
+
                  return (
                    <div
                      key={hand.id}
-                     className={`rounded-xl border bg-card/70 px-3 py-2 shadow-sm ${
-                       isActive ? 'border-primary ring-2 ring-primary/40' : 'border-border/60'
-                     }`}
+                     className={handClass}
                    >
                      <div className="flex items-center justify-between text-xs text-muted-foreground mb-1">
-                       <span>{sortedHands.length > 1 ? `Hand ${hand.hand_index + 1}` : 'Your Hand'}</span>
-                       <span>Bet ${hand.bet_amount}</span>
+                      <span className="w-full text-center text-xs text-muted-foreground">
+                        {sortedHands.length > 1 ? `Hand ${hand.hand_index + 1}` : 'YOUR HAND'}
+                      </span>
                      </div>
-                     <CardHand
-                       cards={hand.cards}
-                       label={undefined}
-                       // value and soft removed to hide hand value
-                       scale={cardScale}
-                       animateNewCards={true}
-                     />
-                     {hand.result && (
-                       <div className={`mt-2 text-center text-lg font-black ${payoutClass}`}>
-                         {payoutDisplay}
-                       </div>
-                     )}
+                    <CardHand
+                      cards={hand.cards}
+                      label={undefined}
+                      // value and soft removed to hide hand value
+                      scale={cardScale}
+                      animateNewCards={true}
+                    />
+                    {hand.insurance_bet > 0 && dealerHand.length >= 2 && (
+                      <div className={`mt-1 text-center text-xs font-semibold ${
+                        dealerBlackjack ? 'text-green-500' : 'text-red-500'
+                      }`}>
+                        Insurance {dealerBlackjack ? `+$${hand.insurance_bet * 2}` : `-$${hand.insurance_bet}`}
+                      </div>
+                    )}
+                    {hand.result && (
+                      <div className={`mt-2 text-center text-lg font-black ${payoutClass}`}>
+                        {payoutDisplay}
+                      </div>
+                    )}
                    </div>
                  );
                })}
              </div>
-           )}
+           ) : gameStatus !== 'betting' ? (
+             <div className="flex justify-center">
+               <div className="rounded-xl border bg-card/70 px-3 py-2 shadow-sm border-border/60">
+                 <div className="flex items-center justify-between text-xs text-muted-foreground mb-1">
+                     <span className="w-full text-center block">YOUR HAND</span>
+                 </div>
+                 <CardHand
+                   cards={[]}
+                   label={undefined}
+                   scale={cardScale}
+                   animateNewCards={false}
+                   showEmptySlot={true}
+                 />
+               </div>
+             </div>
+           ) : null}
          </div>
       </div>
 
@@ -282,6 +331,9 @@ const PlayerGameView = ({
             <div className="flex items-center gap-4">
               {player.current_bet > 0 && (
                 <Badge variant="secondary" className="font-mono">BET: ${player.current_bet}</Badge>
+              )}
+              {insuranceBet > 0 && (
+                <Badge variant="outline" className="font-mono">INSURANCE: ${insuranceBet}</Badge>
               )}
             </div>
           </div>
@@ -331,7 +383,7 @@ const PlayerGameView = ({
                   Insurance?
                 </div>
                 <div className="text-center text-sm text-muted-foreground">
-                  Dealer shows an Ace. Insurance pays 2:1 if the dealer has blackjack.
+                  Insurance pays 2:1 if the dealer has blackjack.
                 </div>
                 <div className="flex gap-3 justify-center flex-wrap">
                   <Button 
@@ -413,13 +465,6 @@ const PlayerGameView = ({
           {allHandsComplete && gameStatus !== 'table_idle' && gameStatus !== 'insurance' && (
             <div className="text-center text-muted-foreground py-4">
               Waiting for round to complete...
-            </div>
-          )}
-
-          {/* Dealer's turn */}
-          {['dealer_turn', 'resolving'].includes(gameStatus) && (
-            <div className="text-center text-muted-foreground py-4">
-              Dealer is playing...
             </div>
           )}
 

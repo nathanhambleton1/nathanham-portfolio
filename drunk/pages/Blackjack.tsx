@@ -167,6 +167,9 @@ const Blackjack = () => {
   const playerRef = useRef<BlackjackPlayer | null>(null);
   const dealingTriggeredRef = useRef<boolean>(false);
   const insuranceResolveRef = useRef<boolean>(false);
+  const handsRef = useRef<BlackjackHand[]>([]);
+  const insuranceResponsesRef = useRef<Record<string, 'taken' | 'declined'>>({});
+  const insuranceTimeoutRef = useRef<number | null>(null);
 
   // ============================================================================
   // HELPER FUNCTIONS
@@ -499,6 +502,14 @@ const Blackjack = () => {
   }, [playersList]);
 
   useEffect(() => {
+    handsRef.current = hands;
+  }, [hands]);
+
+  useEffect(() => {
+    insuranceResponsesRef.current = insuranceResponses;
+  }, [insuranceResponses]);
+
+  useEffect(() => {
     gameRef.current = game;
     // If game left betting state, clear the dealing trigger
     if (gameRef.current && gameRef.current.status !== 'betting') {
@@ -509,6 +520,46 @@ const Blackjack = () => {
   useEffect(() => {
     playerRef.current = player;
   }, [player]);
+
+  const autoDeclineMissingInsurance = async (reason: 'timeout' | 'no_eligible') => {
+    try {
+      const currentGame = gameRef.current;
+      if (!currentGame || currentGame.status !== 'insurance' || !currentGame.current_round_id) return;
+
+      const currentHands = handsRef.current;
+      const currentPlayers = playersListRef.current;
+      const responses = insuranceResponsesRef.current;
+
+      const eligibleHands = currentHands.filter(h => {
+        const handPlayer = currentPlayers.find(p => p.id === h.player_id);
+        return handPlayer && !handPlayer.is_dealer && h.bet_amount >= 2;
+      });
+
+      const missing = eligibleHands.filter(h => !responses[h.id]);
+      if (missing.length === 0) return;
+
+      await supabase.from('blackjack_actions').insert(
+        missing.map(h => ({
+          game_id: currentGame.id,
+          round_id: currentGame.current_round_id,
+          player_id: h.player_id,
+          hand_id: h.id,
+          action_type: 'insurance_declined',
+          details: { reason }
+        }))
+      );
+
+      setInsuranceResponses(prev => {
+        const next = { ...prev };
+        missing.forEach(h => {
+          next[h.id] = 'declined';
+        });
+        return next;
+      });
+    } catch (e) {
+      console.error('Auto-decline insurance error:', e);
+    }
+  };
 
   // ============================================================================
   // REALTIME SUBSCRIPTIONS
@@ -710,23 +761,46 @@ const Blackjack = () => {
     if (!game || !player?.is_dealer) return;
     if (game.status !== 'insurance') {
       insuranceResolveRef.current = false;
+      if (insuranceTimeoutRef.current) {
+        clearTimeout(insuranceTimeoutRef.current);
+        insuranceTimeoutRef.current = null;
+      }
       return;
     }
 
-    const activeHands = hands.filter(h => {
+    const eligibleHands = hands.filter(h => {
       const handPlayer = playersList.find(p => p.id === h.player_id);
-      return handPlayer && !handPlayer.is_dealer && handPlayer.has_placed_bet;
+      return handPlayer && !handPlayer.is_dealer && h.bet_amount >= 2;
     });
 
-    if (activeHands.length === 0) return;
+    if (eligibleHands.length === 0) {
+      if (insuranceResolveRef.current) return;
+      insuranceResolveRef.current = true;
+      // eslint-disable-next-line @typescript-eslint/no-floating-promises
+      resolveInsurancePhase();
+      return;
+    }
 
-    const allResponded = activeHands.every(h => insuranceResponses[h.id]);
-    if (!allResponded) return;
-    if (insuranceResolveRef.current) return;
+    const missingResponses = eligibleHands.filter(h => !insuranceResponses[h.id]);
+    if (missingResponses.length === 0) {
+      if (insuranceTimeoutRef.current) {
+        clearTimeout(insuranceTimeoutRef.current);
+        insuranceTimeoutRef.current = null;
+      }
+      if (insuranceResolveRef.current) return;
+      insuranceResolveRef.current = true;
+      // eslint-disable-next-line @typescript-eslint/no-floating-promises
+      resolveInsurancePhase();
+      return;
+    }
 
-    insuranceResolveRef.current = true;
-    // eslint-disable-next-line @typescript-eslint/no-floating-promises
-    resolveInsurancePhase();
+    if (!insuranceTimeoutRef.current) {
+      insuranceTimeoutRef.current = window.setTimeout(() => {
+        insuranceTimeoutRef.current = null;
+        // eslint-disable-next-line @typescript-eslint/no-floating-promises
+        autoDeclineMissingInsurance('timeout');
+      }, 12000);
+    }
   }, [game?.status, player?.is_dealer, hands, insuranceResponses, playersList]);
 
   useEffect(() => {
@@ -1649,9 +1723,20 @@ const Blackjack = () => {
 
         await resolveRound(dealerCards, dealerValue.value, false);
       } else {
+        await supabase.from('blackjack_actions').insert([{
+          game_id: game.id,
+          round_id: game.current_round_id,
+          action_type: 'dealer_reveal',
+          card: hiddenCard
+        }]);
+
         await supabase
           .from('blackjack_games')
-          .update({ status: 'playing', current_turn_index: null })
+          .update({ 
+            status: 'playing',
+            current_turn_index: null,
+            dealer_hand: dealerCards
+          })
           .eq('id', game.id);
         await activateFirstHandOrDealer();
       }
@@ -1883,7 +1968,18 @@ const Blackjack = () => {
 
     const insuranceAmount = Math.floor(myHand.bet_amount / 2);
     if (insuranceAmount <= 0) {
-      toast({ title: 'Insurance unavailable', description: 'Insurance bet is too small for this wager' });
+      try {
+        await supabase.from('blackjack_actions').insert([{
+          game_id: game.id,
+          round_id: game.current_round_id,
+          player_id: player.id,
+          hand_id: myHand.id,
+          action_type: 'insurance_declined'
+        }]);
+      } catch (e) {
+        console.error('Auto-decline insurance error:', e);
+      }
+      setInsuranceResponses(prev => ({ ...prev, [myHand.id]: 'declined' }));
       return;
     }
 
@@ -2241,13 +2337,14 @@ const Blackjack = () => {
 
     try {
       const roundHands = await fetchHands(game.current_round_id);
+      const latestPlayers = await fetchPlayers(game.id);
       const dealerBlackjack = dealerValue === 21 && dealerCards.length === 2;
 
       const statsMap = new Map<string, BlackjackPlayer>();
-      playersList.forEach(p => statsMap.set(p.id, { ...p }));
+      latestPlayers.forEach(p => statsMap.set(p.id, { ...p }));
       const balanceDeltas: Record<string, number> = {};
 
-      const dealerPlayer = playersList.find(p => p.is_dealer);
+      const dealerPlayer = latestPlayers.find(p => p.is_dealer);
       const dealerStats = dealerPlayer ? { ...dealerPlayer } : null;
       if (dealerStats && dealerBlackjack) dealerStats.blackjacks += 1;
       if (dealerStats && dealerBusted) dealerStats.busts += 1;
@@ -2265,7 +2362,7 @@ const Blackjack = () => {
         } else if (hand.status === 'blackjack') {
           if (dealerBlackjack) {
             result = 'push';
-            payout = 0;
+            payout = hand.bet_amount;
           } else {
             result = 'blackjack';
             payout = Math.floor(hand.bet_amount * (1 + game.settings.blackjack_payout));
@@ -2281,7 +2378,7 @@ const Blackjack = () => {
           payout = 0;
         } else {
           result = 'push';
-          payout = 0;
+          payout = hand.bet_amount;
         }
 
         const insuranceBet = hand.insurance_bet || 0;
@@ -2679,7 +2776,7 @@ const Blackjack = () => {
         const showInsurancePrompt = !!insuranceHand
           && game.status === 'insurance'
           && !insuranceDecision
-          && player.has_placed_bet
+          && insuranceAmount > 0
           && game.settings.insurance_enabled;
         
         return (
