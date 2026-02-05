@@ -4,6 +4,7 @@ import { Badge } from "../../components/ui/badge";
 import { useEffect, useState } from 'react';
 import CardHand from "./CardHand";
 import { BASE_HEIGHT_FOR_SCALE, SCALE_SENSITIVITY } from './cardConfig';
+import DeckMeter from "./DeckMeter";
 
 interface BlackjackPlayer {
   id: string;
@@ -43,6 +44,9 @@ interface PlayerGameViewProps {
   doubleDownEnabled: boolean;
   canDoubleDown: boolean;
   onBackToLobby?: () => void;
+  deckRemaining: number;
+  deckTotal: number;
+  deckThresholdPercent: number;
 }
 
 const PlayerGameView = ({
@@ -63,6 +67,9 @@ const PlayerGameView = ({
   doubleDownEnabled,
   canDoubleDown,
   onBackToLobby,
+  deckRemaining,
+  deckTotal,
+  deckThresholdPercent,
 }: PlayerGameViewProps) => {
   useEffect(() => {
     const prevBodyOverflow = document.body.style.overflow;
@@ -225,6 +232,18 @@ const PlayerGameView = ({
                 <Badge variant="secondary" className="font-mono">BET: ${player.current_bet}</Badge>
               )}
             </div>
+          </div>
+
+          <div className="flex items-center justify-center mb-4">
+            <DeckMeter
+              remaining={deckRemaining}
+              total={deckTotal}
+              thresholdPercent={deckThresholdPercent}
+              size={52}
+              strokeWidth={5}
+              label="Shoe"
+              showStatusText={true}
+            />
           </div>
 
           {/* Betting Interface */}

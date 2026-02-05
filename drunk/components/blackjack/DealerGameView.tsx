@@ -4,6 +4,7 @@ import { Badge } from "../../components/ui/badge";
 import { DollarSign } from "lucide-react";
 import { useEffect, useRef } from "react";
 import CardHand from "./CardHand";
+import DeckMeter from "./DeckMeter";
 
 interface BlackjackPlayer {
   id: string;
@@ -43,6 +44,10 @@ interface DealerGameViewProps {
   loading: boolean;
   onBackToLobby?: () => void;
   onForceLobby?: () => void;
+  deckRemaining: number;
+  deckTotal: number;
+  deckThresholdPercent: number;
+  onReshuffle: () => void;
 }
 
 const DealerGameView = ({
@@ -62,6 +67,10 @@ const DealerGameView = ({
   loading,
   onBackToLobby,
   onForceLobby,
+  deckRemaining,
+  deckTotal,
+  deckThresholdPercent,
+  onReshuffle,
 }: DealerGameViewProps) => {
   const nonDealerPlayers = players.filter(p => !p.is_dealer);
   const anyBetsPlaced = nonDealerPlayers.some(p => p.has_placed_bet);
@@ -84,6 +93,8 @@ const DealerGameView = ({
   // Find the player whose turn it is
   const activeHand = hands.find(h => h.is_active && h.status === 'active');
   const activePlayer = activeHand ? players.find(p => p.id === activeHand.player_id) : null;
+  const deckPercent = deckTotal > 0 ? (deckRemaining / deckTotal) * 100 : 0;
+  const deckLow = deckPercent <= deckThresholdPercent;
 
   // Compute dealer net payout for this round based on players' hand results
   const dealerNet = nonDealerPlayers.reduce((acc, p) => {
@@ -255,12 +266,39 @@ const DealerGameView = ({
         <div className="max-w-7xl mx-auto">
           <div className="flex flex-col gap-2">
             {/* Dealer payout info */}
-            <div className="flex items-center justify-center gap-3 py-1">
-              <div className="text-xs font-bold uppercase tracking-widest opacity-70">Dealer Payout</div>
-              <div className={`text-lg font-black ${dealerNet > 0 ? 'text-green-600' : dealerNet < 0 ? 'text-red-600' : 'text-white'}`}>
-                {dealerNet > 0 ? `+$${dealerNet}` : (dealerNet < 0 ? `-$${Math.abs(dealerNet)}` : '$0')}
-              </div>
+          <div className="flex items-center justify-center gap-3 py-1">
+            <div className="text-xs font-bold uppercase tracking-widest opacity-70">Dealer Payout</div>
+            <div className={`text-lg font-black ${dealerNet > 0 ? 'text-green-600' : dealerNet < 0 ? 'text-red-600' : 'text-white'}`}>
+              {dealerNet > 0 ? `+$${dealerNet}` : (dealerNet < 0 ? `-$${Math.abs(dealerNet)}` : '$0')}
             </div>
+          </div>
+
+          <div className="flex flex-wrap items-center justify-between gap-3 rounded-md border border-border/60 bg-card/60 p-3">
+            <DeckMeter
+              remaining={deckRemaining}
+              total={deckTotal}
+              thresholdPercent={deckThresholdPercent}
+              size={56}
+              strokeWidth={6}
+              label="Shoe"
+              showStatusText={true}
+            />
+            <div className="flex items-center gap-2">
+              {deckLow && (
+                <div className="text-[11px] text-red-400 font-semibold uppercase tracking-wider">
+                  Reshuffle Recommended
+                </div>
+              )}
+              <Button
+                onClick={onReshuffle}
+                variant="outline"
+                size="sm"
+                className="uppercase tracking-widest text-[11px]"
+              >
+                Reshuffle
+              </Button>
+            </div>
+          </div>
 
             {gameStatus === 'betting' && anyBetsPlaced && !allBetsPlaced && (
               <Button 

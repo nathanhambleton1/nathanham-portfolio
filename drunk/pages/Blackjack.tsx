@@ -24,6 +24,9 @@ const supabaseUrl = 'https://kcyrvubzhsphpxfsewii.supabase.co';
 const supabaseAnonKey = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImtjeXJ2dWJ6aHNwaHB4ZnNld2lpIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjMxODAwMTcsImV4cCI6MjA3ODc1NjAxN30.8psClrpif-F1DWj67u2tErnU8-4ZYjw5LvEfRK3oHkI';
 const supabase = createClient(supabaseUrl, supabaseAnonKey);
 
+const CARDS_PER_DECK = 52;
+const RESHUFFLE_THRESHOLD_PERCENT = 25;
+
 type Screen = "join-create" | "enter-name" | "confirm-settings" | "lobby" | "game";
 type GameStatus = "lobby" | "betting" | "dealing" | "playing" | "dealer_turn" | "resolving" | "finished" | "table_idle";
 
@@ -42,6 +45,7 @@ interface BlackjackGame {
   dealer_status: string;
   turn_order: string[];
   current_turn_index: number | null;
+  last_reshuffle_at?: string | null;
   settings: {
     num_decks: number;
     hit_on_soft_17: boolean;
@@ -256,6 +260,100 @@ const Blackjack = () => {
     if (!card || typeof card !== 'string') return false;
     const suit = card.slice(-1).toUpperCase();
     return suit === 'H' || suit === 'D';
+  };
+
+  const getTotalCards = (numDecks: number) => numDecks * CARDS_PER_DECK;
+
+  const getReshuffleThreshold = (numDecks: number) =>
+    Math.ceil(getTotalCards(numDecks) * (RESHUFFLE_THRESHOLD_PERCENT / 100));
+
+  const updateShoeState = async (
+    deck: string[],
+    discard: string[],
+    lastReshuffleAt?: string | null
+  ) => {
+    if (!game) return;
+    const payload: any = { remaining_cards: deck, discard_pile: discard };
+    if (lastReshuffleAt !== undefined) {
+      payload.last_reshuffle_at = lastReshuffleAt;
+    }
+
+    await supabase
+      .from('blackjack_games')
+      .update(payload)
+      .eq('id', game.id);
+
+    setGame(prev => prev ? {
+      ...prev,
+      remaining_cards: [...deck],
+      discard_pile: [...discard],
+      ...(lastReshuffleAt !== undefined ? { last_reshuffle_at: lastReshuffleAt } : {})
+    } : prev);
+  };
+
+  const reshuffleShoe = async (reason: string, options?: { silent?: boolean }) => {
+    if (!game) return null;
+    const deck = generateDeck(game.settings.num_decks);
+    const discard: string[] = [];
+    const now = new Date().toISOString();
+
+    await updateShoeState(deck, discard, now);
+
+    const actionPayload: any = {
+      game_id: game.id,
+      action_type: 'shoe_reshuffled',
+      details: { reason }
+    };
+    if (game.current_round_id) actionPayload.round_id = game.current_round_id;
+    const actorId = player?.id || game.dealer_id;
+    if (actorId) actionPayload.player_id = actorId;
+
+    await supabase.from('blackjack_actions').insert([actionPayload]);
+
+    if (!options?.silent) {
+      toast({ title: 'Shoe reshuffled', description: 'A new shoe is now in play' });
+    }
+
+    return { deck, discard };
+  };
+
+  const ensureShoeReady = async (
+    deck: string[],
+    discard: string[],
+    options: { requiredCards?: number; reason?: string; silent?: boolean } = {}
+  ) => {
+    if (!game) return { deck, discard, reshuffled: false };
+    const threshold = getReshuffleThreshold(game.settings.num_decks);
+    const needsReshuffle =
+      deck.length < threshold ||
+      (options.requiredCards ? deck.length < options.requiredCards : false);
+
+    if (!needsReshuffle) {
+      return { deck, discard, reshuffled: false };
+    }
+
+    const reshuffled = await reshuffleShoe(options.reason || 'auto_low_cards', {
+      silent: options.silent ?? true
+    });
+
+    if (reshuffled) {
+      return { deck: reshuffled.deck, discard: reshuffled.discard, reshuffled: true };
+    }
+
+    return { deck, discard, reshuffled: false };
+  };
+
+  const drawFromShoe = async (
+    deck: string[],
+    discard: string[]
+  ): Promise<{ card: string | null; deck: string[]; discard: string[] }> => {
+    if (!game) return { card: null, deck, discard };
+    if (deck.length === 0) return { card: null, deck, discard };
+
+    const card = deck.pop()!;
+    discard.push(card);
+    await updateShoeState(deck, discard);
+    return { card, deck, discard };
   };
 
   // ============================================================================
@@ -831,6 +929,12 @@ const Blackjack = () => {
           name: `${name}'s Table`,
           status: 'lobby',
           remaining_cards: deck,
+          discard_pile: [],
+          dealer_hand: [],
+          dealer_visible_card: null,
+          dealer_status: 'waiting',
+          turn_order: [],
+          current_turn_index: null,
           settings: {
             num_decks: numDecks,
             hit_on_soft_17: !tempDealerStandsOnSoft17,
@@ -1023,6 +1127,10 @@ const Blackjack = () => {
     if (!game || !player?.is_dealer) return;
     
     try {
+      const deck = [...(game.remaining_cards || [])];
+      const discard = [...(game.discard_pile || [])];
+      await ensureShoeReady(deck, discard, { reason: 'auto_low_cards_before_round', silent: false });
+
       // Create a new round
       const { data: round, error: roundErr } = await supabase
         .from('blackjack_rounds')
@@ -1087,6 +1195,24 @@ const Blackjack = () => {
     } catch (e) {
       console.error('Update player order error:', e);
       toast({ title: 'Error', description: 'Failed to update player order' });
+    }
+  };
+
+  const handleReshuffleShoe = async () => {
+    if (!game || !player?.is_dealer) return;
+    const inRound = ['betting', 'dealing', 'playing', 'dealer_turn', 'resolving'].includes(game.status);
+    if (inRound) {
+      const ok = window.confirm(
+        'Reshuffle the shoe mid-round? This will reset the remaining deck during an active hand.'
+      );
+      if (!ok) return;
+    }
+
+    try {
+      await reshuffleShoe('manual', { silent: false });
+    } catch (e) {
+      console.error('Manual reshuffle error:', e);
+      toast({ title: 'Error', description: 'Failed to reshuffle the shoe' });
     }
   };
 
@@ -1160,37 +1286,6 @@ const Blackjack = () => {
   // DEALING & GAME FLOW
   // ============================================================================
 
-  const drawCard = async (): Promise<string | null> => {
-    if (!game) return null;
-    
-    let deck = [...game.remaining_cards];
-    let discard = [...game.discard_pile];
-    
-    // Reshuffle if needed (less than 25% remaining)
-    if (deck.length < (game.settings.num_decks * 52 * 0.25)) {
-      deck = generateDeck(game.settings.num_decks);
-      discard = [];
-      await supabase
-        .from('blackjack_games')
-        .update({ 
-          remaining_cards: deck, 
-          discard_pile: discard,
-          last_reshuffle_at: new Date().toISOString()
-        })
-        .eq('id', game.id);
-    }
-    
-    if (deck.length === 0) return null;
-    
-    const card = deck.pop()!;
-    await supabase
-      .from('blackjack_games')
-      .update({ remaining_cards: deck })
-      .eq('id', game.id);
-    
-    return card;
-  };
-
   const handleDealCards = async () => {
     if (!game || !player?.is_dealer || !game.current_round_id) return;
     
@@ -1215,12 +1310,16 @@ const Blackjack = () => {
           .eq('id', game.id);
       }
 
-      let deck = [...game.remaining_cards];
-      if (deck.length < (activePlayers.length * 2 + 2)) {
-        // Need to reshuffle
-        deck = generateDeck(game.settings.num_decks);
-        toast({ title: 'Reshuffling deck', description: 'Not enough cards remaining' });
-      }
+      let deck = [...(game.remaining_cards || [])];
+      let discard = [...(game.discard_pile || [])];
+      const requiredCards = (activePlayers.length * 2) + 2;
+      const ensured = await ensureShoeReady(deck, discard, {
+        requiredCards,
+        reason: 'auto_low_cards_before_deal',
+        silent: false
+      });
+      deck = ensured.deck;
+      discard = ensured.discard;
 
       // Deduct bets from player balances and create hand records
       for (const p of activePlayers) {
@@ -1253,8 +1352,11 @@ const Blackjack = () => {
 
       // ROUND 1: Deal first card to each player (clockwise)
       for (const p of orderedPlayers) {
-        if (deck.length === 0) break;
-        const card = deck.pop()!;
+        const draw = await drawFromShoe(deck, discard);
+        if (!draw.card) throw new Error('No cards left to deal');
+        deck = draw.deck;
+        discard = draw.discard;
+        const card = draw.card;
         
         // Fetch the hand
         const { data: handData } = await supabase
@@ -1288,7 +1390,11 @@ const Blackjack = () => {
       }
 
       // Deal first card to dealer (face up) - everyone sees this
-      const dealerCard1 = deck.pop()!;
+      const dealerDraw1 = await drawFromShoe(deck, discard);
+      if (!dealerDraw1.card) throw new Error('No cards left to deal');
+      deck = dealerDraw1.deck;
+      discard = dealerDraw1.discard;
+      const dealerCard1 = dealerDraw1.card;
       await supabase.from('blackjack_actions').insert([{
         game_id: game.id,
         round_id: game.current_round_id,
@@ -1300,15 +1406,18 @@ const Blackjack = () => {
       // Update game state so the first dealer card is visible immediately
       await supabase
         .from('blackjack_games')
-        .update({ remaining_cards: deck, dealer_hand: [dealerCard1], dealer_visible_card: dealerCard1 })
+        .update({ dealer_hand: [dealerCard1], dealer_visible_card: dealerCard1 })
         .eq('id', game.id);
 
       await dealCardWithDelay(1000);
 
       // ROUND 2: Deal second card to each player
       for (const p of orderedPlayers) {
-        if (deck.length === 0) break;
-        const card = deck.pop()!;
+        const draw = await drawFromShoe(deck, discard);
+        if (!draw.card) throw new Error('No cards left to deal');
+        deck = draw.deck;
+        discard = draw.discard;
+        const card = draw.card;
         
         const { data: handData } = await supabase
           .from('blackjack_hands')
@@ -1347,7 +1456,11 @@ const Blackjack = () => {
       }
 
       // Deal second card to dealer (face down - hidden)
-      const dealerCard2 = deck.pop()!;
+      const dealerDraw2 = await drawFromShoe(deck, discard);
+      if (!dealerDraw2.card) throw new Error('No cards left to deal');
+      deck = dealerDraw2.deck;
+      discard = dealerDraw2.discard;
+      const dealerCard2 = dealerDraw2.card;
       await supabase.from('blackjack_actions').insert([{
         game_id: game.id,
         round_id: game.current_round_id,
@@ -1361,7 +1474,6 @@ const Blackjack = () => {
       await supabase
         .from('blackjack_games')
         .update({
-          remaining_cards: deck,
           dealer_hand: [dealerCard1, '__HIDDEN__'],
           dealer_visible_card: dealerCard1,
           status: 'playing',
@@ -1438,21 +1550,24 @@ const Blackjack = () => {
     if (!myHand || myHand.status !== 'active') return;
 
     try {
-      let deck = [...game.remaining_cards];
+      let deck = [...(game.remaining_cards || [])];
+      let discard = [...(game.discard_pile || [])];
       if (deck.length === 0) {
         toast({ title: 'Error', description: 'No cards left in deck' });
         return;
       }
 
-      const card = deck.pop()!;
+      const draw = await drawFromShoe(deck, discard);
+      if (!draw.card) {
+        toast({ title: 'Error', description: 'No cards left in deck' });
+        return;
+      }
+      deck = draw.deck;
+      discard = draw.discard;
+      const card = draw.card;
       const newCards = [...myHand.cards, card];
       const handValue = calculateHandValue(newCards);
       const isBusted = handValue.value > 21;
-
-      await supabase
-        .from('blackjack_games')
-        .update({ remaining_cards: deck })
-        .eq('id', game.id);
 
       await supabase
         .from('blackjack_hands')
@@ -1534,10 +1649,21 @@ const Blackjack = () => {
     }
 
     try {
-      let deck = [...game.remaining_cards];
-      if (deck.length === 0) return;
+      let deck = [...(game.remaining_cards || [])];
+      let discard = [...(game.discard_pile || [])];
+      if (deck.length === 0) {
+        toast({ title: 'Error', description: 'No cards left in deck' });
+        return;
+      }
 
-      const card = deck.pop()!;
+      const draw = await drawFromShoe(deck, discard);
+      if (!draw.card) {
+        toast({ title: 'Error', description: 'No cards left in deck' });
+        return;
+      }
+      deck = draw.deck;
+      discard = draw.discard;
+      const card = draw.card;
       const newCards = [...myHand.cards, card];
       const handValue = calculateHandValue(newCards);
       const isBusted = handValue.value > 21;
@@ -1550,11 +1676,6 @@ const Blackjack = () => {
           times_doubled: player.times_doubled + 1
         })
         .eq('id', player.id);
-
-      await supabase
-        .from('blackjack_games')
-        .update({ remaining_cards: deck })
-        .eq('id', game.id);
 
       await supabase
         .from('blackjack_hands')
@@ -1653,7 +1774,8 @@ const Blackjack = () => {
           console.error('Failed to fetch hidden dealer card from actions', e);
         }
       }
-      let deck = [...game.remaining_cards];
+      let deck = [...(game.remaining_cards || [])];
+      let discard = [...(game.discard_pile || [])];
       
       // Reveal hidden card
       await supabase.from('blackjack_actions').insert([{
@@ -1668,9 +1790,11 @@ const Blackjack = () => {
       const hitSoft17 = game.settings.hit_on_soft_17;
 
       while (handValue.value < 17 || (handValue.value === 17 && handValue.soft && hitSoft17)) {
-        if (deck.length === 0) break;
-        
-        const card = deck.pop()!;
+        const draw = await drawFromShoe(deck, discard);
+        if (!draw.card) break;
+        deck = draw.deck;
+        discard = draw.discard;
+        const card = draw.card;
         dealerCards.push(card);
         handValue = calculateHandValue(dealerCards);
 
@@ -1689,7 +1813,6 @@ const Blackjack = () => {
       await supabase
         .from('blackjack_games')
         .update({
-          remaining_cards: deck,
           dealer_hand: dealerCards,
           dealer_status: dealerBusted ? 'busted' : (dealerBlackjack ? 'blackjack' : 'stood'),
           status: 'resolving'
@@ -1705,13 +1828,18 @@ const Blackjack = () => {
       }]);
 
       // Resolve all hands
-      await resolveRound(dealerCards, handValue.value, dealerBusted);
+      await resolveRound(dealerCards, handValue.value, dealerBusted, deck.length);
     } catch (e) {
       console.error('Play dealer hand error:', e);
     }
   };
 
-  const resolveRound = async (dealerCards: string[], dealerValue: number, dealerBusted: boolean) => {
+  const resolveRound = async (
+    dealerCards: string[],
+    dealerValue: number,
+    dealerBusted: boolean,
+    remainingCount?: number
+  ) => {
     if (!game || !game.current_round_id) return;
 
     try {
@@ -1848,6 +1976,14 @@ const Blackjack = () => {
         .update({ current_bet: 0, has_placed_bet: false })
         .eq('game_id', game.id);
 
+      const finalRemaining = typeof remainingCount === 'number'
+        ? remainingCount
+        : (game.remaining_cards ? game.remaining_cards.length : 0);
+      const threshold = getReshuffleThreshold(game.settings.num_decks);
+      if (finalRemaining < threshold) {
+        await reshuffleShoe('auto_low_cards_after_round', { silent: !player?.is_dealer });
+      }
+
       toast({ title: 'Round Complete', description: 'Results have been calculated' });
     } catch (e) {
       console.error('Resolve round error:', e);
@@ -1960,6 +2096,10 @@ const Blackjack = () => {
   }
 
   if ((screen === "lobby" || screen === "game") && game && player) {
+    const deckTotal = getTotalCards(game.settings.num_decks);
+    const deckRemaining = game.remaining_cards ? game.remaining_cards.length : 0;
+    const deckThresholdPercent = RESHUFFLE_THRESHOLD_PERCENT;
+
     const renderActiveView = () => {
       if (screen === "lobby") {
         return (
@@ -2007,6 +2147,10 @@ const Blackjack = () => {
             onForceLobby={handleGoToLobby}
             onBackToLobby={() => setScreen('lobby')}
             loading={loading}
+            deckRemaining={deckRemaining}
+            deckTotal={deckTotal}
+            deckThresholdPercent={deckThresholdPercent}
+            onReshuffle={handleReshuffleShoe}
           />
         );
       } else {
@@ -2031,6 +2175,9 @@ const Blackjack = () => {
             doubleDownEnabled={game.settings.double_down_enabled}
             canDoubleDown={canDoubleDown}
             onBackToLobby={() => setScreen('lobby')}
+            deckRemaining={deckRemaining}
+            deckTotal={deckTotal}
+            deckThresholdPercent={deckThresholdPercent}
           />
         );
       }
