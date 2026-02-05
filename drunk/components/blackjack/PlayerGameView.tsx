@@ -123,43 +123,13 @@ const PlayerGameView = ({
     return () => window.removeEventListener('resize', updateCardScale);
   }, []);
 
-  // State for animating dealer's cards sequentially
-  const [displayedDealerCards, setDisplayedDealerCards] = useState<string[]>([]);
-
-  useEffect(() => {
-    if (showFullDealerHand) {
-      setDisplayedDealerCards([]);
-      const interval = setInterval(() => {
-        setDisplayedDealerCards(prev => {
-          if (prev.length < dealerHand.length) {
-            return [...prev, dealerHand[prev.length]];
-          } else {
-            clearInterval(interval);
-            return prev;
-          }
-        });
-      }, 500); // 500ms delay between each card
-      return () => clearInterval(interval);
-    } else {
-      setDisplayedDealerCards([]);
-    }
-  }, [showFullDealerHand, dealerHand]);
-
-  const myHandValue = myHand ? calculateHandValue(myHand.cards) : null;
   const dealerDisplayCards = showFullDealerHand
     ? dealerHand
     : (() => {
         // Show dealer cards as they arrive during dealing
         // First card shows immediately, second card shows as __HIDDEN__
-        if (dealerHand && dealerHand.length >= 2) {
-          // Both cards are in the database, show them (second might be __HIDDEN__)
-          return dealerHand;
-        }
-        if (dealerHand && dealerHand.length === 1) {
-          // Only first card dealt, show it with a hidden placeholder
-          return [dealerHand[0], '__HIDDEN__'];
-        }
-        // No cards yet - return empty to avoid showing placeholders prematurely
+        if (dealerHand && dealerHand.length >= 2) return dealerHand;
+        if (dealerHand && dealerHand.length === 1) return [dealerHand[0]];
         return [];
       })();
   // const dealerValue = showFullDealerHand ? calculateHandValue(dealerHand) : null;
@@ -198,18 +168,17 @@ const PlayerGameView = ({
             paddingBottom: '6rem'
           }}
         >
-           {/* Dealer Hand - Top (only show after betting phase) */}
-           {gameStatus !== 'betting' && (
-             <div className="flex justify-center origin-center">
-               <CardHand
-                 cards={showFullDealerHand ? displayedDealerCards : dealerDisplayCards}
-                 label="Dealer"
-                 // value and soft removed to hide hand value
-                 scale={cardScale}
-                 animateNewCards={true}
-               />
-             </div>
-           )}
+           {/* Dealer Hand - Top (reserve space even before cards are dealt) */}
+           <div className="flex justify-center origin-center">
+             <CardHand
+               cards={dealerDisplayCards}
+               label="Dealer"
+               // value and soft removed to hide hand value
+               scale={cardScale}
+               animateNewCards={true}
+               showEmptySlot={true}
+             />
+           </div>
 
            {/* Player's Hand - Center */}
            {myHand && myHand.cards.length > 0 && (

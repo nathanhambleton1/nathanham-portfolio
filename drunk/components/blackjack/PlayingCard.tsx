@@ -29,25 +29,35 @@ const PlayingCard = ({
   backImageOffsetY = BACK_IMAGE_OFFSET_Y
 }: PlayingCardProps) => {
 
+  const initialMotion = animateIn ? { scale: 0, rotateY: 180, x: -100, y: -100 } : false;
+  const animateMotion = { scale: 1, rotateY: 0, x: 0, y: 0 };
+  const transitionMotion = { 
+    duration: 0.6, 
+    delay,
+    type: "spring",
+    stiffness: 260,
+    damping: 20
+  };
+
   if (hidden || card === '__HIDDEN__') {
     return (
       <motion.div
-          initial={animateIn ? { scale: 0, rotateY: 180, x: -100, y: -100 } : false}
-          animate={{ scale: 1, rotateY: 0, x: 0, y: 0 }}
-          transition={{ duration: 0.5, delay }}
-          className={cn(
-            "relative bg-gradient-to-br from-blue-900 to-blue-700",
-            "rounded-lg shadow-xl border-2 border-white/20 overflow-hidden",
-            "flex items-center justify-center",
-            className
-          )}
-          style={{
-            width: `${BASE_WIDTH * (scale ?? 1)}px`,
-            height: `${BASE_HEIGHT * (scale ?? 1)}px`,
-            minWidth: `${BASE_WIDTH * (scale ?? 1)}px`,
-            minHeight: `${BASE_HEIGHT * (scale ?? 1)}px`
-          }}
-        >
+        initial={initialMotion}
+        animate={animateMotion}
+        transition={transitionMotion}
+        className={cn(
+          "relative bg-gradient-to-br from-blue-900 to-blue-700",
+          "rounded-lg shadow-xl border-2 border-white/20 overflow-hidden",
+          "flex items-center justify-center",
+          className
+        )}
+        style={{
+          width: `${BASE_WIDTH * (scale ?? 1)}px`,
+          height: `${BASE_HEIGHT * (scale ?? 1)}px`,
+          minWidth: `${BASE_WIDTH * (scale ?? 1)}px`,
+          minHeight: `${BASE_HEIGHT * (scale ?? 1)}px`
+        }}
+      >
         <div className="absolute inset-0 bg-[repeating-linear-gradient(45deg,transparent,transparent_10px,rgba(255,255,255,0.05)_10px,rgba(255,255,255,0.05)_20px)] rounded-lg" />
         {/* Back image: centered and transformable; confined by overflow-hidden on the card */}
         <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
@@ -170,15 +180,9 @@ const PlayingCard = ({
 
   const cardContent = (
     <motion.div
-      initial={animateIn ? { scale: 0, rotateY: 180, x: -100, y: -100 } : false}
-      animate={{ scale: 1, rotateY: 0, x: 0, y: 0 }}
-      transition={{ 
-        duration: 0.6, 
-        delay,
-        type: "spring",
-        stiffness: 260,
-        damping: 20
-      }}
+      initial={initialMotion}
+      animate={animateMotion}
+      transition={transitionMotion}
       className={cn(
         "relative bg-white rounded-lg shadow-2xl border-2 border-gray-300 overflow-hidden",
         "flex flex-col",

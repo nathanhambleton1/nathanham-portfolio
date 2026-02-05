@@ -12,6 +12,7 @@ interface CardHandProps {
   large?: boolean;
   scale?: number; // optional scale override
   animateNewCards?: boolean;
+  showEmptySlot?: boolean;
 }
 
 const CardHand = ({ 
@@ -22,9 +23,14 @@ const CardHand = ({
   className,
   large = false,
   scale: propScale,
-  animateNewCards = false
+  animateNewCards = false,
+  showEmptySlot = false
 }: CardHandProps) => {
   const scale = propScale !== undefined ? propScale : (large ? LARGE_SCALE : 1);
+  const handWidth =
+    cards.length > 0
+      ? Math.max(0, ((cards.length - 1) * (OVERLAP_SPACING * scale)) + (BASE_WIDTH * scale))
+      : (BASE_WIDTH * scale);
   return (
     <div className={cn("flex flex-col items-center gap-3", className)}>
       {label && (
@@ -39,9 +45,21 @@ const CardHand = ({
         style={{ minHeight: `${BASE_HEIGHT * scale + 24}px`,
                  // compute the width of the whole hand so absolute-positioned cards
                  // are contained and the group can be centered by the parent
-                 width: `${Math.max(0, ((cards.length - 1) * (OVERLAP_SPACING * scale)) + (BASE_WIDTH * scale))}px`
+                 width: `${handWidth}px`
         }}
       >
+        {showEmptySlot && cards.length === 0 && (
+          <div
+            className="absolute rounded-lg border border-dashed border-white/25 bg-white/5"
+            style={{
+              width: `${BASE_WIDTH * scale}px`,
+              height: `${BASE_HEIGHT * scale}px`,
+              left: '50%',
+              top: '50%',
+              transform: 'translate(-50%, -50%)'
+            }}
+          />
+        )}
         {cards.map((card, idx) => {
           const left = idx * (OVERLAP_SPACING * scale);
           return (
