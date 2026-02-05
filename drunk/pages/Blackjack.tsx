@@ -634,24 +634,60 @@ const Blackjack = () => {
       const params = new URLSearchParams(window.location.search);
       const invite = params.get('invite') || params.get('code');
       if (invite) {
-        // Clear any previously cached session so invite always forces join flow
         try {
+          // Clear any cached session identifiers but preserve a stored name
           localStorage.removeItem(STORAGE_KEY_CODE);
-          localStorage.removeItem(STORAGE_KEY_NAME);
           localStorage.removeItem(STORAGE_KEY_PLAYER_ID);
         } catch (e) {
           // ignore
         }
-        setGameCode(invite.toUpperCase());
+
+        const normalized = invite.toUpperCase();
+        setGameCode(normalized);
         setMode('join');
-        // Ensure name input is empty for invite-join flows
-        setName('');
-        setScreen('enter-name');
+
+        // If a user name is already stored, attempt to auto-join the invite
+        const storedName = (() => {
+          try { return localStorage.getItem(STORAGE_KEY_NAME); } catch { return null; }
+        })();
+
         // remove query params from URL to keep it clean
         try {
           navigate(window.location.pathname, { replace: true });
         } catch (e) {
           // ignore navigate errors
+        }
+
+        if (storedName) {
+          (async () => {
+            try {
+              const gameData = await fetchGame(normalized);
+              if (!gameData) {
+                // fall back to enter-name flow
+                setName('');
+                setScreen('enter-name');
+                return;
+              }
+
+              // prefill and attempt to join with the stored name
+              setGame(gameData);
+              setName(storedName);
+              setScreen('enter-name');
+
+              // call the same submit handler to join (will create or re-use player)
+              // delay slightly to ensure state updates propagate
+              setTimeout(() => {
+                void handleNameSubmit();
+              }, 50);
+            } catch (e) {
+              setName('');
+              setScreen('enter-name');
+            }
+          })();
+        } else {
+          // No stored name - show enter-name so user can type
+          setName('');
+          setScreen('enter-name');
         }
       }
     } catch (err) {
@@ -707,13 +743,25 @@ const Blackjack = () => {
       // Joining an existing game as a player
       setLoading(true);
       try {
-        if (!game) throw new Error('No game selected');
+        // Ensure we have a game object; if not, try to fetch using the code
+        let gameToUse = game;
+        if (!gameToUse) {
+          if (!gameCode || !gameCode.trim()) throw new Error('No game selected');
+          const fetched = await fetchGame(gameCode);
+          if (!fetched) {
+            setError('Game not found');
+            setLoading(false);
+            return;
+          }
+          gameToUse = fetched;
+          setGame(fetched);
+        }
 
         // Check if player already exists
         const { data: existingPlayers } = await supabase
           .from('blackjack_players')
           .select('*')
-          .eq('game_id', game.id)
+          .eq('game_id', gameToUse.id)
           .eq('name', cleaned.toUpperCase());
 
         let currentPlayer: BlackjackPlayer;
@@ -729,7 +777,7 @@ const Blackjack = () => {
           const { data: newPlayer, error: joinErr } = await supabase
             .from('blackjack_players')
             .insert([{
-              game_id: game.id,
+              game_id: gameToUse.id,
               name: cleaned.toUpperCase(),
               is_dealer: false,
               balance: 0, // Players start with 0 until dealer gives chips
@@ -742,7 +790,7 @@ const Blackjack = () => {
 
           // Log action
           await supabase.from('blackjack_actions').insert([{
-            game_id: game.id,
+            game_id: gameToUse.id,
             player_id: currentPlayer.id,
             action_type: 'player_joined',
             details: { name: cleaned.toUpperCase() }
@@ -751,13 +799,13 @@ const Blackjack = () => {
 
         setPlayer(currentPlayer);
         localStorage.setItem(STORAGE_KEY_NAME, cleaned.toUpperCase());
-        localStorage.setItem(STORAGE_KEY_CODE, game.code);
+        localStorage.setItem(STORAGE_KEY_CODE, gameToUse.code);
         localStorage.setItem(STORAGE_KEY_PLAYER_ID, currentPlayer.id);
         
-        const players = await fetchPlayers(game.id);
+        const players = await fetchPlayers(gameToUse.id);
         setPlayersList(players);
         
-        setScreen(game.status === 'lobby' ? 'lobby' : 'game');
+        setScreen(gameToUse.status === 'lobby' ? 'lobby' : 'game');
       } catch (err: any) {
         setError(err.message || "Failed to join game");
       } finally {
@@ -1027,6 +1075,8 @@ const Blackjack = () => {
     if (!game || !player?.is_dealer) return;
 
     try {
+      // Optimistically update local game state to prevent UI reordering jitter
+      setGame(prev => prev ? { ...prev, turn_order: orderedPlayerIds } : prev);
       // Update the turn_order in the game
       await supabase
         .from('blackjack_games')

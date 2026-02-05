@@ -89,40 +89,58 @@ const LobbyScreen = ({
     setDragOverIndex(null);
   }, [playersList, game?.turn_order]);
 
-  const handleDragStart = (e: React.DragEvent, index: number) => {
-    try { e.dataTransfer.setData('text/plain', String(index)); } catch (err) {}
-    e.dataTransfer.effectAllowed = 'move';
-    setDraggedIndex(index);
-  };
-
-  const handleDragOver = (e: React.DragEvent, index: number) => {
-    e.preventDefault();
-    setDragOverIndex(index);
-  };
-
-  const handleDragLeave = () => {
-    setDragOverIndex(null);
-  };
-
-  const handleDrop = (e: React.DragEvent, dropIndex: number) => {
-    e.preventDefault();
-    if (draggedIndex === null || !isDealer || !onUpdatePlayerOrder) return;
+  const applyReorder = (fromIndex: number, toIndex: number) => {
+    if (!isDealer || !onUpdatePlayerOrder) return;
+    if (fromIndex === toIndex) return;
 
     const reorderedPlayers = [...orderedNonDealerPlayers];
-    const [draggedPlayer] = reorderedPlayers.splice(draggedIndex, 1);
-    reorderedPlayers.splice(dropIndex, 0, draggedPlayer);
+    const [draggedPlayer] = reorderedPlayers.splice(fromIndex, 1);
+    reorderedPlayers.splice(toIndex, 0, draggedPlayer);
 
     // Optimistically update UI
     setOrderedNonDealerPlayers(reorderedPlayers);
 
     // Persist new order
     onUpdatePlayerOrder(reorderedPlayers.map(p => p.id));
+  };
 
+  const getIndexFromPoint = (x: number, y: number) => {
+    const el = document.elementFromPoint(x, y);
+    const row = el?.closest?.('[data-player-index]') as HTMLElement | null;
+    if (!row) return null;
+    const idx = Number(row.dataset.playerIndex);
+    return Number.isFinite(idx) ? idx : null;
+  };
+
+  const handlePointerDown = (e: React.PointerEvent, index: number) => {
+    if (!isDealer || !onUpdatePlayerOrder) return;
+    (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
+    setDraggedIndex(index);
+    setDragOverIndex(index);
+  };
+
+  const handlePointerMove = (e: React.PointerEvent) => {
+    if (draggedIndex === null) return;
+    const idx = getIndexFromPoint(e.clientX, e.clientY);
+    if (idx === null) return;
+    if (idx !== dragOverIndex) setDragOverIndex(idx);
+  };
+
+  const handlePointerUp = (e: React.PointerEvent) => {
+    if (draggedIndex === null) return;
+    try {
+      (e.currentTarget as HTMLElement).releasePointerCapture(e.pointerId);
+    } catch (err) {}
+    const dropIndex = dragOverIndex ?? draggedIndex;
+    applyReorder(draggedIndex, dropIndex);
     setDraggedIndex(null);
     setDragOverIndex(null);
   };
 
-  const handleDragEnd = () => {
+  const handlePointerCancel = (e: React.PointerEvent) => {
+    try {
+      (e.currentTarget as HTMLElement).releasePointerCapture(e.pointerId);
+    } catch (err) {}
     setDraggedIndex(null);
     setDragOverIndex(null);
   };
@@ -153,12 +171,7 @@ const LobbyScreen = ({
               orderedNonDealerPlayers.map((p, index) => (
                 <div
                   key={p.id}
-                  draggable={isDealer && onUpdatePlayerOrder !== undefined}
-                  onDragStart={(e) => handleDragStart(e, index)}
-                  onDragOver={(e) => handleDragOver(e, index)}
-                  onDragLeave={handleDragLeave}
-                  onDrop={(e) => handleDrop(e, index)}
-                  onDragEnd={handleDragEnd}
+                  data-player-index={index}
                   className={`flex items-center justify-between p-3 bg-muted rounded-lg transition-all ${
                     isDealer && onUpdatePlayerOrder ? 'cursor-move' : ''
                   } ${
@@ -169,7 +182,18 @@ const LobbyScreen = ({
                 >
                   <div className="flex items-center gap-3">
                     {isDealer && onUpdatePlayerOrder && (
-                      <GripVertical className="w-4 h-4 text-muted-foreground" />
+                      <span
+                        className="cursor-grab touch-none"
+                        onPointerDown={(e) => handlePointerDown(e, index)}
+                        onPointerMove={handlePointerMove}
+                        onPointerUp={handlePointerUp}
+                        onPointerCancel={handlePointerCancel}
+                        aria-label="Reorder player"
+                        role="button"
+                        tabIndex={0}
+                      >
+                        <GripVertical className="w-4 h-4 text-muted-foreground" />
+                      </span>
                     )}
                     <div className={`w-3 h-3 rounded-full ${p.is_online ? 'bg-green-500' : 'bg-gray-400'}`} />
                     <div>
