@@ -5,12 +5,23 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "../co
 import { Input } from "../components/ui/input";
 import { Switch } from "../components/ui/switch";
 import { Badge } from "../components/ui/badge";
+import {
+  AlertDialog,
+  AlertDialogContent,
+  AlertDialogHeader,
+  AlertDialogFooter,
+  AlertDialogTitle,
+  AlertDialogDescription,
+  AlertDialogAction,
+  AlertDialogCancel,
+} from "../components/ui/alert-dialog";
 import { QRCodeSVG } from "qrcode.react";
-import { Copy, QrCode, Users, Crown, DollarSign, Plus, Minus, Play, Clock, Check, X } from "lucide-react";
+import { Copy, QrCode, Users, Crown, DollarSign, Plus, Minus, Play, Clock, Check, X, ChevronDown } from "lucide-react";
 import { createClient } from '@supabase/supabase-js';
 import { useNavigate } from "react-router-dom";
 import { toast } from "../components/ui/use-toast";
 import { Toaster } from "../components/ui/toaster";
+import { ThemeSelector } from "../../src/components/ThemeSelector";
 import JoinCreateScreen from "../components/blackjack/JoinCreateScreen";
 import EnterNameScreen from "../components/blackjack/EnterNameScreen";
 import ConfirmSettingsScreen from "../components/blackjack/ConfirmSettingsScreen";
@@ -57,6 +68,7 @@ interface BlackjackGame {
     min_bet: number;
     max_bet: number;
     bet_increments: number[];
+    chips_enabled: boolean;
   };
 }
 
@@ -69,6 +81,8 @@ interface BlackjackPlayer {
   seat_position: number | null;
   balance: number;
   total_bought_in: number;
+  buy_in_with_sips: boolean;
+  sips_owed: number;
   current_bet: number;
   has_placed_bet: boolean;
   // Stats
@@ -121,6 +135,7 @@ const Blackjack = () => {
   const STORAGE_KEY_NAME = "blackjack:name";
   const STORAGE_KEY_RECENT = "blackjack:recentGames";
   const STORAGE_KEY_PLAYER_ID = "blackjack:playerId";
+  const STORAGE_KEY_SOUND = "blackjack:soundEnabled";
 
   const [screen, setScreen] = useState<Screen>("join-create");
   const [gameCode, setGameCode] = useState("");
@@ -137,6 +152,7 @@ const Blackjack = () => {
   const [tempSplitEnabled, setTempSplitEnabled] = useState<boolean>(true);
   const [tempMaxSplits, setTempMaxSplits] = useState<string>("3");
   const [tempNumberOfDecks, setTempNumberOfDecks] = useState<string>("6");
+  const [tempChipsEnabled, setTempChipsEnabled] = useState<boolean>(true);
   
   // Game state
   const [game, setGame] = useState<BlackjackGame | null>(null);
@@ -154,10 +170,21 @@ const Blackjack = () => {
   const [qrDialogOpen, setQrDialogOpen] = useState(false);
   // Settings Dialog (accessible at all times)
   const [settingsDialogOpen, setSettingsDialogOpen] = useState(false);
+  const [settingsOpenSection, setSettingsOpenSection] = useState<'game' | 'players' | null>(null);
+  const [confirmRemoveOpen, setConfirmRemoveOpen] = useState(false);
+  const [pendingRemove, setPendingRemove] = useState<{ id: string; name?: string } | null>(null);
   
   // Chip request dialog (for players)
   const [chipRequestDialogOpen, setChipRequestDialogOpen] = useState(false);
   const [chipRequestAmount, setChipRequestAmount] = useState<string>("");
+  const [soundEnabled, setSoundEnabled] = useState<boolean>(() => {
+    try {
+      const stored = typeof window !== "undefined" ? localStorage.getItem(STORAGE_KEY_SOUND) : null;
+      return stored !== null ? stored === "true" : true;
+    } catch {
+      return true;
+    }
+  });
 
   const navigate = useNavigate();
   const channelRef = useRef<any>(null);
@@ -170,6 +197,8 @@ const Blackjack = () => {
   const handsRef = useRef<BlackjackHand[]>([]);
   const insuranceResponsesRef = useRef<Record<string, 'taken' | 'declined'>>({});
   const insuranceTimeoutRef = useRef<number | null>(null);
+  const chipsEnabled = game?.settings?.chips_enabled ?? true;
+  const canTrackChipsForPlayer = (p?: BlackjackPlayer | null) => !!p && chipsEnabled && !p.buy_in_with_sips;
 
   // ============================================================================
   // HELPER FUNCTIONS
@@ -187,6 +216,13 @@ const Blackjack = () => {
       const up = [code, ...recentGames.filter((c) => c !== code)].slice(0, 3);
       setRecentGames(up);
       persistRecentGames(up);
+    } catch (e) { /* ignore */ }
+  };
+
+  const handleToggleSound = (enabled: boolean) => {
+    setSoundEnabled(enabled);
+    try {
+      if (typeof window !== "undefined") localStorage.setItem(STORAGE_KEY_SOUND, String(enabled));
     } catch (e) { /* ignore */ }
   };
 
@@ -315,9 +351,9 @@ const Blackjack = () => {
     } : prev);
   };
 
-  const reshuffleShoe = async (reason: string, options?: { silent?: boolean }) => {
+  const reshuffleShoe = async (reason: string, options?: { silent?: boolean; numDecks?: number }) => {
     if (!game) return null;
-    const deck = generateDeck(game.settings.num_decks);
+    const deck = generateDeck(options?.numDecks ?? game.settings.num_decks);
     const discard: string[] = [];
     const now = new Date().toISOString();
 
@@ -1050,6 +1086,8 @@ const Blackjack = () => {
               name: cleaned.toUpperCase(),
               is_dealer: false,
               balance: 0, // Players start with 0 until dealer gives chips
+              buy_in_with_sips: false,
+              sips_owed: 0,
             }])
             .select()
             .single();
@@ -1116,7 +1154,8 @@ const Blackjack = () => {
             max_splits: parseInt(tempMaxSplits),
             min_bet: 1,
             max_bet: 100,
-            bet_increments: [1, 2, 5, 10, 25]
+            bet_increments: [1, 2, 5, 10, 25],
+            chips_enabled: tempChipsEnabled
           }
         }])
         .select()
@@ -1132,6 +1171,8 @@ const Blackjack = () => {
           name: name.toUpperCase(),
           is_dealer: true,
           balance: 999999, // Dealer has unlimited chips (the house)
+          buy_in_with_sips: false,
+          sips_owed: 0,
         }])
         .select()
         .single();
@@ -1197,13 +1238,116 @@ const Blackjack = () => {
   // DEALER ACTIONS
   // ============================================================================
 
+  const updateGameSettings = async (
+    updates: Partial<BlackjackGame['settings']>,
+    options: { reshuffle?: boolean } = {}
+  ) => {
+    if (!game || !player?.is_dealer) {
+      try { toast({ title: 'Not allowed', description: 'Only the dealer can change game settings.' }); } catch {}
+      return;
+    }
+
+    const baseSettings = { ...game.settings, chips_enabled: game.settings?.chips_enabled ?? true };
+    const nextSettings = { ...baseSettings, ...updates };
+
+    try {
+      await supabase
+        .from('blackjack_games')
+        .update({ settings: nextSettings, updated_at: new Date().toISOString() })
+        .eq('id', game.id);
+
+      setGame(prev => prev ? { ...prev, settings: nextSettings } : prev);
+
+      if (options.reshuffle) {
+        await reshuffleShoe('settings_change', { silent: false, numDecks: nextSettings.num_decks });
+      }
+    } catch (e) {
+      console.error('Update settings error:', e);
+      toast({ title: 'Error', description: 'Failed to update game settings' });
+    }
+  };
+
+  const handleTogglePlayerSips = async (playerId: string, enabled: boolean) => {
+    if (!game || !player) return;
+    const isSelf = player.id === playerId;
+    if (!player.is_dealer && !isSelf) {
+      try { toast({ title: 'Not allowed', description: 'You can only change your own buy-in.' }); } catch {}
+      return;
+    }
+    const targetPlayer = playersList.find(p => p.id === playerId);
+    if (targetPlayer?.is_dealer) {
+      try { toast({ title: 'Dealer excluded', description: 'Dealer buy-ins are always chips.' }); } catch {}
+      return;
+    }
+
+    try {
+      await supabase
+        .from('blackjack_players')
+        .update({ buy_in_with_sips: enabled })
+        .eq('id', playerId);
+    } catch (e) {
+      console.error('Toggle sip mode error:', e);
+      toast({ title: 'Error', description: 'Failed to update player buy-in' });
+    }
+  };
+
+  const requestRemovePlayer = (id: string, name?: string) => {
+    setPendingRemove({ id, name });
+    setConfirmRemoveOpen(true);
+  };
+
+  const handleConfirmRemovePlayer = async () => {
+    if (!game || !player?.is_dealer || !pendingRemove) return;
+    const inRound = ['betting', 'dealing', 'insurance', 'playing', 'dealer_turn', 'resolving'].includes(game.status);
+    if (inRound) {
+      try { toast({ title: 'Wait for round end', description: 'Remove players between rounds.' }); } catch {}
+      return;
+    }
+
+    try {
+      await supabase
+        .from('blackjack_players')
+        .delete()
+        .eq('id', pendingRemove.id);
+
+      if (game.turn_order && game.turn_order.length > 0) {
+        const nextOrder = game.turn_order.filter(id => id !== pendingRemove.id);
+        await supabase
+          .from('blackjack_games')
+          .update({ turn_order: nextOrder })
+          .eq('id', game.id);
+      }
+
+      await supabase.from('blackjack_actions').insert([{
+        game_id: game.id,
+        player_id: player.id,
+        action_type: 'player_removed',
+        details: { removed_player_id: pendingRemove.id, removed_player_name: pendingRemove.name }
+      }]);
+
+      setConfirmRemoveOpen(false);
+      setPendingRemove(null);
+    } catch (e) {
+      console.error('Remove player error:', e);
+      toast({ title: 'Error', description: 'Failed to remove player' });
+    }
+  };
+
   const handleGiveChips = async (playerId: string, amount: number) => {
     if (!game || !player?.is_dealer) return;
+    if (!chipsEnabled) {
+      toast({ title: 'Chips disabled', description: 'This table is not tracking chips.' });
+      return;
+    }
     
     try {
       // Update player balance
       const targetPlayer = playersList.find(p => p.id === playerId);
       if (!targetPlayer) return;
+      if (targetPlayer.buy_in_with_sips) {
+        toast({ title: 'Sip mode', description: `${targetPlayer.name} is buying in with sips.` });
+        return;
+      }
 
       await supabase
         .from('blackjack_players')
@@ -1231,6 +1375,10 @@ const Blackjack = () => {
 
   const handleApproveChipRequest = async (requestId: string, approve: boolean) => {
     if (!game || !player?.is_dealer) return;
+    if (!chipsEnabled) {
+      toast({ title: 'Chips disabled', description: 'This table is not tracking chips.' });
+      return;
+    }
     
     try {
       const request = chipRequests.find(r => r.id === requestId);
@@ -1240,6 +1388,10 @@ const Blackjack = () => {
         // Update player balance
         const targetPlayer = playersList.find(p => p.id === request.player_id);
         if (targetPlayer) {
+          if (targetPlayer.buy_in_with_sips) {
+            toast({ title: 'Sip mode', description: `${targetPlayer.name} is buying in with sips.` });
+            return;
+          }
           await supabase
             .from('blackjack_players')
             .update({ 
@@ -1394,6 +1546,14 @@ const Blackjack = () => {
 
   const handleRequestChips = async () => {
     if (!game || !player || player.is_dealer) return;
+    if (!chipsEnabled) {
+      toast({ title: 'Chips disabled', description: 'This table is not tracking chips.' });
+      return;
+    }
+    if (player.buy_in_with_sips) {
+      toast({ title: 'Sip mode', description: 'You are buying in with sips.' });
+      return;
+    }
     
     const amount = parseInt(chipRequestAmount);
     if (isNaN(amount) || amount <= 0) {
@@ -1429,7 +1589,7 @@ const Blackjack = () => {
   const handlePlaceBet = async (amount: number) => {
     if (!game || !player || player.is_dealer) return;
     if (game.status !== 'betting') return;
-    if (amount > player.balance) {
+    if (canTrackChipsForPlayer(player) && amount > player.balance) {
       toast({ title: 'Insufficient balance', description: 'You don\'t have enough chips' });
       return;
     }
@@ -1495,10 +1655,12 @@ const Blackjack = () => {
 
       // Deduct bets from player balances and create hand records
       for (const p of activePlayers) {
-        await supabase
-          .from('blackjack_players')
-          .update({ balance: p.balance - p.current_bet })
-          .eq('id', p.id);
+        if (canTrackChipsForPlayer(p)) {
+          await supabase
+            .from('blackjack_players')
+            .update({ balance: p.balance - p.current_bet })
+            .eq('id', p.id);
+        }
 
         // Create hand record with empty cards initially
         await supabase
@@ -1852,7 +2014,8 @@ const Blackjack = () => {
     const myHand = hands.find(h => h.player_id === player.id && h.is_active);
     if (!myHand || myHand.status !== 'active' || myHand.cards.length !== 2) return;
     const currentPlayer = playerRef.current ?? player;
-    if (currentPlayer.balance < myHand.bet_amount) {
+    const shouldTrackChips = canTrackChipsForPlayer(currentPlayer);
+    if (shouldTrackChips && currentPlayer.balance < myHand.bet_amount) {
       toast({ title: 'Insufficient balance', description: 'Not enough chips to double down' });
       return;
     }
@@ -1879,13 +2042,16 @@ const Blackjack = () => {
 
       // Deduct additional bet
       const newCurrentBet = (currentPlayer.current_bet || 0) + myHand.bet_amount;
+      const playerUpdates: any = {
+        current_bet: newCurrentBet,
+        times_doubled: currentPlayer.times_doubled + 1
+      };
+      if (shouldTrackChips) {
+        playerUpdates.balance = currentPlayer.balance - myHand.bet_amount;
+      }
       await supabase
         .from('blackjack_players')
-        .update({ 
-          balance: currentPlayer.balance - myHand.bet_amount,
-          current_bet: newCurrentBet,
-          times_doubled: currentPlayer.times_doubled + 1
-        })
+        .update(playerUpdates)
         .eq('id', player.id);
 
       await supabase
@@ -1987,7 +2153,8 @@ const Blackjack = () => {
       const currentPlayer = playerRef.current ?? player;
 
       if (takeInsurance) {
-        if (currentPlayer.balance < insuranceAmount) {
+        const shouldTrackChips = canTrackChipsForPlayer(currentPlayer);
+        if (shouldTrackChips && currentPlayer.balance < insuranceAmount) {
           toast({ title: 'Insufficient balance', description: 'Not enough chips for insurance' });
           return;
         }
@@ -1997,12 +2164,15 @@ const Blackjack = () => {
           .update({ insurance_bet: insuranceAmount })
           .eq('id', myHand.id);
 
+        const playerUpdates: any = {
+          times_insurance: currentPlayer.times_insurance + 1
+        };
+        if (shouldTrackChips) {
+          playerUpdates.balance = currentPlayer.balance - insuranceAmount;
+        }
         await supabase
           .from('blackjack_players')
-          .update({ 
-            balance: currentPlayer.balance - insuranceAmount,
-            times_insurance: currentPlayer.times_insurance + 1
-          })
+          .update(playerUpdates)
           .eq('id', player.id);
 
         await supabase.from('blackjack_actions').insert([{
@@ -2048,7 +2218,8 @@ const Blackjack = () => {
     }
 
     const currentPlayer = playerRef.current ?? player;
-    if (currentPlayer.balance < myHand.bet_amount) {
+    const shouldTrackChips = canTrackChipsForPlayer(currentPlayer);
+    if (shouldTrackChips && currentPlayer.balance < myHand.bet_amount) {
       toast({ title: 'Insufficient balance', description: 'Not enough chips to split' });
       return;
     }
@@ -2075,13 +2246,16 @@ const Blackjack = () => {
 
       const nextHandIndex = Math.max(...playerHands.map(h => h.hand_index)) + 1;
 
+      const playerUpdates: any = {
+        current_bet: (currentPlayer.current_bet || 0) + myHand.bet_amount,
+        times_split: currentPlayer.times_split + 1
+      };
+      if (shouldTrackChips) {
+        playerUpdates.balance = currentPlayer.balance - myHand.bet_amount;
+      }
       await supabase
         .from('blackjack_players')
-        .update({ 
-          balance: currentPlayer.balance - myHand.bet_amount,
-          current_bet: (currentPlayer.current_bet || 0) + myHand.bet_amount,
-          times_split: currentPlayer.times_split + 1
-        })
+        .update(playerUpdates)
         .eq('id', player.id);
 
       await supabase
@@ -2343,6 +2517,8 @@ const Blackjack = () => {
       const statsMap = new Map<string, BlackjackPlayer>();
       latestPlayers.forEach(p => statsMap.set(p.id, { ...p }));
       const balanceDeltas: Record<string, number> = {};
+      const sipsDeltas: Record<string, number> = {};
+      const tableTracksChips = game.settings?.chips_enabled ?? true;
 
       const dealerPlayer = latestPlayers.find(p => p.is_dealer);
       const dealerStats = dealerPlayer ? { ...dealerPlayer } : null;
@@ -2355,6 +2531,8 @@ const Blackjack = () => {
         let payout = 0;
         const targetPlayer = statsMap.get(hand.player_id);
         if (!targetPlayer) continue;
+        const playerUsesChips = tableTracksChips && !targetPlayer.buy_in_with_sips;
+        const playerUsesSips = !!targetPlayer.buy_in_with_sips;
 
         if (hand.status === 'busted') {
           result = 'loss';
@@ -2390,23 +2568,29 @@ const Blackjack = () => {
           .update({ result, payout, is_active: false })
           .eq('id', hand.id);
 
-        balanceDeltas[hand.player_id] = (balanceDeltas[hand.player_id] || 0) + payout + insurancePayout;
+        if (playerUsesChips) {
+          balanceDeltas[hand.player_id] = (balanceDeltas[hand.player_id] || 0) + payout + insurancePayout;
+        }
 
         targetPlayer.hands_played += 1;
 
         if (result === 'win' || result === 'blackjack') {
           targetPlayer.hands_won += 1;
-          targetPlayer.total_won += (payout - hand.bet_amount);
+          if (playerUsesChips) {
+            targetPlayer.total_won += (payout - hand.bet_amount);
+            if (payout - hand.bet_amount > targetPlayer.biggest_win) {
+              targetPlayer.biggest_win = payout - hand.bet_amount;
+            }
+          }
           targetPlayer.current_streak = Math.max(1, targetPlayer.current_streak + 1);
           targetPlayer.best_streak = Math.max(targetPlayer.current_streak, targetPlayer.best_streak);
-          if (payout - hand.bet_amount > targetPlayer.biggest_win) {
-            targetPlayer.biggest_win = payout - hand.bet_amount;
-          }
         } else if (result === 'loss') {
           targetPlayer.hands_lost += 1;
-          targetPlayer.total_lost += hand.bet_amount;
           targetPlayer.current_streak = Math.min(-1, targetPlayer.current_streak - 1);
           targetPlayer.worst_streak = Math.min(targetPlayer.current_streak, targetPlayer.worst_streak);
+          if (playerUsesChips) {
+            targetPlayer.total_lost += hand.bet_amount;
+          }
         } else {
           targetPlayer.hands_pushed += 1;
           targetPlayer.current_streak = 0;
@@ -2419,21 +2603,25 @@ const Blackjack = () => {
           targetPlayer.busts += 1;
         }
 
-        targetPlayer.total_wagered += hand.bet_amount;
-        if (hand.bet_amount > targetPlayer.biggest_bet) {
-          targetPlayer.biggest_bet = hand.bet_amount;
-        }
-
-        if (insuranceBet > 0) {
-          targetPlayer.total_wagered += insuranceBet;
-          if (dealerBlackjack) {
-            targetPlayer.total_won += insuranceBet;
-          } else {
-            targetPlayer.total_lost += insuranceBet;
+        if (playerUsesChips) {
+          targetPlayer.total_wagered += hand.bet_amount;
+          if (hand.bet_amount > targetPlayer.biggest_bet) {
+            targetPlayer.biggest_bet = hand.bet_amount;
           }
         }
 
-        if (dealerStats) {
+        if (insuranceBet > 0) {
+          if (playerUsesChips) {
+            targetPlayer.total_wagered += insuranceBet;
+            if (dealerBlackjack) {
+              targetPlayer.total_won += insuranceBet;
+            } else {
+              targetPlayer.total_lost += insuranceBet;
+            }
+          }
+        }
+
+        if (dealerStats && playerUsesChips) {
           dealerStats.hands_played += 1;
           dealerStats.total_wagered += hand.bet_amount;
           if (hand.bet_amount > dealerStats.biggest_bet) {
@@ -2466,6 +2654,19 @@ const Blackjack = () => {
             } else {
               dealerStats.total_won += insuranceBet;
             }
+          }
+        }
+
+        if (playerUsesSips) {
+          let sipDelta = 0;
+          if (result === 'loss') {
+            sipDelta += hand.bet_amount;
+          }
+          if (insuranceBet > 0 && !dealerBlackjack) {
+            sipDelta += insuranceBet;
+          }
+          if (sipDelta > 0) {
+            sipsDeltas[hand.player_id] = (sipsDeltas[hand.player_id] || 0) + sipDelta;
           }
         }
 
@@ -2513,10 +2714,15 @@ const Blackjack = () => {
         if (balanceDelta !== 0) {
           updated.balance += balanceDelta;
         }
+        const sipDelta = sipsDeltas[playerId] || 0;
+        if (sipDelta !== 0) {
+          updated.sips_owed = (updated.sips_owed || 0) + sipDelta;
+        }
         await supabase
           .from('blackjack_players')
           .update({
             balance: updated.balance,
+            sips_owed: updated.sips_owed,
             hands_played: updated.hands_played,
             hands_won: updated.hands_won,
             hands_lost: updated.hands_lost,
@@ -2690,6 +2896,8 @@ const Blackjack = () => {
           setMaxSplits={setTempMaxSplits}
           numberOfDecks={tempNumberOfDecks}
           setNumberOfDecks={setTempNumberOfDecks}
+          chipsEnabled={tempChipsEnabled}
+          setChipsEnabled={setTempChipsEnabled}
           loading={loading}
           error={error}
           onConfirm={handleSettingsConfirm}
@@ -2759,6 +2967,7 @@ const Blackjack = () => {
             deckTotal={deckTotal}
             deckThresholdPercent={deckThresholdPercent}
             onReshuffle={handleReshuffleShoe}
+            chipsEnabled={chipsEnabled}
           />
         );
       } else {
@@ -2769,7 +2978,7 @@ const Blackjack = () => {
           && game.settings.split_enabled
           && canSplitCards(activeHand.cards)
           && myHands.length < (game.settings.max_splits + 1)
-          && player.balance >= activeHand.bet_amount;
+          && (!canTrackChipsForPlayer(player) || player.balance >= activeHand.bet_amount);
         const insuranceHand = myHands.find(h => h.hand_index === 0) || activeHand;
         const insuranceAmount = insuranceHand ? Math.floor(insuranceHand.bet_amount / 2) : 0;
         const insuranceDecision = insuranceHand ? insuranceResponses[insuranceHand.id] : undefined;
@@ -2808,6 +3017,8 @@ const Blackjack = () => {
             deckRemaining={deckRemaining}
             deckTotal={deckTotal}
             deckThresholdPercent={deckThresholdPercent}
+            soundEnabled={soundEnabled}
+            chipsEnabled={chipsEnabled}
           />
         );
       }
@@ -2820,86 +3031,287 @@ const Blackjack = () => {
           player={player} 
           onLogout={handleLogout}
           onOpenSettings={() => setSettingsDialogOpen(true)}
-          onOpenChipRequest={() => { setChipRequestAmount(""); setChipRequestDialogOpen(true); }}
+          onOpenChipRequest={chipsEnabled && !player.buy_in_with_sips ? () => { setChipRequestAmount(""); setChipRequestDialogOpen(true); } : undefined}
+          chipsEnabled={chipsEnabled}
         />
         <div className="flex-1 overflow-hidden flex flex-col pt-16">
           {renderActiveView()}
         </div>
 
-        <Dialog open={settingsDialogOpen} onOpenChange={setSettingsDialogOpen}>
-          <DialogContent className="max-w-md">
+        <Dialog open={settingsDialogOpen} onOpenChange={(open) => { setSettingsDialogOpen(open); if (!open) setSettingsOpenSection(null); }}>
+          <DialogContent className="max-w-lg max-h-[90vh] overflow-auto">
             <DialogHeader>
-              <DialogTitle>Game Settings</DialogTitle>
+              <DialogTitle>Settings</DialogTitle>
               <DialogDescription>
-                View the current table rules.
+                Manage table rules, sounds, and players.
               </DialogDescription>
             </DialogHeader>
-            <div className="space-y-4 py-4">
-              <div className="flex items-center justify-between">
-                <span className="font-medium">Dealer hits on Soft 17</span>
-                <span className="text-muted-foreground">{game.settings.hit_on_soft_17 ? 'Yes' : 'No'}</span>
+
+            <div className="space-y-4 mt-2">
+              <div>
+                <button
+                  type="button"
+                  onClick={() => setSettingsOpenSection((v) => (v === 'game' ? null : 'game'))}
+                  className="w-full flex items-center justify-between gap-3 p-3 rounded bg-muted/30 hover:bg-muted/40"
+                  aria-expanded={settingsOpenSection === 'game'}
+                >
+                  <div className="flex items-center gap-3">
+                    <div className="text-left">
+                      <div className="font-medium">Game Settings</div>
+                      <div className="text-sm text-muted-foreground">Table rules and app options</div>
+                    </div>
+                  </div>
+                  <ChevronDown
+                    className="w-5 h-5 transform-gpu"
+                    style={{ transform: settingsOpenSection === 'game' ? 'rotate(180deg)' : 'rotate(0deg)', transition: 'transform 200ms ease-in-out', willChange: 'transform' }}
+                  />
+                </button>
+
+                {settingsOpenSection === 'game' && (
+                  <div className="mt-3 px-0">
+                    <div className="rounded bg-muted/30 border border-muted p-3 space-y-2">
+                      <ThemeSelector />
+
+                      <div className="flex items-center justify-between py-2 px-3 rounded-lg bg-muted/10">
+                        <div className="flex-1">
+                          <div className="font-medium text-sm">App Sounds</div>
+                          <div className="text-xs text-muted-foreground">Play the turn notification sound</div>
+                        </div>
+                        <Switch
+                          checked={soundEnabled}
+                          onCheckedChange={handleToggleSound}
+                        />
+                      </div>
+
+                      <div className="flex items-center justify-between py-2 px-3 rounded-lg bg-muted/10">
+                        <div className="flex-1">
+                          <div className="font-medium text-sm">Track Chips</div>
+                          <div className="text-xs text-muted-foreground">Use the in-app chip tracker</div>
+                        </div>
+                        <Switch
+                          checked={chipsEnabled}
+                          disabled={!player.is_dealer}
+                          onCheckedChange={(checked) => updateGameSettings({ chips_enabled: checked })}
+                        />
+                      </div>
+
+                      <div className="flex items-center justify-between py-2 px-3 rounded-lg bg-muted/10">
+                        <div className="flex-1">
+                          <div className="font-medium text-sm">Dealer Hits on Soft 17</div>
+                          <div className="text-xs text-muted-foreground">Toggle dealer soft 17 behavior</div>
+                        </div>
+                        <Switch
+                          checked={!!game.settings.hit_on_soft_17}
+                          disabled={!player.is_dealer}
+                          onCheckedChange={(checked) => updateGameSettings({ hit_on_soft_17: checked })}
+                        />
+                      </div>
+
+                      <div className="flex items-center justify-between py-2 px-3 rounded-lg bg-muted/10">
+                        <div className="flex-1">
+                          <div className="font-medium text-sm">Insurance</div>
+                          <div className="text-xs text-muted-foreground">Allow insurance bets</div>
+                        </div>
+                        <Switch
+                          checked={!!game.settings.insurance_enabled}
+                          disabled={!player.is_dealer}
+                          onCheckedChange={(checked) => updateGameSettings({ insurance_enabled: checked })}
+                        />
+                      </div>
+
+                      <div className="flex items-center justify-between py-2 px-3 rounded-lg bg-muted/10">
+                        <div className="flex-1">
+                          <div className="font-medium text-sm">Double Down</div>
+                          <div className="text-xs text-muted-foreground">Allow double down</div>
+                        </div>
+                        <Switch
+                          checked={!!game.settings.double_down_enabled}
+                          disabled={!player.is_dealer}
+                          onCheckedChange={(checked) => updateGameSettings({ double_down_enabled: checked })}
+                        />
+                      </div>
+
+                      <div className="flex items-center justify-between py-2 px-3 rounded-lg bg-muted/10">
+                        <div className="flex-1">
+                          <div className="font-medium text-sm">Splitting</div>
+                          <div className="text-xs text-muted-foreground">Allow hand splits</div>
+                        </div>
+                        <Switch
+                          checked={!!game.settings.split_enabled}
+                          disabled={!player.is_dealer}
+                          onCheckedChange={(checked) => updateGameSettings({ split_enabled: checked })}
+                        />
+                      </div>
+
+                      <div className="space-y-2 py-1 px-1">
+                        <div className="text-sm font-medium px-2">Max Splits</div>
+                        <div className="flex gap-2 px-2">
+                          {['1', '2', '3', '4'].map((val) => (
+                            <Button
+                              key={val}
+                              variant={String(game.settings.max_splits) === val ? 'default' : 'outline'}
+                              size="sm"
+                              onClick={() => updateGameSettings({ max_splits: parseInt(val) })}
+                              className="flex-1"
+                              disabled={!player.is_dealer || !game.settings.split_enabled}
+                            >
+                              {val}
+                            </Button>
+                          ))}
+                        </div>
+                      </div>
+
+                      <div className="space-y-2 py-1 px-1">
+                        <div className="text-sm font-medium px-2">Number of Decks</div>
+                        <div className="flex gap-2 px-2">
+                          {['1', '2', '4', '6', '8'].map((val) => (
+                            <Button
+                              key={val}
+                              variant={String(game.settings.num_decks) === val ? 'default' : 'outline'}
+                              size="sm"
+                              onClick={() => updateGameSettings({ num_decks: parseInt(val) }, { reshuffle: true })}
+                              className="flex-1"
+                              disabled={!player.is_dealer}
+                            >
+                              {val}
+                            </Button>
+                          ))}
+                        </div>
+                      </div>
+
+                      {!player.is_dealer && (
+                        <div className="text-xs text-muted-foreground px-2 pt-2">
+                          Only the dealer can change table rules.
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                )}
               </div>
-              <div className="flex items-center justify-between">
-                <span className="font-medium">Insurance</span>
-                <span className="text-muted-foreground">{game.settings.insurance_enabled ? 'Enabled' : 'Disabled'}</span>
-              </div>
-              <div className="flex items-center justify-between">
-                <span className="font-medium">Double Down</span>
-                <span className="text-muted-foreground">{game.settings.double_down_enabled ? 'Enabled' : 'Disabled'}</span>
-              </div>
-              <div className="flex items-center justify-between">
-                <span className="font-medium">Splitting</span>
-                <span className="text-muted-foreground">{game.settings.split_enabled ? 'Enabled' : 'Disabled'}</span>
-              </div>
-              <div className="flex items-center justify-between">
-                <span className="font-medium">Number of Decks</span>
-                <span className="text-muted-foreground">{game.settings.num_decks}</span>
-              </div>
-              <div className="flex items-center justify-between border-t pt-4">
-                <span className="font-medium text-xs text-muted-foreground uppercase tracking-wider">Note</span>
-                <span className="text-xs text-muted-foreground">Settings can only be changed during table creation.</span>
+
+              <div>
+                <button
+                  type="button"
+                  onClick={() => setSettingsOpenSection((v) => (v === 'players' ? null : 'players'))}
+                  className="w-full flex items-center justify-between gap-3 p-3 rounded bg-muted/30 hover:bg-muted/40"
+                  aria-expanded={settingsOpenSection === 'players'}
+                >
+                  <div className="flex items-center gap-3">
+                    <div className="text-left">
+                      <div className="font-medium">Players</div>
+                      <div className="text-sm text-muted-foreground">Manage players and buy-ins</div>
+                    </div>
+                  </div>
+                  <ChevronDown
+                    className="w-5 h-5 transform-gpu"
+                    style={{ transform: settingsOpenSection === 'players' ? 'rotate(180deg)' : 'rotate(0deg)', transition: 'transform 200ms ease-in-out', willChange: 'transform' }}
+                  />
+                </button>
+
+                {settingsOpenSection === 'players' && (
+                  <div className="mt-3 px-0">
+                    <div className="rounded bg-muted/30 border border-muted p-3 space-y-2">
+                      {playersList.length > 0 ? (
+                        playersList.map((p) => {
+                          const isSelf = player.id === p.id;
+                          const isDealer = p.is_dealer;
+                          const inRound = ['betting', 'dealing', 'insurance', 'playing', 'dealer_turn', 'resolving'].includes(game.status);
+                          const canRemove = player.is_dealer && !isDealer && !isSelf && !inRound;
+                          const canToggleSip = !isDealer && (player.is_dealer || isSelf);
+                          const balanceLabel = p.buy_in_with_sips
+                            ? `Sips Owed: ${p.sips_owed || 0}`
+                            : (chipsEnabled ? `Balance: $${p.balance}` : 'Cards only');
+
+                          return (
+                            <div key={p.id} className="flex items-center gap-3 py-2 px-2 border rounded">
+                              <div className="flex-1">
+                                <div className="font-medium">
+                                  {p.name}{isDealer ? ' (Dealer)' : isSelf ? ' (You)' : ''}
+                                </div>
+                                <div className="text-sm text-muted-foreground">{balanceLabel}</div>
+                              </div>
+                              <div className="flex items-center gap-2">
+                                <div className="flex items-center gap-2">
+                                  <div className="text-xs text-muted-foreground">Sips</div>
+                                  <Switch
+                                    checked={!!p.buy_in_with_sips}
+                                    disabled={!canToggleSip}
+                                    onCheckedChange={(checked) => handleTogglePlayerSips(p.id, checked)}
+                                  />
+                                </div>
+                                <Button size="sm" variant="destructive" disabled={!canRemove} onClick={() => requestRemovePlayer(p.id, p.name)}>
+                                  Remove
+                                </Button>
+                              </div>
+                            </div>
+                          );
+                        })
+                      ) : (
+                        <div className="text-sm text-muted-foreground">No players found.</div>
+                      )}
+                    </div>
+                  </div>
+                )}
               </div>
             </div>
+
             <DialogFooter>
               <Button onClick={() => setSettingsDialogOpen(false)}>Close</Button>
             </DialogFooter>
           </DialogContent>
         </Dialog>
+
+        <AlertDialog open={confirmRemoveOpen} onOpenChange={(v) => { setConfirmRemoveOpen(v); if (!v) setPendingRemove(null); }}>
+          <AlertDialogContent>
+            <AlertDialogHeader>
+              <AlertDialogTitle>Remove player</AlertDialogTitle>
+              <AlertDialogDescription>
+                Are you sure you want to remove <span className="font-medium">{pendingRemove?.name ?? 'this player'}</span> from the game?
+              </AlertDialogDescription>
+            </AlertDialogHeader>
+            <AlertDialogFooter>
+              <AlertDialogCancel>Cancel</AlertDialogCancel>
+              <AlertDialogAction onClick={handleConfirmRemovePlayer} className="bg-destructive">Remove</AlertDialogAction>
+            </AlertDialogFooter>
+          </AlertDialogContent>
+        </AlertDialog>
         
         {/* Chip Request Dialog */}
-        <Dialog open={chipRequestDialogOpen} onOpenChange={setChipRequestDialogOpen}>
-          <DialogContent>
-            <DialogHeader>
-              <DialogTitle>Request Chips</DialogTitle>
-            </DialogHeader>
-            <div className="space-y-4 py-4">
-              <Input
-                type="number"
-                placeholder="Amount"
-                value={chipRequestAmount}
-                onChange={(e) => setChipRequestAmount(e.target.value)}
-              />
-              <div className="flex gap-2">
-                {[5, 10, 50, 100].map((amount) => (
-                  <Button
-                    key={amount}
-                    variant="outline"
-                    size="sm"
-                    onClick={() => setChipRequestAmount(String(amount))}
-                    className="flex-1"
-                  >
-                    ${amount}
-                  </Button>
-                ))}
+        {chipsEnabled && !player.buy_in_with_sips && (
+          <Dialog open={chipRequestDialogOpen} onOpenChange={setChipRequestDialogOpen}>
+            <DialogContent>
+              <DialogHeader>
+                <DialogTitle>Request Chips</DialogTitle>
+              </DialogHeader>
+              <div className="space-y-4 py-4">
+                <Input
+                  type="number"
+                  placeholder="Amount"
+                  value={chipRequestAmount}
+                  onChange={(e) => setChipRequestAmount(e.target.value)}
+                />
+                <div className="flex gap-2">
+                  {[5, 10, 50, 100].map((amount) => (
+                    <Button
+                      key={amount}
+                      variant="outline"
+                      size="sm"
+                      onClick={() => setChipRequestAmount(String(amount))}
+                      className="flex-1"
+                    >
+                      ${amount}
+                    </Button>
+                  ))}
+                </div>
               </div>
-            </div>
-            <DialogFooter>
-              <Button onClick={handleRequestChips} className="w-full">
-                Request ${chipRequestAmount || '0'}
-              </Button>
-            </DialogFooter>
-          </DialogContent>
-        </Dialog>
+              <DialogFooter>
+                <Button onClick={handleRequestChips} className="w-full">
+                  Request ${chipRequestAmount || '0'}
+                </Button>
+              </DialogFooter>
+            </DialogContent>
+          </Dialog>
+        )}
         
         <Toaster />
       </div>

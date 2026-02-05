@@ -8,6 +8,8 @@ interface BlackjackPlayer {
   name: string;
   is_dealer: boolean;
   balance: number;
+  buy_in_with_sips: boolean;
+  sips_owed: number;
   is_online: boolean;
   seat_position: number | null;
   hands_played: number;
@@ -79,6 +81,7 @@ const LobbyScreen = ({
 }: LobbyScreenProps) => {
   const isDealer = player?.is_dealer;
   const inviteUrl = typeof window !== 'undefined' ? `${window.location.origin}${window.location.pathname}?code=${game?.code}` : '';
+  const chipsEnabled = game?.settings?.chips_enabled ?? true;
 
   // Drag and drop state
   const [draggedIndex, setDraggedIndex] = useState<number | null>(null);
@@ -259,11 +262,13 @@ const LobbyScreen = ({
                         {p.name}
                       </div>
                       <div className="text-sm text-muted-foreground">
-                        Balance: ${p.balance}
+                        {p.buy_in_with_sips
+                          ? `Sips Owed: ${p.sips_owed || 0}`
+                          : (chipsEnabled ? `Balance: $${p.balance}` : 'Cards only')}
                       </div>
                     </div>
                   </div>
-                  {isDealer && (
+                  {isDealer && chipsEnabled && !p.buy_in_with_sips && (
                     <div className="flex gap-2">
                       <Button
                         size="sm"
@@ -288,7 +293,7 @@ const LobbyScreen = ({
         </Card>
 
         {/* Chip Requests (Dealer Only) */}
-        {isDealer && chipRequests.length > 0 && (
+        {isDealer && chipsEnabled && chipRequests.length > 0 && (
           <Card className="border-yellow-500">
             <CardHeader>
               <CardTitle>Chip Requests</CardTitle>
@@ -325,13 +330,20 @@ const LobbyScreen = ({
               <CardDescription>Your current table stats.</CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
-              <Button 
-                className="w-full" 
-                variant="outline"
-                onClick={() => { setChipRequestAmount(""); setChipRequestDialogOpen(true); }}
-              >
-                Request Chips
-              </Button>
+              {chipsEnabled && !player.buy_in_with_sips && (
+                <Button 
+                  className="w-full" 
+                  variant="outline"
+                  onClick={() => { setChipRequestAmount(""); setChipRequestDialogOpen(true); }}
+                >
+                  Request Chips
+                </Button>
+              )}
+              {player.buy_in_with_sips && (
+                <div className="text-sm text-muted-foreground">
+                  Sips Owed: <span className="font-semibold text-foreground">{player.sips_owed || 0}</span>
+                </div>
+              )}
               {renderStatsGrid(player)}
             </CardContent>
           </Card>
@@ -357,6 +369,9 @@ const LobbyScreen = ({
           </CardHeader>
           <CardContent>
             <div className="grid grid-cols-2 gap-3 text-sm">
+              <div>
+                <span className="text-muted-foreground">Chips:</span> {chipsEnabled ? 'Tracked' : 'Cards only'}
+              </div>
               <div>
                 <span className="text-muted-foreground">Decks:</span> {game.settings.num_decks}
               </div>

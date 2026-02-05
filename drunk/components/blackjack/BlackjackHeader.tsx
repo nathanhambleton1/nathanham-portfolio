@@ -9,13 +9,14 @@ import { toast } from "../ui/use-toast";
 
 interface BlackjackHeaderProps {
   gameCode: string;
-  player: { name: string; is_dealer: boolean; balance: number };
+  player: { name: string; is_dealer: boolean; balance: number; buy_in_with_sips: boolean; sips_owed: number };
   onLogout: () => void;
   onOpenSettings?: () => void;
   onOpenChipRequest?: () => void;
+  chipsEnabled: boolean;
 }
 
-export const BlackjackHeader = ({ gameCode, player, onLogout, onOpenSettings, onOpenChipRequest }: BlackjackHeaderProps) => {
+export const BlackjackHeader = ({ gameCode, player, onLogout, onOpenSettings, onOpenChipRequest, chipsEnabled }: BlackjackHeaderProps) => {
   const [qrOpen, setQrOpen] = useState(false);
   const navigate = useNavigate();
 
@@ -37,9 +38,19 @@ export const BlackjackHeader = ({ gameCode, player, onLogout, onOpenSettings, on
       <div className="flex items-center gap-2">
         <div className="px-3 py-1 rounded-md flex items-center gap-3 bg-muted/50 border border-muted-foreground/20">
           <div className="font-semibold text-lg">{player.name}</div>
-          {!player.is_dealer && (
+          {!player.is_dealer && chipsEnabled && !player.buy_in_with_sips && (
             <div className="text-sm font-mono text-green-600 dark:text-green-400 font-bold">
               ${player.balance}
+            </div>
+          )}
+          {!player.is_dealer && player.buy_in_with_sips && (
+            <div className="text-sm font-mono text-blue-600 dark:text-blue-400 font-bold">
+              {player.sips_owed || 0} sips
+            </div>
+          )}
+          {!player.is_dealer && !chipsEnabled && !player.buy_in_with_sips && (
+            <div className="text-xs uppercase tracking-wider bg-muted text-muted-foreground px-1.5 py-0.5 rounded font-bold">
+              Cards only
             </div>
           )}
           {player.is_dealer && (
@@ -71,7 +82,7 @@ export const BlackjackHeader = ({ gameCode, player, onLogout, onOpenSettings, on
                 <Copy size={16} />
                 Invite Link
               </Button>
-              {!player.is_dealer && onOpenChipRequest && (
+              {!player.is_dealer && chipsEnabled && !player.buy_in_with_sips && onOpenChipRequest && (
                 <Button variant="secondary" className="w-full justify-start gap-2" onClick={onOpenChipRequest}>
                   <DollarSign size={16} />
                   Request Chips

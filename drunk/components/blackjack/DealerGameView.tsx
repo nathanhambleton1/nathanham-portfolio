@@ -10,6 +10,8 @@ interface BlackjackPlayer {
   name: string;
   is_dealer: boolean;
   balance: number;
+  buy_in_with_sips: boolean;
+  sips_owed: number;
   has_placed_bet: boolean;
   current_bet: number;
   is_online: boolean;
@@ -49,6 +51,7 @@ interface DealerGameViewProps {
   deckTotal: number;
   deckThresholdPercent: number;
   onReshuffle: () => void;
+  chipsEnabled: boolean;
 }
 
 const DealerGameView = ({
@@ -72,6 +75,7 @@ const DealerGameView = ({
   deckTotal,
   deckThresholdPercent,
   onReshuffle,
+  chipsEnabled,
 }: DealerGameViewProps) => {
   const nonDealerPlayers = players.filter(p => !p.is_dealer);
   const anyBetsPlaced = nonDealerPlayers.some(p => p.has_placed_bet);
@@ -101,6 +105,9 @@ const DealerGameView = ({
   const dealerNet = hands
     .filter(h => nonDealerPlayers.some(p => p.id === h.player_id) && h.result)
     .reduce((acc, ph) => {
+      const handPlayer = players.find(p => p.id === ph.player_id);
+      const trackChipsForPlayer = chipsEnabled && !handPlayer?.buy_in_with_sips;
+      if (!trackChipsForPlayer) return acc;
       // If player won (including blackjack), dealer loses the player's payout amount
       if (ph.result === 'win' || ph.result === 'blackjack') {
         acc -= (ph.payout ?? ph.bet_amount ?? 0);
@@ -153,7 +160,7 @@ const DealerGameView = ({
           </div>
 
           {/* Chip Requests - High Visibility */}
-          {chipRequests.length > 0 && (
+          {chipsEnabled && chipRequests.length > 0 && (
             <Card className="border-yellow-500 bg-yellow-500/10">
               <CardHeader className="py-2">
                 <CardTitle className="text-sm">Pending Chip Requests</CardTitle>
@@ -188,6 +195,18 @@ const DealerGameView = ({
                 .filter(h => h.player_id === player.id)
                 .sort((a, b) => a.hand_index - b.hand_index);
               const isPlayersTurn = playerHands.some(h => h.is_active && h.status === 'active');
+              const playerUsesChips = chipsEnabled && !player.buy_in_with_sips;
+              const balanceLabel = playerUsesChips
+                ? `$${player.balance}`
+                : (player.buy_in_with_sips ? `Sips Owed: ${player.sips_owed || 0}` : 'Cards only');
+              const formatDelta = (value: number) => {
+                if (value === 0) {
+                  return playerUsesChips ? '$0' : '0';
+                }
+                const abs = Math.abs(value);
+                const unit = playerUsesChips ? `$${abs}` : (player.buy_in_with_sips ? `${abs} sips` : `${abs}`);
+                return value > 0 ? `+${unit}` : `-${unit}`;
+              };
 
               const hasBet = (player.current_bet && player.current_bet > 0) || player.has_placed_bet;
               let cardClass = 'border transition-all duration-300';
@@ -222,8 +241,12 @@ const DealerGameView = ({
                       />
                     </div>
                     <div className="flex items-center justify-between text-[10px] text-muted-foreground font-mono">
-                      <div>${player.balance}</div>
-                      {player.current_bet > 0 && <Badge variant="outline" className="h-4 px-1 text-[8px]">BET: ${player.current_bet}</Badge>}
+                      <div>{balanceLabel}</div>
+                      {player.current_bet > 0 && (
+                        <Badge variant="outline" className="h-4 px-1 text-[8px]">
+                          BET: {playerUsesChips ? `$${player.current_bet}` : (player.buy_in_with_sips ? `${player.current_bet} sips` : player.current_bet)}
+                        </Badge>
+                      )}
                     </div>
                   </CardHeader>
                   <CardContent className="p-3">
@@ -255,7 +278,9 @@ const DealerGameView = ({
                             >
                               <div className="flex items-center justify-between text-[10px] text-muted-foreground mb-1">
                                 <span>Hand {hand.hand_index + 1}</span>
-                                <span>Bet ${hand.bet_amount}</span>
+                                <span>
+                                  Bet {playerUsesChips ? `$${hand.bet_amount}` : (player.buy_in_with_sips ? `${hand.bet_amount} sips` : hand.bet_amount)}
+                                </span>
                               </div>
                               {hand.cards.length > 0 ? (
                                 <div className="flex justify-center scale-90 origin-top">
@@ -274,9 +299,7 @@ const DealerGameView = ({
                               {hand.result && (
                                 <div className="mt-2 text-center">
                                   <div className={`text-base font-black ${payoutClass}`}>
-                                    {displayPayout > 0
-                                      ? `+$${displayPayout}`
-                                      : (displayPayout < 0 ? `-$${Math.abs(displayPayout)}` : '$0')}
+                                    {formatDelta(displayPayout)}
                                   </div>
                                 </div>
                               )}
@@ -302,12 +325,14 @@ const DealerGameView = ({
         <div className="max-w-7xl mx-auto">
           <div className="flex flex-col gap-2">
             {/* Dealer payout info */}
-          <div className="flex items-center justify-center gap-3 py-1">
-            <div className="text-xs font-bold uppercase tracking-widest opacity-70">Dealer Payout</div>
-            <div className={`text-lg font-black ${dealerNet > 0 ? 'text-green-600' : dealerNet < 0 ? 'text-red-600' : 'text-white'}`}>
-              {dealerNet > 0 ? `+$${dealerNet}` : (dealerNet < 0 ? `-$${Math.abs(dealerNet)}` : '$0')}
+          {chipsEnabled && (
+            <div className="flex items-center justify-center gap-3 py-1">
+              <div className="text-xs font-bold uppercase tracking-widest opacity-70">Dealer Payout</div>
+              <div className={`text-lg font-black ${dealerNet > 0 ? 'text-green-600' : dealerNet < 0 ? 'text-red-600' : 'text-white'}`}>
+                {dealerNet > 0 ? `+$${dealerNet}` : (dealerNet < 0 ? `-$${Math.abs(dealerNet)}` : '$0')}
+              </div>
             </div>
-          </div>
+          )}
 
           <div className="flex flex-wrap items-center justify-between gap-3 rounded-md border border-border/60 bg-card/60 p-3">
             <DeckMeter

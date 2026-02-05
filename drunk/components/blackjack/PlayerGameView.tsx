@@ -1,6 +1,6 @@
 import { Button } from "../../components/ui/button";
 import { Badge } from "../../components/ui/badge";
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useRef } from 'react';
 import CardHand from "./CardHand";
 import { BASE_HEIGHT_FOR_SCALE, SCALE_SENSITIVITY } from './cardConfig';
 import DeckMeter from "./DeckMeter";
@@ -10,6 +10,8 @@ interface BlackjackPlayer {
   name: string;
   is_dealer: boolean;
   balance: number;
+  buy_in_with_sips: boolean;
+  sips_owed: number;
   has_placed_bet: boolean;
   current_bet: number;
 }
@@ -55,6 +57,8 @@ interface PlayerGameViewProps {
   deckRemaining: number;
   deckTotal: number;
   deckThresholdPercent: number;
+  soundEnabled: boolean;
+  chipsEnabled: boolean;
 }
 
 const PlayerGameView = ({
@@ -85,7 +89,12 @@ const PlayerGameView = ({
   deckRemaining,
   deckTotal,
   deckThresholdPercent,
+  soundEnabled,
+  chipsEnabled,
 }: PlayerGameViewProps) => {
+  const audioRef = useRef<HTMLAudioElement | null>(null);
+  const prevTurnRef = useRef<boolean>(false);
+
   useEffect(() => {
     const prevBodyOverflow = document.body.style.overflow;
     const prevHtmlOverflow = document.documentElement.style.overflow;
@@ -95,6 +104,19 @@ const PlayerGameView = ({
       document.body.style.overflow = prevBodyOverflow;
       document.documentElement.style.overflow = prevHtmlOverflow;
     };
+  }, []);
+
+  useEffect(() => {
+    try {
+      if (!audioRef.current) {
+        const a = new Audio('/notification.mp3');
+        a.preload = 'auto';
+        a.volume = 0.85;
+        audioRef.current = a;
+      }
+    } catch (e) {
+      // ignore audio init errors
+    }
   }, []);
 
   // Loader mount/visibility state so we can fade it out on gameStatus change
@@ -166,6 +188,39 @@ const PlayerGameView = ({
 
   // Check if it's this player's turn
   const isMyTurn = gameStatus === 'playing' && activeHand?.is_active && activeHand.status === 'active';
+  const usesChips = chipsEnabled && !player.buy_in_with_sips;
+  const usesSips = player.buy_in_with_sips;
+  const formatAmount = (amount: number) => {
+    if (usesChips) return `$${amount}`;
+    if (usesSips) return `${amount} sips`;
+    return `${amount}`;
+  };
+  const formatDelta = (value: number) => {
+    if (value === 0) return usesChips ? '$0' : '0';
+    const abs = Math.abs(value);
+    const unit = usesChips ? `$${abs}` : (usesSips ? `${abs} sips` : `${abs}`);
+    return value > 0 ? `+${unit}` : `-${unit}`;
+  };
+
+  useEffect(() => {
+    if (!soundEnabled) {
+      prevTurnRef.current = isMyTurn;
+      return;
+    }
+    if (isMyTurn && !prevTurnRef.current) {
+      try {
+        const a = audioRef.current;
+        if (a) {
+          a.currentTime = 0;
+          const p = a.play();
+          if (p && typeof p.then === 'function') p.catch(() => {});
+        }
+      } catch (e) {
+        // ignore playback errors
+      }
+    }
+    prevTurnRef.current = isMyTurn;
+  }, [isMyTurn, soundEnabled]);
 
   return (
     <div
@@ -220,11 +275,10 @@ const PlayerGameView = ({
                  const isLoss = hand.result === 'loss';
                  const isPush = hand.result === 'push';
                  const isBusted = hand.status === 'busted';
-                 const payoutDisplay = hand.payout > 0
-                   ? `+$${hand.payout}`
-                   : hand.payout < 0
-                     ? `-$${Math.abs(hand.payout)}`
-                     : (hand.result === 'loss' ? `-$${hand.bet_amount}` : '$0');
+                 const payoutValue = hand.payout !== 0
+                   ? hand.payout
+                   : (hand.result === 'loss' ? -hand.bet_amount : 0);
+                 const payoutDisplay = formatDelta(payoutValue);
                  const payoutClass = hand.result === 'win' || hand.result === 'blackjack'
                    ? 'text-green-600'
                    : hand.result === 'loss'
@@ -272,7 +326,7 @@ const PlayerGameView = ({
                       <div className={`mt-1 text-center text-xs font-semibold ${
                         dealerBlackjack ? 'text-green-500' : 'text-red-500'
                       }`}>
-                        Insurance {dealerBlackjack ? `+$${hand.insurance_bet * 2}` : `-$${hand.insurance_bet}`}
+                        Insurance {formatDelta(dealerBlackjack ? (hand.insurance_bet * 2) : -hand.insurance_bet)}
                       </div>
                     )}
                     {hand.result && (
@@ -329,11 +383,14 @@ const PlayerGameView = ({
           {/* Player Info */}
           <div className="flex items-center justify-between mb-4">
             <div className="flex items-center gap-4">
+              {usesSips && (
+                <Badge variant="outline" className="font-mono">SIPS OWED: {player.sips_owed || 0}</Badge>
+              )}
               {player.current_bet > 0 && (
-                <Badge variant="secondary" className="font-mono">BET: ${player.current_bet}</Badge>
+                <Badge variant="secondary" className="font-mono">BET: {formatAmount(player.current_bet)}</Badge>
               )}
               {insuranceBet > 0 && (
-                <Badge variant="outline" className="font-mono">INSURANCE: ${insuranceBet}</Badge>
+                <Badge variant="outline" className="font-mono">INSURANCE: {formatAmount(insuranceBet)}</Badge>
               )}
             </div>
           </div>
@@ -350,10 +407,10 @@ const PlayerGameView = ({
                     key={amount}
                     variant={selectedBet === amount ? 'default' : 'outline'}
                     onClick={() => setSelectedBet(amount)}
-                    disabled={amount > player.balance}
+                    disabled={usesChips && amount > player.balance}
                     className="min-w-[80px]"
                   >
-                    ${amount}
+                    {formatAmount(amount)}
                   </Button>
                 ))}
               </div>
@@ -361,9 +418,9 @@ const PlayerGameView = ({
                 className="w-full" 
                 size="lg"
                 onClick={() => onPlaceBet(selectedBet)}
-                disabled={selectedBet > player.balance || selectedBet === 0}
+                disabled={(usesChips && selectedBet > player.balance) || selectedBet === 0}
               >
-                Bet ${selectedBet}
+                Bet {formatAmount(selectedBet)}
               </Button>
             </div>
           )}
@@ -392,7 +449,7 @@ const PlayerGameView = ({
                     className="flex-1 max-w-[220px]"
                     disabled={insuranceAmount <= 0 || insuranceDecision === 'taken'}
                   >
-                    Take Insurance ${insuranceAmount}
+                    Take Insurance {formatAmount(insuranceAmount)}
                   </Button>
                   <Button 
                     onClick={() => onInsuranceDecision(false)}
@@ -446,7 +503,7 @@ const PlayerGameView = ({
                   size="lg"
                   variant="outline"
                   className="flex-1 max-w-[200px]"
-                  disabled={activeHand ? activeHand.bet_amount > player.balance : true}
+                  disabled={activeHand ? (usesChips && activeHand.bet_amount > player.balance) : true}
                 >
                   Double Down
                 </Button>

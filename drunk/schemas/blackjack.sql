@@ -55,7 +55,8 @@ create table public.blackjack_games (
     "max_splits": 3,
     "min_bet": 1,
     "max_bet": 100,
-    "bet_increments": [1, 2, 5, 10, 25]
+    "bet_increments": [1, 2, 5, 10, 25],
+    "chips_enabled": true
   }'::jsonb,
   
   created_at timestamptz not null default now(),
@@ -85,6 +86,8 @@ create table public.blackjack_players (
   -- Chip balance
   balance int4 not null default 0,
   total_bought_in int4 not null default 0,
+  buy_in_with_sips boolean not null default false,
+  sips_owed int4 not null default 0,
   
   -- Current round state (reset each round)
   current_bet int4 not null default 0,

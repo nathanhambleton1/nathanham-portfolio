@@ -15,6 +15,8 @@ interface ConfirmSettingsScreenProps {
   setMaxSplits: (value: string) => void;
   numberOfDecks: string;
   setNumberOfDecks: (value: string) => void;
+  chipsEnabled: boolean;
+  setChipsEnabled: (value: boolean) => void;
   loading: boolean;
   error: string | null;
   onConfirm: () => void;
@@ -34,6 +36,8 @@ const ConfirmSettingsScreen = ({
   setMaxSplits,
   numberOfDecks,
   setNumberOfDecks,
+  chipsEnabled,
+  setChipsEnabled,
   loading,
   error,
   onConfirm,
@@ -73,6 +77,13 @@ const ConfirmSettingsScreen = ({
             <Switch
               checked={splitEnabled}
               onCheckedChange={setSplitEnabled}
+            />
+          </div>
+          <div className="flex items-center justify-between">
+            <label>Track chips in app</label>
+            <Switch
+              checked={chipsEnabled}
+              onCheckedChange={setChipsEnabled}
             />
           </div>
           {splitEnabled && (
