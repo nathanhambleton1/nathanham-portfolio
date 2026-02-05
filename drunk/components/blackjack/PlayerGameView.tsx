@@ -1,4 +1,3 @@
-import { Card, CardContent, CardHeader, CardTitle } from "../../components/ui/card";
 import { Button } from "../../components/ui/button";
 import { Badge } from "../../components/ui/badge";
 import { useEffect, useState } from 'react';
@@ -18,8 +17,10 @@ interface BlackjackPlayer {
 interface BlackjackHand {
   id: string;
   player_id: string;
+  hand_index: number;
   cards: string[];
   bet_amount: number;
+  insurance_bet: number;
   status: string;
   is_active: boolean;
   result: string | null;
@@ -28,8 +29,8 @@ interface BlackjackHand {
 
 interface PlayerGameViewProps {
   player: BlackjackPlayer;
-  myHand: BlackjackHand | undefined;
-  dealerVisibleCard: string | null;
+  myHands: BlackjackHand[];
+  activeHand: BlackjackHand | undefined;
   dealerHand: string[];
   gameStatus: string;
   showFullDealerHand: boolean;
@@ -43,6 +44,13 @@ interface PlayerGameViewProps {
   onDoubleDown: () => void;
   doubleDownEnabled: boolean;
   canDoubleDown: boolean;
+  splitEnabled: boolean;
+  canSplit: boolean;
+  onSplit: () => void;
+  showInsurancePrompt: boolean;
+  insuranceAmount: number;
+  insuranceDecision: 'taken' | 'declined' | undefined;
+  onInsuranceDecision: (takeInsurance: boolean) => void;
   onBackToLobby?: () => void;
   deckRemaining: number;
   deckTotal: number;
@@ -51,8 +59,8 @@ interface PlayerGameViewProps {
 
 const PlayerGameView = ({
   player,
-  myHand,
-  dealerVisibleCard,
+  myHands,
+  activeHand,
   dealerHand,
   gameStatus,
   showFullDealerHand,
@@ -66,6 +74,13 @@ const PlayerGameView = ({
   onDoubleDown,
   doubleDownEnabled,
   canDoubleDown,
+  splitEnabled,
+  canSplit,
+  onSplit,
+  showInsurancePrompt,
+  insuranceAmount,
+  insuranceDecision,
+  onInsuranceDecision,
   onBackToLobby,
   deckRemaining,
   deckTotal,
@@ -107,12 +122,12 @@ const PlayerGameView = ({
 
   // If cards start dealing (player or dealer cards appear) hide the loader immediately
   useEffect(() => {
-    if (loaderMounted && ((myHand && myHand.cards.length > 0) || (dealerHand && dealerHand.length > 0))) {
+    if (loaderMounted && ((myHands && myHands.some(h => h.cards.length > 0)) || (dealerHand && dealerHand.length > 0))) {
       setLoaderVisible(false);
       const t = window.setTimeout(() => setLoaderMounted(false), 200);
       return () => clearTimeout(t);
     }
-  }, [loaderMounted, myHand?.cards.length, dealerHand.length]);
+  }, [loaderMounted, myHands, dealerHand.length]);
 
   // Card scale based on screen height
   const [cardScale, setCardScale] = useState(1);
@@ -141,8 +156,13 @@ const PlayerGameView = ({
       })();
   // const dealerValue = showFullDealerHand ? calculateHandValue(dealerHand) : null;
 
+  const sortedHands = [...(myHands || [])].sort((a, b) => a.hand_index - b.hand_index);
+  const hasActiveHand = sortedHands.some(h => h.status === 'active');
+  const allHandsComplete = sortedHands.length > 0
+    && sortedHands.every(h => ['stood', 'busted', 'doubled', 'blackjack'].includes(h.status));
+
   // Check if it's this player's turn
-  const isMyTurn = gameStatus === 'playing' && myHand?.is_active && myHand.status === 'active';
+  const isMyTurn = gameStatus === 'playing' && activeHand?.is_active && activeHand.status === 'active';
 
   return (
     <div
@@ -187,36 +207,68 @@ const PlayerGameView = ({
              />
            </div>
 
-           {/* Player's Hand - Center */}
-           {myHand && myHand.cards.length > 0 && (
-             <div className="flex justify-center origin-center">
-               <CardHand
-                 cards={myHand.cards}
-                 label="Your Hand"
-                 // value and soft removed to hide hand value
-                 scale={cardScale}
-                 animateNewCards={true}
-               />
-             </div>
-           )}
+           {/* Player Hands - Center */}
+           {sortedHands.length > 0 && (
+             <div className="flex flex-wrap justify-center gap-4">
+               {sortedHands.map((hand) => {
+                 const isActive = hand.is_active && hand.status === 'active';
+                 const payoutDisplay = hand.payout > 0
+                   ? `+$${hand.payout}`
+                   : hand.payout < 0
+                     ? `-$${Math.abs(hand.payout)}`
+                     : (hand.result === 'loss' ? `-$${hand.bet_amount}` : '$0');
+                 const payoutClass = hand.result === 'win' || hand.result === 'blackjack'
+                   ? 'text-green-600'
+                   : hand.result === 'loss'
+                     ? 'text-red-600'
+                     : 'text-white';
 
-           {/* Result Display */}
-           {myHand?.result && (
-             <div className="flex justify-center w-full">
-               <Card className="w-full max-w-xs shadow-lg bg-card/90">
-                 <CardContent className="p-3">
-                   <div className={`text-center text-2xl font-black ${myHand.result === 'win' ? 'text-green-600' : myHand.result === 'loss' ? 'text-red-600' : 'text-white'}`}>{
-                     myHand.payout > 0
-                       ? `+$${myHand.payout}`
-                       : myHand.payout < 0
-                         ? `-$${Math.abs(myHand.payout)}`
-                         : (myHand.result === 'loss' ? `-$${myHand.bet_amount}` : '$0')
-                   }</div>
-                 </CardContent>
-               </Card>
+                 return (
+                   <div
+                     key={hand.id}
+                     className={`rounded-xl border bg-card/70 px-3 py-2 shadow-sm ${
+                       isActive ? 'border-primary ring-2 ring-primary/40' : 'border-border/60'
+                     }`}
+                   >
+                     <div className="flex items-center justify-between text-xs text-muted-foreground mb-1">
+                       <span>{sortedHands.length > 1 ? `Hand ${hand.hand_index + 1}` : 'Your Hand'}</span>
+                       <span>Bet ${hand.bet_amount}</span>
+                     </div>
+                     <CardHand
+                       cards={hand.cards}
+                       label={undefined}
+                       // value and soft removed to hide hand value
+                       scale={cardScale}
+                       animateNewCards={true}
+                     />
+                     {hand.result && (
+                       <div className={`mt-2 text-center text-lg font-black ${payoutClass}`}>
+                         {payoutDisplay}
+                       </div>
+                     )}
+                   </div>
+                 );
+               })}
              </div>
            )}
          </div>
+      </div>
+
+      {/* Deck Meter - Floating under header */}
+      <div
+        className="absolute left-4 z-20"
+        style={{ top: 'calc(4rem + 1rem)' }}
+      >
+        <DeckMeter
+          remaining={deckRemaining}
+          total={deckTotal}
+          thresholdPercent={deckThresholdPercent}
+          size={40}
+          strokeWidth={4}
+          label="Shoe"
+          showStatusText={false}
+          showDetails={false}
+        />
       </div>
 
       {/* Bottom Action Bar - Always at bottom via flex */}
@@ -232,18 +284,6 @@ const PlayerGameView = ({
                 <Badge variant="secondary" className="font-mono">BET: ${player.current_bet}</Badge>
               )}
             </div>
-          </div>
-
-          <div className="flex items-center justify-center mb-4">
-            <DeckMeter
-              remaining={deckRemaining}
-              total={deckTotal}
-              thresholdPercent={deckThresholdPercent}
-              size={52}
-              strokeWidth={5}
-              label="Shoe"
-              showStatusText={true}
-            />
           </div>
 
           {/* Betting Interface */}
@@ -283,8 +323,45 @@ const PlayerGameView = ({
             </div>
           )}
 
+          {/* Insurance prompt */}
+          {gameStatus === 'insurance' && (
+            showInsurancePrompt ? (
+              <div className="space-y-3">
+                <div className="text-center text-lg font-semibold">
+                  Insurance?
+                </div>
+                <div className="text-center text-sm text-muted-foreground">
+                  Dealer shows an Ace. Insurance pays 2:1 if the dealer has blackjack.
+                </div>
+                <div className="flex gap-3 justify-center flex-wrap">
+                  <Button 
+                    onClick={() => onInsuranceDecision(true)}
+                    size="lg"
+                    className="flex-1 max-w-[220px]"
+                    disabled={insuranceAmount <= 0 || insuranceDecision === 'taken'}
+                  >
+                    Take Insurance ${insuranceAmount}
+                  </Button>
+                  <Button 
+                    onClick={() => onInsuranceDecision(false)}
+                    size="lg"
+                    variant="secondary"
+                    className="flex-1 max-w-[220px]"
+                    disabled={insuranceDecision === 'declined'}
+                  >
+                    No Insurance
+                  </Button>
+                </div>
+              </div>
+            ) : (
+              <div className="text-center text-muted-foreground py-4">
+                Waiting for insurance decisions...
+              </div>
+            )
+          )}
+
           {/* Playing Actions */}
-          {gameStatus === 'playing' && myHand?.is_active && myHand.status === 'active' && (
+          {gameStatus === 'playing' && isMyTurn && (
             <div className="flex gap-3 justify-center flex-wrap">
               <Button 
                 onClick={onHit}
@@ -301,13 +378,23 @@ const PlayerGameView = ({
               >
                 Stand
               </Button>
+              {splitEnabled && canSplit && (
+                <Button 
+                  onClick={onSplit}
+                  size="lg"
+                  variant="outline"
+                  className="flex-1 max-w-[200px]"
+                >
+                  Split
+                </Button>
+              )}
               {doubleDownEnabled && canDoubleDown && (
                 <Button 
                   onClick={onDoubleDown}
                   size="lg"
                   variant="outline"
                   className="flex-1 max-w-[200px]"
-                  disabled={myHand.bet_amount > player.balance}
+                  disabled={activeHand ? activeHand.bet_amount > player.balance : true}
                 >
                   Double Down
                 </Button>
@@ -316,17 +403,16 @@ const PlayerGameView = ({
           )}
 
           {/* Waiting for turn */}
-          {gameStatus === 'playing' && myHand && !myHand.is_active && myHand.status === 'active' && (
+          {gameStatus === 'playing' && !isMyTurn && hasActiveHand && !allHandsComplete && (
             <div className="text-center text-muted-foreground py-4">
               Waiting for your turn...
             </div>
           )}
 
           {/* Hand complete */}
-          {myHand && ['stood', 'busted', 'doubled', 'blackjack'].includes(myHand.status) && gameStatus !== 'table_idle' && (
+          {allHandsComplete && gameStatus !== 'table_idle' && gameStatus !== 'insurance' && (
             <div className="text-center text-muted-foreground py-4">
-              {myHand.status === 'busted' && 'Busted! Waiting for round to complete...'}
-              {['stood', 'doubled', 'blackjack'].includes(myHand.status) && 'Waiting for round to complete...'}
+              Waiting for round to complete...
             </div>
           )}
 

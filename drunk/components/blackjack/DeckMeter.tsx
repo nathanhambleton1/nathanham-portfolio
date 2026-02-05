@@ -9,6 +9,7 @@ interface DeckMeterProps {
   label?: string;
   className?: string;
   showStatusText?: boolean;
+  showDetails?: boolean;
 }
 
 const clampPercent = (value: number) => Math.max(0, Math.min(100, value));
@@ -22,6 +23,7 @@ const DeckMeter = ({
   label = "Deck",
   className = "",
   showStatusText = true,
+  showDetails = true,
 }: DeckMeterProps) => {
   const percent = total > 0 ? (remaining / total) * 100 : 0;
   const clamped = clampPercent(percent);
@@ -67,17 +69,19 @@ const DeckMeter = ({
           {Math.round(clamped)}%
         </div>
       </div>
-      <div className="flex flex-col">
-        <div className="text-[10px] uppercase tracking-widest text-muted-foreground">{label}</div>
-        <div className="text-xs font-semibold">
-          {remaining} / {total} cards
-        </div>
-        {showStatusText && (
-          <div className={`text-[10px] ${isLow ? "text-red-400" : "text-muted-foreground"}`}>
-            {isLow ? `Below ${thresholdPercent}% - reshuffle` : "Shoe OK"}
+      {showDetails && (
+        <div className="flex flex-col">
+          <div className="text-[10px] uppercase tracking-widest text-muted-foreground">{label}</div>
+          <div className="text-xs font-semibold">
+            {remaining} / {total} cards
           </div>
-        )}
-      </div>
+          {showStatusText && (
+            <div className={`text-[10px] ${isLow ? "text-red-400" : "text-muted-foreground"}`}>
+              {isLow ? `Below ${thresholdPercent}% - reshuffle` : "Shoe OK"}
+            </div>
+          )}
+        </div>
+      )}
     </div>
   );
 };

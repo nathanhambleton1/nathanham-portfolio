@@ -1,8 +1,5 @@
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "../../components/ui/card";
 import { Button } from "../../components/ui/button";
-import { Badge } from "../../components/ui/badge";
-import { Input } from "../../components/ui/input";
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "../../components/ui/dialog";
 import { Users, GripVertical } from "lucide-react";
 import { useState, useEffect } from "react";
 
@@ -13,6 +10,26 @@ interface BlackjackPlayer {
   balance: number;
   is_online: boolean;
   seat_position: number | null;
+  hands_played: number;
+  hands_won: number;
+  hands_lost: number;
+  hands_pushed: number;
+  blackjacks: number;
+  busts: number;
+  times_hit: number;
+  times_stood: number;
+  times_doubled: number;
+  times_split: number;
+  times_surrendered: number;
+  times_insurance: number;
+  total_wagered: number;
+  total_won: number;
+  total_lost: number;
+  biggest_win: number;
+  biggest_bet: number;
+  current_streak: number;
+  best_streak: number;
+  worst_streak: number;
 }
 
 interface ChipRequest {
@@ -145,6 +162,46 @@ const LobbyScreen = ({
     setDragOverIndex(null);
   };
 
+  const dealerPlayer = playersList.find(p => p.is_dealer);
+  const formatCurrency = (amount: number) => `$${amount.toLocaleString()}`;
+  const formatStreak = (value: number) => (value > 0 ? `+${value}` : `${value}`);
+
+  const renderStatsGrid = (stats: BlackjackPlayer) => {
+    const items = [
+      { label: 'Hands Played', value: stats.hands_played },
+      { label: 'Wins', value: stats.hands_won, className: 'text-green-600' },
+      { label: 'Losses', value: stats.hands_lost, className: 'text-red-600' },
+      { label: 'Pushes', value: stats.hands_pushed },
+      { label: 'Blackjacks', value: stats.blackjacks },
+      { label: 'Busts', value: stats.busts },
+      { label: 'Hits', value: stats.times_hit },
+      { label: 'Stands', value: stats.times_stood },
+      { label: 'Doubles', value: stats.times_doubled },
+      { label: 'Splits', value: stats.times_split },
+      { label: 'Surrenders', value: stats.times_surrendered },
+      { label: 'Insurance', value: stats.times_insurance },
+      { label: 'Total Wagered', value: formatCurrency(stats.total_wagered) },
+      { label: 'Total Won', value: formatCurrency(stats.total_won), className: 'text-green-600' },
+      { label: 'Total Lost', value: formatCurrency(stats.total_lost), className: 'text-red-600' },
+      { label: 'Biggest Win', value: formatCurrency(stats.biggest_win), className: 'text-green-600' },
+      { label: 'Biggest Bet', value: formatCurrency(stats.biggest_bet) },
+      { label: 'Current Streak', value: formatStreak(stats.current_streak), className: stats.current_streak > 0 ? 'text-green-600' : stats.current_streak < 0 ? 'text-red-600' : '' },
+      { label: 'Best Streak', value: formatStreak(stats.best_streak), className: stats.best_streak > 0 ? 'text-green-600' : '' },
+      { label: 'Worst Streak', value: formatStreak(stats.worst_streak), className: stats.worst_streak < 0 ? 'text-red-600' : '' },
+    ];
+
+    return (
+      <div className="grid grid-cols-2 gap-3 text-sm">
+        {items.map((item) => (
+          <div key={item.label} className="flex items-center justify-between gap-2">
+            <span className="text-muted-foreground">{item.label}</span>
+            <span className={`font-medium ${item.className ?? ''}`}>{item.value}</span>
+          </div>
+        ))}
+      </div>
+    );
+  };
+
   return (
     <div className="flex-1 h-full overflow-y-auto bg-gradient-bg p-4">
       <div className="max-w-2xl mx-auto space-y-4 pb-8">
@@ -263,9 +320,11 @@ const LobbyScreen = ({
         {/* Your Info (Player) */}
         {!isDealer && player && (
           <Card>
-            <CardContent className="space-y-3">
-            </CardContent>
-            <CardContent className="space-y-3">
+            <CardHeader>
+              <CardTitle>Your Stats</CardTitle>
+              <CardDescription>Your current table stats.</CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-4">
               <Button 
                 className="w-full" 
                 variant="outline"
@@ -273,6 +332,20 @@ const LobbyScreen = ({
               >
                 Request Chips
               </Button>
+              {renderStatsGrid(player)}
+            </CardContent>
+          </Card>
+        )}
+
+        {/* Dealer Stats (dealer only) */}
+        {isDealer && dealerPlayer && (
+          <Card>
+            <CardHeader>
+              <CardTitle>Your Dealer Stats</CardTitle>
+              <CardDescription>Your performance at this table.</CardDescription>
+            </CardHeader>
+            <CardContent>
+              {renderStatsGrid(dealerPlayer)}
             </CardContent>
           </Card>
         )}

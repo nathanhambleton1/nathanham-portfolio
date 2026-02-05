@@ -1,7 +1,6 @@
 import { Card, CardContent, CardHeader, CardTitle } from "../../components/ui/card";
 import { Button } from "../../components/ui/button";
 import { Badge } from "../../components/ui/badge";
-import { DollarSign } from "lucide-react";
 import { useEffect, useRef } from "react";
 import CardHand from "./CardHand";
 import DeckMeter from "./DeckMeter";
@@ -19,8 +18,10 @@ interface BlackjackPlayer {
 interface BlackjackHand {
   id: string;
   player_id: string;
+  hand_index: number;
   cards: string[];
   bet_amount: number;
+  insurance_bet: number;
   status: string;
   is_active: boolean;
   result: string | null;
@@ -97,24 +98,28 @@ const DealerGameView = ({
   const deckLow = deckPercent <= deckThresholdPercent;
 
   // Compute dealer net payout for this round based on players' hand results
-  const dealerNet = nonDealerPlayers.reduce((acc, p) => {
-    const ph = hands.find(h => h.player_id === p.id);
-    if (!ph || !ph.result) return acc;
+  const dealerNet = hands
+    .filter(h => nonDealerPlayers.some(p => p.id === h.player_id) && h.result)
+    .reduce((acc, ph) => {
+      // If player won (including blackjack), dealer loses the player's payout amount
+      if (ph.result === 'win' || ph.result === 'blackjack') {
+        acc -= (ph.payout ?? ph.bet_amount ?? 0);
+      } else if (ph.result === 'loss') {
+        // Player lost: dealer gains the player's bet amount
+        acc += (ph.bet_amount ?? 0);
+      } else if (ph.result === 'push') {
+        // push = no change
+      } else {
+        // other cases (surrender, doubled, etc.) - use payout if present
+        acc -= (ph.payout ?? 0);
+      }
 
-    // If player won (including blackjack), dealer loses the player's payout amount
-    if (ph.result === 'win' || ph.result === 'blackjack') {
-      acc -= (ph.payout ?? ph.bet_amount ?? 0);
-    } else if (ph.result === 'loss') {
-      // Player lost: dealer gains the player's bet amount
-      acc += (ph.bet_amount ?? 0);
-    } else if (ph.result === 'push') {
-      // push = no change
-    } else {
-      // other cases (surrender, doubled, etc.) - use payout if present
-      acc -= (ph.payout ?? 0);
-    }
-    return acc;
-  }, 0 as number);
+      if (ph.insurance_bet && ph.insurance_bet > 0) {
+        acc += dealerStatus === 'blackjack' ? -ph.insurance_bet : ph.insurance_bet;
+      }
+
+      return acc;
+    }, 0 as number);
 
   return (
     <div className="flex-1 h-full flex flex-col transition-all overflow-hidden bg-gradient-bg">
@@ -179,24 +184,15 @@ const DealerGameView = ({
           {/* Player Hands Grid */}
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
             {nonDealerPlayers.map((player) => {
-              const playerHand = hands.find(h => h.player_id === player.id);
-              const handValue = playerHand ? calculateHandValue(playerHand.cards) : null;
-              const isPlayersTurn = playerHand?.is_active && playerHand?.status === 'active';
-              const isWin = playerHand?.result === 'win' || playerHand?.result === 'blackjack';
-              const isLoss = playerHand?.result === 'loss';
-
-              const displayPayout = playerHand
-                ? (isWin ? -(playerHand.payout ?? 0) : isLoss ? (playerHand.bet_amount ?? 0) : 0)
-                : 0;
-
-              const payoutClass = displayPayout > 0 ? 'text-green-600' : displayPayout < 0 ? 'text-red-600' : 'text-white';
+              const playerHands = hands
+                .filter(h => h.player_id === player.id)
+                .sort((a, b) => a.hand_index - b.hand_index);
+              const isPlayersTurn = playerHands.some(h => h.is_active && h.status === 'active');
 
               const hasBet = (player.current_bet && player.current_bet > 0) || player.has_placed_bet;
               let cardClass = 'border transition-all duration-300';
               if (isPlayersTurn) {
                 cardClass += ' border-red-600 border-4 shadow-xl shadow-red-500/20';
-              } else if (isWin) {
-                cardClass += ' border-green-600 border-2';
               } else if (hasBet) {
                 cardClass += ' border-green-500/50 border-2';
               } else {
@@ -231,26 +227,66 @@ const DealerGameView = ({
                     </div>
                   </CardHeader>
                   <CardContent className="p-3">
-                    {playerHand && playerHand.cards.length > 0 ? (
-                      <div className="flex justify-center scale-90 origin-top">
-                        <CardHand
-                          cards={playerHand.cards}
-                          value={handValue?.value}
-                          soft={handValue?.soft}
-                          animateNewCards={true}
-                        />
+                    {playerHands.length > 0 ? (
+                      <div className="space-y-3">
+                        {playerHands.map((hand) => {
+                          const handValue = calculateHandValue(hand.cards);
+                          const isWin = hand.result === 'win' || hand.result === 'blackjack';
+                          const isLoss = hand.result === 'loss';
+                          const displayPayout = isWin
+                            ? -(hand.payout ?? 0)
+                            : isLoss
+                              ? (hand.bet_amount ?? 0)
+                              : 0;
+                          const payoutClass = displayPayout > 0
+                            ? 'text-green-600'
+                            : displayPayout < 0
+                              ? 'text-red-600'
+                              : 'text-white';
+
+                          return (
+                            <div
+                              key={hand.id}
+                              className={`rounded-md border px-2 py-2 ${
+                                hand.is_active && hand.status === 'active'
+                                  ? 'border-red-600 border-2 shadow-md'
+                                  : 'border-border/50'
+                              }`}
+                            >
+                              <div className="flex items-center justify-between text-[10px] text-muted-foreground mb-1">
+                                <span>Hand {hand.hand_index + 1}</span>
+                                <span>Bet ${hand.bet_amount}</span>
+                              </div>
+                              {hand.cards.length > 0 ? (
+                                <div className="flex justify-center scale-90 origin-top">
+                                  <CardHand
+                                    cards={hand.cards}
+                                    value={handValue?.value}
+                                    soft={handValue?.soft}
+                                    animateNewCards={true}
+                                  />
+                                </div>
+                              ) : (
+                                <div className="text-center text-[10px] text-muted-foreground py-2 italic">
+                                  Waiting for cards...
+                                </div>
+                              )}
+                              {hand.result && (
+                                <div className="mt-2 text-center">
+                                  <div className={`text-base font-black ${payoutClass}`}>
+                                    {displayPayout > 0
+                                      ? `+$${displayPayout}`
+                                      : (displayPayout < 0 ? `-$${Math.abs(displayPayout)}` : '$0')}
+                                  </div>
+                                </div>
+                              )}
+                            </div>
+                          );
+                        })}
                       </div>
                     ) : (
                       <div className="text-center text-[10px] text-muted-foreground py-4 italic">
                         {player.has_placed_bet ? 'Waiting for cards...' : 'No bet placed'}
-                      </div>
-                    )}
-                    
-                    {playerHand?.result && (
-                      <div className="mt-2 text-center">
-                        <div className={`text-base font-black ${payoutClass}`}>
-                          {displayPayout > 0 ? `+$${displayPayout}` : (displayPayout < 0 ? `-$${Math.abs(displayPayout)}` : '$0')}
-                        </div>
                       </div>
                     )}
                   </CardContent>
@@ -317,7 +353,7 @@ const DealerGameView = ({
               </div>
             )}
 
-            {['playing', 'dealer_turn', 'resolving'].includes(gameStatus) && (
+            {['insurance', 'playing', 'dealer_turn', 'resolving'].includes(gameStatus) && (
               <div className="text-center text-sm font-bold animate-pulse text-primary py-2 uppercase tracking-tighter">
                 Round in progress...
               </div>
