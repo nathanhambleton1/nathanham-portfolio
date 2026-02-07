@@ -2918,7 +2918,7 @@ const Drunkopoly = () => {
           onCollect={handleCollect}
         />
       </div>
-      <ActivityLog gameCode={game?.code ?? gameCode} players={playersList} />
+      <ActivityLog gameCode={game?.code ?? gameCode} players={playersList} currentPlayer={player} />
     </div>
   );
 };
@@ -3124,7 +3124,22 @@ function GameCodePopover({ code, onLogout, players, currentPlayer, game, onRemov
   const [confirmOpen, setConfirmOpen] = useState(false);
   const [qrCodeOpen, setQrCodeOpen] = useState(false);
   const [pendingRemove, setPendingRemove] = useState<{ id: string; name?: string } | null>(null);
+  const [commPinOpen, setCommPinOpen] = useState(false);
+  const [commToolsOpen, setCommToolsOpen] = useState(false);
+  const [commPinValue, setCommPinValue] = useState('');
+  const [commUnlockedUntil, setCommUnlockedUntil] = useState<number>(0);
+  const [commSelectedPlayerId, setCommSelectedPlayerId] = useState<string>('');
+  const [commBalanceMode, setCommBalanceMode] = useState<'set' | 'delta'>('delta');
+  const [commBalanceValue, setCommBalanceValue] = useState<string>('');
+  const [commPendingSipsValue, setCommPendingSipsValue] = useState<string>('');
+  const [commNote, setCommNote] = useState<string>('');
   const navigate = useNavigate();
+
+  // NOTE: This is NOT a secret. Vite env vars are bundled into the client.
+  // Real security must be enforced server-side (Supabase RLS / policies).
+  const commissionerPin ='drunk1234';
+
+  const commUnlocked = Date.now() < (commUnlockedUntil || 0);
 
   const requestRemove = (id: string, name?: string) => {
     setPendingRemove({ id, name });
@@ -3169,6 +3184,135 @@ function GameCodePopover({ code, onLogout, players, currentPlayer, game, onRemov
       } catch (e) {
         // ignore
       }
+    }
+  };
+
+  const openCommissionerTools = () => {
+    if (!currentPlayer?.is_commissioner) return;
+    // Default selection to self if available; otherwise first player in list.
+    const fallback = (currentPlayer?.id ? String(currentPlayer.id) : (players && players.length ? String(players[0]?.id) : '')) || '';
+    setCommSelectedPlayerId((prev) => (prev ? prev : fallback));
+    if (commUnlocked) {
+      setCommToolsOpen(true);
+      return;
+    }
+    setCommPinValue('');
+    setCommPinOpen(true);
+  };
+
+  const tryUnlockCommissionerTools = () => {
+    if (!currentPlayer?.is_commissioner) return;
+    if ((commPinValue || '') === String(commissionerPin || '')) {
+      setCommUnlockedUntil(Date.now() + 10 * 60 * 1000); // 10 minutes
+      setCommPinOpen(false);
+      setCommToolsOpen(true);
+      setCommPinValue('');
+      try { toast({ title: 'Unlocked', description: 'Commissioner Tools unlocked for 10 minutes.' }); } catch { /* ignore */ }
+      return;
+    }
+    try { toast({ title: 'Incorrect PIN', description: 'Commissioner Tools PIN was incorrect.', variant: 'destructive' }); } catch { /* ignore */ }
+  };
+
+  const commissionerAdjustBalance = async () => {
+    if (!currentPlayer?.is_commissioner) return;
+    if (!game?.id) return;
+    const targetId = String(commSelectedPlayerId || '');
+    const parsed = Number(commBalanceValue);
+    if (!targetId) {
+      try { toast({ title: 'Missing player', description: 'Select a player first.', variant: 'destructive' }); } catch { /* ignore */ }
+      return;
+    }
+    if (!Number.isFinite(parsed)) {
+      try { toast({ title: 'Invalid amount', description: 'Enter a valid number.', variant: 'destructive' }); } catch { /* ignore */ }
+      return;
+    }
+
+    try {
+      // Fetch freshest player row so we compute delta off the latest balance.
+      const { data: targetRows, error: tErr } = await supabase
+        .from('players')
+        .select('*')
+        .eq('id', targetId)
+        .eq('game_id', game.id)
+        .limit(1);
+      if (tErr) throw tErr;
+      const target = targetRows && targetRows.length ? targetRows[0] : null;
+      if (!target) throw new Error('Player not found');
+
+      const currentBal = Number(target.balance || 0);
+      const nextBal = commBalanceMode === 'set' ? parsed : (currentBal + parsed);
+      if (!Number.isFinite(nextBal)) throw new Error('Invalid resulting balance');
+      if (nextBal < 0) throw new Error('Balance cannot be negative');
+
+      await supabase.from('players').update({ balance: nextBal }).eq('id', targetId).eq('game_id', game.id);
+
+      const delta = nextBal - currentBal;
+      const note = (commNote || '').trim();
+      const modeDesc = commBalanceMode === 'set' ? `set balance to $${Number(nextBal).toLocaleString()}` : `adjusted balance by $${Number(parsed).toLocaleString()}`;
+      await supabase.from('money_events').insert([{
+        game_id: game.id,
+        actor_player_id: currentPlayer?.id ?? null,
+        from_player_id: null,
+        to_player_id: targetId,
+        amount: delta,
+        type: 'admin_balance_adjust',
+        description: `Commissioner ${modeDesc} for ${target?.name || targetId}.${note ? ` Note: ${note}` : ''}`,
+      }]);
+
+      try { toast({ title: 'Balance updated', description: `${target?.name || 'Player'} now has $${Number(nextBal).toLocaleString()}.` }); } catch { /* ignore */ }
+
+      // Clear inputs but keep tools open.
+      setCommBalanceValue('');
+    } catch (err: any) {
+      console.error('Commissioner adjust balance failed', err);
+      try { toast({ title: 'Update failed', description: err?.message || 'Failed to update balance.', variant: 'destructive' }); } catch { /* ignore */ }
+    }
+  };
+
+  const commissionerSetPendingSips = async () => {
+    if (!currentPlayer?.is_commissioner) return;
+    if (!game?.id) return;
+    const targetId = String(commSelectedPlayerId || '');
+    const parsed = Number(commPendingSipsValue);
+    if (!targetId) {
+      try { toast({ title: 'Missing player', description: 'Select a player first.', variant: 'destructive' }); } catch { /* ignore */ }
+      return;
+    }
+    if (!Number.isFinite(parsed) || parsed < 0 || !Number.isInteger(parsed)) {
+      try { toast({ title: 'Invalid sips', description: 'Enter a whole number 0 or greater.', variant: 'destructive' }); } catch { /* ignore */ }
+      return;
+    }
+
+    try {
+      const { data: targetRows, error: tErr } = await supabase
+        .from('players')
+        .select('*')
+        .eq('id', targetId)
+        .eq('game_id', game.id)
+        .limit(1);
+      if (tErr) throw tErr;
+      const target = targetRows && targetRows.length ? targetRows[0] : null;
+      if (!target) throw new Error('Player not found');
+
+      const prev = Number(target.pending_sips || 0);
+      await supabase.from('players').update({ pending_sips: parsed }).eq('id', targetId).eq('game_id', game.id);
+
+      const note = (commNote || '').trim();
+      await supabase.from('money_events').insert([{
+        game_id: game.id,
+        actor_player_id: currentPlayer?.id ?? null,
+        from_player_id: null,
+        to_player_id: targetId,
+        amount: 0,
+        type: 'admin_pending_sips_set',
+        description: `Commissioner set pending sips for ${target?.name || targetId} from ${prev} to ${parsed}.${note ? ` Note: ${note}` : ''}`,
+      }]);
+
+      try { toast({ title: 'Pending sips updated', description: `${target?.name || 'Player'} now has ${parsed} pending sip${parsed !== 1 ? 's' : ''}.` }); } catch { /* ignore */ }
+      setCommPendingSipsValue('');
+    } catch (err: any) {
+      console.error('Commissioner set pending sips failed', err);
+      try { toast({ title: 'Update failed', description: err?.message || 'Failed to update pending sips.', variant: 'destructive' }); } catch { /* ignore */ }
     }
   };
 
@@ -3309,6 +3453,18 @@ function GameCodePopover({ code, onLogout, players, currentPlayer, game, onRemov
                           onCheckedChange={(checked) => { if (onToggleExpansion) onToggleExpansion(checked); }}
                         />
                       </div>
+
+                      <div className="pt-2">
+                        <Button
+                          type="button"
+                          variant="secondary"
+                          className="w-full justify-center"
+                          onClick={openCommissionerTools}
+                          title="Commissioner-only tools (audited)"
+                        >
+                          Advanced (Commissioner)
+                        </Button>
+                      </div>
                     </>
                   )}
                 </div>
@@ -3373,6 +3529,125 @@ function GameCodePopover({ code, onLogout, players, currentPlayer, game, onRemov
         
         <DialogFooter>
           <Button onClick={() => setSettingsOpen(false)}>Close</Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+
+    {/* Commissioner PIN gate (soft gate; real protection must be enforced in Supabase policies) */}
+    <Dialog open={commPinOpen} onOpenChange={(v) => { setCommPinOpen(v); if (!v) setCommPinValue(''); }}>
+      <DialogContent className="max-w-sm">
+        <DialogHeader>
+          <DialogTitle>Commissioner Tools</DialogTitle>
+        </DialogHeader>
+        <div className="space-y-3">
+          <div className="text-sm text-muted-foreground">
+            Enter the commissioner PIN to unlock tools for this session.
+          </div>
+          <Input
+            type="password"
+            value={commPinValue}
+            placeholder="PIN"
+            onChange={(e) => setCommPinValue(e.target.value)}
+            onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); tryUnlockCommissionerTools(); } }}
+          />
+          <div className="text-xs text-muted-foreground">
+            Note: this is a UI-only gate. Security must be enforced with Supabase RLS.
+          </div>
+        </div>
+        <DialogFooter>
+          <Button variant="secondary" onClick={() => setCommPinOpen(false)}>Cancel</Button>
+          <Button onClick={tryUnlockCommissionerTools}>Unlock</Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+
+    {/* Commissioner Tools (audited) */}
+    <Dialog open={commToolsOpen} onOpenChange={setCommToolsOpen}>
+      <DialogContent className="max-w-lg">
+        <DialogHeader>
+          <DialogTitle>Commissioner Tools</DialogTitle>
+        </DialogHeader>
+
+        <div className="space-y-4">
+          <div className="rounded border border-muted bg-muted/20 p-3 space-y-2">
+            <div className="text-sm font-medium">Target Player</div>
+            <select
+              className="w-full h-10 px-3 rounded border border-input bg-background text-foreground"
+              value={commSelectedPlayerId}
+              onChange={(e) => setCommSelectedPlayerId(e.target.value)}
+            >
+              {(players || []).map((p: any) => (
+                <option key={p.id} value={String(p.id)}>
+                  {p.name}{p.is_commissioner ? ' (Commissioner)' : ''}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          <div className="rounded border border-muted bg-muted/20 p-3 space-y-3">
+            <div className="text-sm font-medium">Adjust Balance</div>
+            <div className="flex items-center gap-2">
+              <Button
+                type="button"
+                variant={commBalanceMode === 'delta' ? 'default' : 'secondary'}
+                size="sm"
+                onClick={() => setCommBalanceMode('delta')}
+              >
+                Delta (+/-)
+              </Button>
+              <Button
+                type="button"
+                variant={commBalanceMode === 'set' ? 'default' : 'secondary'}
+                size="sm"
+                onClick={() => setCommBalanceMode('set')}
+              >
+                Set Exact
+              </Button>
+            </div>
+            <Input
+              inputMode="numeric"
+              value={commBalanceValue}
+              placeholder={commBalanceMode === 'set' ? 'New balance (e.g. 1500)' : 'Delta (e.g. -200 or 200)'}
+              onChange={(e) => setCommBalanceValue(e.target.value)}
+            />
+            <div className="flex justify-end">
+              <Button type="button" onClick={commissionerAdjustBalance}>
+                Apply Balance Change
+              </Button>
+            </div>
+          </div>
+
+          <div className="rounded border border-muted bg-muted/20 p-3 space-y-3">
+            <div className="text-sm font-medium">Set Pending Sips</div>
+            <Input
+              inputMode="numeric"
+              value={commPendingSipsValue}
+              placeholder="Pending sips (e.g. 0)"
+              onChange={(e) => setCommPendingSipsValue(e.target.value)}
+            />
+            <div className="flex justify-end">
+              <Button type="button" onClick={commissionerSetPendingSips}>
+                Apply Sips Change
+              </Button>
+            </div>
+          </div>
+
+          <div className="rounded border border-muted bg-muted/20 p-3 space-y-2">
+            <div className="text-sm font-medium">Audit Note (optional)</div>
+            <Input
+              value={commNote}
+              placeholder="Reason for correction (shows in Activity Log)"
+              onChange={(e) => setCommNote(e.target.value)}
+            />
+          </div>
+
+          <div className="text-xs text-muted-foreground">
+            All changes here are recorded in Activity Log.
+          </div>
+        </div>
+
+        <DialogFooter>
+          <Button variant="secondary" onClick={() => setCommToolsOpen(false)}>Close</Button>
         </DialogFooter>
       </DialogContent>
     </Dialog>

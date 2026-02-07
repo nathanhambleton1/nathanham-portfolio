@@ -22,14 +22,19 @@ type EventRow = {
 export default function ActivityLog({
   gameCode,
   players,
+  currentPlayer,
   pollInterval = 2000,
 }: {
   gameCode: string | undefined | null;
   players: any[];
+  currentPlayer?: any;
   pollInterval?: number;
 }) {
   const [events, setEvents] = useState<EventRow[]>([]);
   const [expanded, setExpanded] = useState(false);
+  // Default to hiding commissioner corrections even for commissioners to keep the feed clean.
+  const [showAdminEvents, setShowAdminEvents] = useState(false);
+  const isCommissioner = !!currentPlayer?.is_commissioner;
 
   useEffect(() => {
     if (!gameCode) return;
@@ -191,7 +196,6 @@ export default function ActivityLog({
     return e.description || `${e.kind} ${e.type}`;
   };
 
-  const visibleEvents = expanded ? events : events.slice(0, 5);
   // Deduplicate: when we log a sip assignment we now insert a `money` event
   // of type `sip_assigned`. The `game_events` view may also include the
   // original `sip` row which gets updated later; to avoid showing the same
@@ -222,7 +226,17 @@ export default function ActivityLog({
     return true;
   });
 
-  const visibleFilteredEvents = expanded ? filteredEvents : filteredEvents.slice(0, 5);
+  const adminFilteredEvents = filteredEvents.filter((ev) => {
+    const t = String(ev.type || '');
+    // `game_events.kind` is a view field and may not always be exactly "money".
+    // We key off the event type prefix instead.
+    const isAdmin = (t.startsWith('admin_') || t.startsWith('admin'));
+    if (!isCommissioner) return !isAdmin;
+    if (!showAdminEvents) return !isAdmin;
+    return true;
+  });
+
+  const visibleFilteredEvents = expanded ? adminFilteredEvents : adminFilteredEvents.slice(0, 5);
 
   return (
     <>
@@ -232,6 +246,16 @@ export default function ActivityLog({
         <div className="max-w-4xl mx-auto px-4 sm:px-6 pt-8 pb-3">
           <div className="flex items-center gap-2 mb-1">
             <div className="font-semibold text-xs sm:text-sm">Activity</div>
+            {isCommissioner ? (
+              <button
+                type="button"
+                onClick={() => setShowAdminEvents((v) => !v)}
+                className="ml-2 text-[10px] sm:text-xs text-muted-foreground hover:text-foreground underline decoration-dotted underline-offset-4"
+                title="Toggle visibility of commissioner corrections"
+              >
+                {showAdminEvents ? 'Hide corrections' : 'Show corrections'}
+              </button>
+            ) : null}
             <div className="ml-auto flex items-center gap-2 text-[10px] sm:text-xs text-muted-foreground">
               <span
                 style={{
@@ -269,7 +293,7 @@ export default function ActivityLog({
           </div>
           <div>
             <ul className="space-y-1 text-[10px] sm:text-xs">
-              {filteredEvents.length === 0 && (
+              {adminFilteredEvents.length === 0 && (
                 <li className="text-[10px] text-muted-foreground">No activity yet</li>
               )}
               {visibleFilteredEvents.map((ev) => (
@@ -282,14 +306,14 @@ export default function ActivityLog({
               ))}
             </ul>
 
-            {filteredEvents.length > 10 && (
+            {adminFilteredEvents.length > 10 && (
               <div className="mt-2 flex items-center">
                 <button
                   className="text-[10px] text-primary underline hover:no-underline"
                   onClick={() => setExpanded((s) => !s)}
                   aria-expanded={expanded}
                 >
-                  {expanded ? 'Show less' : `Show ${filteredEvents.length - 10} more`}
+                  {expanded ? 'Show less' : `Show ${adminFilteredEvents.length - 10} more`}
                 </button>
               </div>
             )}
