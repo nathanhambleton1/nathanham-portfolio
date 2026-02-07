@@ -7,6 +7,7 @@ import BeerPong from "../../drunk/pages/BeerPong";
 import KingsCup from "../../drunk/pages/KingsCup";
 import BeerBall from "../../drunk/pages/BeerBall";
 import Drunkopoly from "../../drunk/pages/Drunkopoly";
+import Messages from "../../drunk/pages/Messages";
 import Blackjack from "../../drunk/pages/Blackjack";
 import Rules from "../../drunk/pages/Rules";
 import NotFound from "../../drunk/pages/NotFound";
@@ -51,6 +52,7 @@ const Drunk = () => {
         <Route index element={<Index />} />
         <Route path="drunkopoly" element={<Drunkopoly />} />
         <Route path="drunkopoly/rules" element={<Rules />} />
+        <Route path="drunkopoly/messages" element={<Messages />} />
         <Route path="blackjack" element={<Blackjack />} />
         {/* Beer Olympics removed */}
         <Route path="power-hour" element={<PowerHour />} />

@@ -6,7 +6,7 @@ import BankruptStatus from "../components/BankruptStatus";
 import SipsLockOverlay from "../components/SipsLockOverlay";
 import PropertiesPopup from "../components/PropertiesPopup";
 import RankingsPopup from "../components/RankingsPopup";
-import { UserPlus, DollarSign, Users, Percent, Crown, PiggyBank, Clock, Copy, Settings, QrCode, ChevronDown, Info, Eye, EyeOff, Building2 } from "lucide-react";
+import { UserPlus, DollarSign, Users, Percent, Crown, PiggyBank, Clock, Copy, Settings, QrCode, ChevronDown, Info, Eye, EyeOff, Building2, MessagesSquare } from "lucide-react";
 import { QRCodeSVG } from "qrcode.react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "../components/ui/dialog";
 import CollectPopup from "../components/CollectPopup";
@@ -109,6 +109,7 @@ const Drunkopoly = () => {
   const [bankruptModalOpen, setBankruptModalOpen] = useState(false);
   const [bankruptStatusOpen, setBankruptStatusOpen] = useState(false);
   const [blockedPaymentMessage, setBlockedPaymentMessage] = useState<string | null>(null);
+  const [unreadMessageCount, setUnreadMessageCount] = useState<number>(0);
   const prevBalanceRef = useRef<number | null>(null);
   const navigate = useNavigate();
   const [isNarrow, setIsNarrow] = useState<boolean>(() => {
@@ -586,6 +587,75 @@ const Drunkopoly = () => {
           .from('games')
           .update({ free_parking_balance: (game.free_parking_balance || 0) + total })
           .eq('id', game.id);
+      }
+
+      // If a note was included on player-to-player payments, also log it into chat history.
+      // This makes payment notes visible in the Messages page later.
+      if (opts?.description) {
+        const note = String(opts.description || '').trim();
+        if (note) {
+          const actorName = actor?.name || 'Unknown';
+          const playerTransfers = (meData || []).filter((me: any) => !!me?.to_player_id && (me?.amount || 0) > 0);
+          for (const tr of playerTransfers) {
+            try {
+              const toId = String(tr.to_player_id);
+              const ids = [String(actor_player_id), toId].sort();
+
+              // Find an existing direct chat (both members).
+              let chatId: string | null = null;
+              const { data: m1, error: m1e } = await supabase
+                .from('drunkopoly_chat_members')
+                .select('chat_id')
+                .eq('player_id', ids[0]);
+              if (m1e) throw m1e;
+              const cand = Array.from(new Set((m1 || []).map((r: any) => r.chat_id)));
+              if (cand.length > 0) {
+                const { data: m2, error: m2e } = await supabase
+                  .from('drunkopoly_chat_members')
+                  .select('chat_id')
+                  .in('chat_id', cand)
+                  .eq('player_id', ids[1]);
+                if (m2e) throw m2e;
+                const found = (m2 || [])[0]?.chat_id;
+                if (found) {
+                  const { data: cr, error: ce } = await supabase
+                    .from('drunkopoly_chats')
+                    .select('id, game_id')
+                    .eq('id', found)
+                    .limit(1)
+                    .single();
+                  if (!ce && cr?.game_id === game.id) chatId = found;
+                }
+              }
+
+              if (!chatId) {
+                const { data: chatCreated, error: cErr } = await supabase
+                  .from('drunkopoly_chats')
+                  .insert([{ game_id: game.id, title: null, created_by_player_id: actor_player_id }])
+                  .select()
+                  .limit(1)
+                  .single();
+                if (cErr) throw cErr;
+                chatId = chatCreated.id;
+                await supabase.from('drunkopoly_chat_members').insert([
+                  { chat_id: chatId, player_id: actor_player_id, last_read_at: new Date().toISOString() },
+                  { chat_id: chatId, player_id: toId, last_read_at: null },
+                ]);
+              }
+
+              await supabase.from('drunkopoly_chat_messages').insert([{
+                chat_id: chatId,
+                game_id: game.id,
+                sender_player_id: actor_player_id,
+                body: note,
+                kind: 'payment',
+                meta: { amount: tr.amount ?? null, from: actor_player_id, to: toId, actor_name: actorName },
+              }]);
+            } catch (logErr) {
+              console.warn('Failed to log payment note to chat history', logErr);
+            }
+          }
+        }
       }
 
       return { ok: true, money_events: meData };
@@ -1519,6 +1589,71 @@ const Drunkopoly = () => {
     };
   }, [screen, game?.code, player?.id]);
 
+  // Poll unread chat count so we can show a badge in the header.
+  useEffect(() => {
+    if (screen !== 'home' || !game?.id || !player?.id) return;
+    let stopped = false;
+    let timer: number | null = null;
+
+    const fetchUnread = async () => {
+      try {
+        const { data: memRows, error: memErr } = await supabase
+          .from('drunkopoly_chat_members')
+          .select('chat_id,last_read_at,player_id')
+          .eq('player_id', player.id);
+        if (memErr) throw memErr;
+
+        const rows = (memRows || []) as any[];
+        if (rows.length === 0) {
+          setUnreadMessageCount(0);
+          return;
+        }
+
+        let total = 0;
+        for (const r of rows) {
+          const since = r.last_read_at || '1970-01-01T00:00:00.000Z';
+          const { count, error: cErr } = await supabase
+            .from('drunkopoly_chat_messages')
+            .select('id', { count: 'exact', head: true })
+            .eq('chat_id', r.chat_id)
+            .gt('created_at', since)
+            .neq('sender_player_id', player.id);
+          if (cErr) throw cErr;
+          total += (count || 0);
+        }
+
+        setUnreadMessageCount(total);
+      } catch (e) {
+        // If messaging tables aren't deployed yet, keep badge at 0 without spamming logs.
+        setUnreadMessageCount(0);
+      }
+    };
+
+    const scheduleNext = () => {
+      if (stopped) return;
+      const hidden = typeof document !== 'undefined' && document.visibilityState === 'hidden';
+      const delay = hidden ? 8000 : 3000;
+      timer = window.setTimeout(async () => {
+        await fetchUnread();
+        scheduleNext();
+      }, delay);
+    };
+
+    fetchUnread();
+    scheduleNext();
+
+    const onVisibility = () => {
+      if (document.visibilityState === 'visible') fetchUnread();
+    };
+    document.addEventListener('visibilitychange', onVisibility);
+
+    return () => {
+      stopped = true;
+      if (timer) clearTimeout(timer);
+      document.removeEventListener('visibilitychange', onVisibility);
+    };
+  }, [screen, game?.id, player?.id]);
+
   // Realtime subscription: update `game` and `playersList` when rows change so everyone sees
   // the trade lock overlay immediately when someone starts the timer.
   useEffect(() => {
@@ -2166,6 +2301,24 @@ const Drunkopoly = () => {
           {(game?.sips_enabled ?? true) && !isNarrow && (
             <Button variant="ghost" size="sm" onClick={() => navigate('/drunk/drunkopoly/rules')}>Rules</Button>
           )}
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={() => navigate('/drunk/drunkopoly/messages')}
+            className="relative"
+            aria-label="Messages"
+            title="Messages"
+          >
+            <MessagesSquare className="w-4 h-4" />
+            {unreadMessageCount > 0 && (
+              <span
+                className="absolute -top-1 -right-1 min-w-[18px] h-[18px] px-1 rounded-full text-[11px] leading-[18px] text-center"
+                style={{ backgroundColor: 'hsl(var(--destructive))', color: 'hsl(var(--destructive-foreground))' }}
+              >
+                {unreadMessageCount > 99 ? '99+' : unreadMessageCount}
+              </span>
+            )}
+          </Button>
           <GameCodePopover
             code={game?.code ?? gameCode}
             onLogout={handleLogoutOfGame}
@@ -3343,6 +3496,18 @@ function GameCodePopover({ code, onLogout, players, currentPlayer, game, onRemov
               Rules
             </Button>
           )}
+          <Button
+            variant="secondary"
+            className="w-full mt-1"
+            onClick={() => {
+              setQrCodeOpen(false);
+              setSettingsOpen(false);
+              navigate('/drunk/drunkopoly/messages');
+            }}
+          >
+            <MessagesSquare size={16} />
+            Messages
+          </Button>
           <Button variant="secondary" className="w-full mt-1" onClick={() => setSettingsOpen(true)}>
             <Settings size={16} />
             Settings

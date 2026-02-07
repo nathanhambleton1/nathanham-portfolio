@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from "./ui/dialog";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogClose } from "./ui/dialog";
 import { Button } from "./ui/button";
 import { Card } from "./ui/card";
 import { Input } from "./ui/input";
@@ -16,6 +16,7 @@ import {
 import { 
   Home, 
   Building2, 
+  X,
   Crown, 
   ChevronDown, 
   ChevronUp, 
@@ -655,11 +656,15 @@ const PropertiesPopup = ({ open, onOpenChange, gameCode, players }: PropertiesPo
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
-        <DialogHeader>
+        <DialogHeader className="flex-row items-center justify-between">
           <DialogTitle className="text-2xl flex items-center gap-2">
             <Building2 className="w-6 h-6" />
             Properties Manager
           </DialogTitle>
+          <DialogClose className="rounded-sm opacity-70 ring-offset-background transition-opacity hover:opacity-100 focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2">
+            <X className="h-5 w-5" />
+            <span className="sr-only">Close</span>
+          </DialogClose>
         </DialogHeader>
         
         <div className="mt-4 space-y-4">
