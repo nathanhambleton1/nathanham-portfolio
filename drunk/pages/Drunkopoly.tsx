@@ -2301,24 +2301,7 @@ const Drunkopoly = () => {
           {(game?.sips_enabled ?? true) && !isNarrow && (
             <Button variant="ghost" size="sm" onClick={() => navigate('/drunk/drunkopoly/rules')}>Rules</Button>
           )}
-          <Button
-            variant="ghost"
-            size="sm"
-            onClick={() => navigate('/drunk/drunkopoly/messages')}
-            className="relative"
-            aria-label="Messages"
-            title="Messages"
-          >
-            <MessagesSquare className="w-4 h-4" />
-            {unreadMessageCount > 0 && (
-              <span
-                className="absolute -top-1 -right-1 min-w-[18px] h-[18px] px-1 rounded-full text-[11px] leading-[18px] text-center"
-                style={{ backgroundColor: 'hsl(var(--destructive))', color: 'hsl(var(--destructive-foreground))' }}
-              >
-                {unreadMessageCount > 99 ? '99+' : unreadMessageCount}
-              </span>
-            )}
-          </Button>
+          {/* Messages moved into the code popover; header icon removed for a cleaner UI */}
           <GameCodePopover
             code={game?.code ?? gameCode}
             onLogout={handleLogoutOfGame}

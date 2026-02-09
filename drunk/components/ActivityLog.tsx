@@ -34,6 +34,7 @@ export default function ActivityLog({
   const [expanded, setExpanded] = useState(false);
   // Default to hiding commissioner corrections even for commissioners to keep the feed clean.
   const [showAdminEvents, setShowAdminEvents] = useState(false);
+  const [selectedPlayerId, setSelectedPlayerId] = useState<string | 'all'>('all');
   const isCommissioner = !!currentPlayer?.is_commissioner;
 
   useEffect(() => {
@@ -103,6 +104,13 @@ export default function ActivityLog({
       if (timer) clearInterval(timer);
     };
   }, [gameCode, pollInterval]);
+
+  // If the selected player disappears (players list changes), reset to 'all'
+  useEffect(() => {
+    if (selectedPlayerId !== 'all' && !(players || []).find((p: any) => p.id === selectedPlayerId)) {
+      setSelectedPlayerId('all');
+    }
+  }, [players, selectedPlayerId]);
 
   const idToName = (id?: string | null) => {
     if (!id) return "Bank";
@@ -236,7 +244,14 @@ export default function ActivityLog({
     return true;
   });
 
-  const visibleFilteredEvents = expanded ? adminFilteredEvents : adminFilteredEvents.slice(0, 5);
+  // Optionally filter to a single player's actions
+  const playerFilteredEvents = selectedPlayerId && selectedPlayerId !== 'all'
+    ? adminFilteredEvents.filter((ev) =>
+        ev.actor_player_id === selectedPlayerId || ev.from_player_id === selectedPlayerId || ev.to_player_id === selectedPlayerId
+      )
+    : adminFilteredEvents;
+
+  const visibleFilteredEvents = expanded ? playerFilteredEvents : playerFilteredEvents.slice(0, 5);
 
   return (
     <>
@@ -257,6 +272,20 @@ export default function ActivityLog({
               </button>
             ) : null}
             <div className="ml-auto flex items-center gap-2 text-[10px] sm:text-xs text-muted-foreground">
+              <label className="sr-only">Filter by player</label>
+              <select
+                value={selectedPlayerId}
+                onChange={(e) => setSelectedPlayerId(e.target.value as string | 'all')}
+                className="appearance-none text-[10px] sm:text-xs text-muted-foreground bg-transparent border border-border/20 hover:border-border rounded px-2 py-0.5 focus:outline-none focus:ring-0 transition-colors"
+                style={{ minWidth: 110 }}
+                title="Show actions for a specific player"
+                aria-label="Filter activity by player"
+              >
+                <option value="all">All players</option>
+                {(players || []).map((p: any) => (
+                  <option key={p.id} value={p.id}>{p.name}</option>
+                ))}
+              </select>
               <span
                 style={{
                   position: 'relative',
@@ -293,7 +322,7 @@ export default function ActivityLog({
           </div>
           <div>
             <ul className="space-y-1 text-[10px] sm:text-xs">
-              {adminFilteredEvents.length === 0 && (
+              {playerFilteredEvents.length === 0 && (
                 <li className="text-[10px] text-muted-foreground">No activity yet</li>
               )}
               {visibleFilteredEvents.map((ev) => (
@@ -306,14 +335,14 @@ export default function ActivityLog({
               ))}
             </ul>
 
-            {adminFilteredEvents.length > 10 && (
+            {playerFilteredEvents.length > 10 && (
               <div className="mt-2 flex items-center">
                 <button
                   className="text-[10px] text-primary underline hover:no-underline"
                   onClick={() => setExpanded((s) => !s)}
                   aria-expanded={expanded}
                 >
-                  {expanded ? 'Show less' : `Show ${adminFilteredEvents.length - 10} more`}
+                  {expanded ? 'Show less' : `Show ${playerFilteredEvents.length - 10} more`}
                 </button>
               </div>
             )}

@@ -1,8 +1,8 @@
 import { useState, useEffect } from "react";
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from "./ui/dialog";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogClose } from "./ui/dialog";
 import { Card } from "./ui/card";
 import { createClient } from "@supabase/supabase-js";
-import { Crown, Zap } from "lucide-react";
+import { Crown, Zap, X } from "lucide-react";
 import { calculateWinProbabilities, WinProbabilityResult, PlayerStats } from "../lib/winProbability";
 import { MONOPOLY_PROPERTIES, calculatePropertyValue } from "../lib/monopoly-properties";
 
@@ -258,10 +258,17 @@ const RankingsPopup = ({ open, onOpenChange, gameCode, players }: RankingsPopupP
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
         <DialogHeader>
-          <DialogTitle className="text-2xl flex items-center gap-2">
-            <Crown className="w-6 h-6 text-yellow-500" />
-            Rankings
-          </DialogTitle>
+          <div className="w-full flex items-center justify-between">
+            <DialogTitle className="text-2xl flex items-center gap-2">
+              <Crown className="w-6 h-6 text-yellow-500" />
+              Rankings
+            </DialogTitle>
+            <div className="ml-4">
+              <DialogClose aria-label="Close rankings" className="text-muted-foreground hover:text-foreground">
+                <X className="w-5 h-5" />
+              </DialogClose>
+            </div>
+          </div>
         </DialogHeader>
 
         <div className="space-y-3 mt-4">
