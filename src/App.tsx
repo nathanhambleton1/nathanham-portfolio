@@ -8,6 +8,7 @@ import Index from "./pages/Index";
 import Dev from "./pages/Dev";
 import NotFound from "./pages/NotFound";
 import Drunk from "./pages/Drunk";
+import Athena from "./pages/Athena";
 
 const queryClient = new QueryClient();
 
@@ -22,6 +23,7 @@ const App = () => (
             <Route path="/" element={<Index />} />
             <Route path="drunk/*" element={<Drunk />} />
             <Route path="dev" element={<Dev />} />
+            <Route path="athena" element={<Athena />} />
             {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
             <Route path="*" element={<NotFound />} />
           </Routes>
