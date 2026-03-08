@@ -1,10 +1,12 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { Button } from "../components/ui/button";
 import { Card } from "../components/ui/card";
 import { Input } from "../components/ui/input";
 import { RadioGroup, RadioGroupItem } from "../components/ui/radio-group";
 import { Label } from "../components/ui/label";
-import { UserPlus, X, Shuffle, Users, Trophy, GripVertical, Settings, ChevronDown, ChevronUp } from "lucide-react";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "../components/ui/tabs";
+import { Badge } from "../components/ui/badge";
+import { UserPlus, X, Shuffle, Users, Trophy, GripVertical, Settings, ChevronDown, ChevronUp, Plus, Gamepad2, ListChecks } from "lucide-react";
 import { toast } from "sonner";
 import { DragDropContext, Droppable, Draggable, DropResult } from "@hello-pangea/dnd";
 import { Checkbox } from "../components/ui/checkbox";
@@ -29,13 +31,106 @@ const supabaseAnonKey = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYm
 const supabase = createClient(supabaseUrl, supabaseAnonKey);
 
 type TeamMode = "random" | "skill";
+type OddPlayerMode = "bench" | "redemption";
+type CompetitionMode = "bracket" | "rotation";
+type ScheduleMode = "round-robin-once" | "round-robin-each-game";
 
 type Player = {
   id: string;
   name: string;
 };
 
-const BeerBall = () => {
+type TournamentGame = {
+  id: string;
+  name: string;
+};
+
+type ScheduledMatch = {
+  id: string;
+  round: number;
+  groupLabel: string;
+  gameId: string;
+  gameName: string;
+  station: number;
+  teamA: Team;
+  teamB: Team;
+  winnerId: string | null;
+};
+
+type PendingRedemption = {
+  teamId: string;
+  soloPlayer: string;
+  placeholder: string;
+  isResolved: boolean;
+  sourceMatchId: string | null;
+  resolvedPartner?: string;
+};
+
+type RoundRobinPairing = {
+  teamA: Team;
+  teamB: Team;
+};
+
+const PRESET_GAMES = ["Beer Ball", "Dye", "Cornhole", "Darts", "Pool", "Pong"];
+const REDEMPTION_PLACEHOLDER = "TBD redemption partner";
+
+const createId = (prefix: string) => `${prefix}-${Date.now()}-${Math.floor(Math.random() * 100000)}`;
+
+const createGame = (name: string): TournamentGame => ({
+  id: createId("game"),
+  name: name.trim(),
+});
+
+const formatTeamPlayers = (team: Team | null | undefined) => {
+  if (!team) return "TBD";
+  return team.players.join(" + ");
+};
+
+const replaceTeamReferences = (rounds: BracketRound[], updatedTeam: Team): BracketRound[] => {
+  return rounds.map((round) => ({
+    ...round,
+    matches: round.matches.map((match) => ({
+      ...match,
+      teamA: match.teamA?.id === updatedTeam.id ? { ...updatedTeam } : match.teamA,
+      teamB: match.teamB?.id === updatedTeam.id ? { ...updatedTeam } : match.teamB,
+      winner: match.winner?.id === updatedTeam.id ? { ...updatedTeam } : match.winner,
+      loser: match.loser?.id === updatedTeam.id ? { ...updatedTeam } : match.loser,
+    })),
+  }));
+};
+
+const generateRoundRobinRounds = (inputTeams: Team[]): RoundRobinPairing[][] => {
+  if (inputTeams.length < 2) return [];
+
+  const participants: (Team | null)[] = [...inputTeams];
+  if (participants.length % 2 === 1) participants.push(null);
+
+  const roundsCount = participants.length - 1;
+  const half = participants.length / 2;
+  const rotating = [...participants];
+  const rounds: RoundRobinPairing[][] = [];
+
+  for (let roundIndex = 0; roundIndex < roundsCount; roundIndex++) {
+    const roundPairings: RoundRobinPairing[] = [];
+
+    for (let i = 0; i < half; i++) {
+      const teamA = rotating[i];
+      const teamB = rotating[rotating.length - 1 - i];
+      if (teamA && teamB) roundPairings.push({ teamA, teamB });
+    }
+
+    rounds.push(roundPairings);
+
+    const fixed = rotating[0];
+    const moving = rotating.slice(1);
+    moving.unshift(moving.pop() ?? null);
+    rotating.splice(0, rotating.length, fixed, ...moving);
+  }
+
+  return rounds;
+};
+
+const PartnerTournament = () => {
   const location = useLocation();
   const navigate = useNavigate();
   
@@ -51,6 +146,7 @@ const BeerBall = () => {
   
   // Team Generation
   const [teamMode, setTeamMode] = useState<TeamMode>("random");
+  const [oddPlayerMode, setOddPlayerMode] = useState<OddPlayerMode>("bench");
   const [throwOrder, setThrowOrder] = useState<string[]>([]);
   const [drinkOrder, setDrinkOrder] = useState<string[]>([]);
   const [defenseOrder, setDefenseOrder] = useState<string[]>([]);
@@ -58,6 +154,15 @@ const BeerBall = () => {
   
   // Teams
   const [teams, setTeams] = useState<Team[]>([]);
+  const [leftoverPlayers, setLeftoverPlayers] = useState<string[]>([]);
+  const [pendingRedemption, setPendingRedemption] = useState<PendingRedemption | null>(null);
+
+  // Games and schedule
+  const [games, setGames] = useState<TournamentGame[]>([createGame("Beer Ball")]);
+  const [newGameName, setNewGameName] = useState("");
+  const [competitionMode, setCompetitionMode] = useState<CompetitionMode>("bracket");
+  const [scheduleMode, setScheduleMode] = useState<ScheduleMode>("round-robin-once");
+  const [rotationSchedule, setRotationSchedule] = useState<ScheduledMatch[]>([]);
   
   // Tournament Settings
   const [tournamentSettings, setTournamentSettings] = useState<TournamentSettings>({
@@ -77,6 +182,27 @@ const BeerBall = () => {
   // UI State
   const [showSettings, setShowSettings] = useState(false);
   const [isDraggingTeams, setIsDraggingTeams] = useState(false);
+
+  const effectiveTournamentSettings = useMemo<TournamentSettings>(() => {
+    if (pendingRedemption && !pendingRedemption.isResolved) {
+      return {
+        ...tournamentSettings,
+        bracketType: "single-elimination",
+        grandFinalReset: false,
+      };
+    }
+    return tournamentSettings;
+  }, [pendingRedemption, tournamentSettings]);
+
+  const teamHasPendingPlaceholder = (team: Team | null | undefined) => {
+    if (!team) return false;
+    return team.players.includes(REDEMPTION_PLACEHOLDER);
+  };
+
+  const isTeamPlayable = (team: Team | null | undefined) => {
+    if (!team) return false;
+    return team.players.length === 2 && !teamHasPendingPlaceholder(team);
+  };
 
   // Initialize players from Beer Olympics
   useEffect(() => {
@@ -179,7 +305,7 @@ const BeerBall = () => {
       return newTeams;
     });
     
-    toast.info("Team adjusted - regenerate bracket to apply changes");
+    toast.info("Team adjusted - regenerate bracket or schedule to apply changes");
   };
 
   // Generate teams
@@ -190,10 +316,10 @@ const BeerBall = () => {
     }
 
     let generatedTeams: Team[] = [];
-    const teamSize = 2; // Beer Ball is 2v2
+    let leftover: string[] = [];
+    const teamSize = 2;
 
     if (teamMode === "random") {
-      // Random shuffle
       const shuffled = [...players].sort(() => Math.random() - 0.5).map((p) => p.name);
       const numTeams = Math.floor(shuffled.length / teamSize);
 
@@ -210,13 +336,8 @@ const BeerBall = () => {
         });
       }
 
-      // Warn about leftover players (don't add them to teams)
-      const leftover = shuffled.slice(numTeams * teamSize);
-      if (leftover.length > 0) {
-        toast.warning(`${leftover.join(", ")} couldn't be placed (need even number of players for 2v2)`);
-      }
+      leftover = shuffled.slice(numTeams * teamSize);
     } else {
-      // Skill-based: snake draft using three rankings
       const numTeams = Math.floor(players.length / teamSize);
       if (numTeams < 1) {
         toast.error("Not enough players for teams");
@@ -257,9 +378,9 @@ const BeerBall = () => {
       let currentTeamIndex = 0;
       let direction = 1;
 
-      // Only assign players that fit into complete teams
       const playersToAssign = ranked.slice(0, numTeams * teamSize);
-      const leftoverPlayers = ranked.slice(numTeams * teamSize);
+      const rankedLeftover = ranked.slice(numTeams * teamSize);
+      leftover = rankedLeftover.map(p => p.name);
 
       playersToAssign.forEach((player) => {
         generatedTeams[currentTeamIndex].players.push(player.name);
@@ -278,14 +399,34 @@ const BeerBall = () => {
           }
         }
       });
+    }
 
-      if (leftoverPlayers.length > 0) {
-        toast.warning(`${leftoverPlayers.map(p => p.name).join(", ")} couldn't be placed (need even number of players for 2v2)`);
-      }
+    let redemption: PendingRedemption | null = null;
+    if (oddPlayerMode === "redemption" && leftover.length === 1 && generatedTeams.length >= 2) {
+      const soloPlayer = leftover[0];
+      const redemptionTeam: Team = {
+        id: createId("team-redemption"),
+        name: "Redemption Team",
+        players: [soloPlayer, REDEMPTION_PLACEHOLDER],
+      };
+      generatedTeams = [...generatedTeams, redemptionTeam];
+      redemption = {
+        teamId: redemptionTeam.id,
+        soloPlayer,
+        placeholder: REDEMPTION_PLACEHOLDER,
+        isResolved: false,
+        sourceMatchId: null,
+      };
+      toast.info(`${soloPlayer} is waiting for a redemption partner from the first opening-round losing team`);
+    } else if (leftover.length > 0) {
+      toast.warning(`${leftover.join(", ")} couldn't be placed (need even number of players for 2v2)`);
     }
 
     setTeams(generatedTeams);
+    setLeftoverPlayers(leftover);
+    setPendingRedemption(redemption);
     setBracketRounds([]);
+    setRotationSchedule([]);
     setChampion(null);
     toast.success(`${generatedTeams.length} teams created!`);
   };
@@ -305,30 +446,241 @@ const BeerBall = () => {
     }
 
     let rounds: BracketRound[] = [];
-    
-    if (tournamentSettings.bracketType === "single-elimination") {
-      rounds = generateSingleEliminationBracket(teams, tournamentSettings);
+
+    if (effectiveTournamentSettings.bracketType === "single-elimination") {
+      rounds = generateSingleEliminationBracket(teams, effectiveTournamentSettings);
     } else {
-      rounds = generateDoubleEliminationBracket(teams, tournamentSettings);
+      rounds = generateDoubleEliminationBracket(teams, effectiveTournamentSettings);
     }
-    
+
     setBracketRounds(rounds);
     setChampion(null);
-    toast.success(`${tournamentSettings.bracketType} bracket created with ${rounds.length} rounds!`);
+
+    if (pendingRedemption && !pendingRedemption.isResolved) {
+      toast.info("Redemption slot is active. Finish any other opening-round match to fill it.");
+    }
+
+    toast.success(`${effectiveTournamentSettings.bracketType} bracket created with ${rounds.length} rounds!`);
   };
 
   // Set match winner
   const setMatchWinner = (matchId: string, winner: Team | null) => {
-    const newRounds = advanceWinner(bracketRounds, matchId, winner, tournamentSettings);
+    const sourceMatch = bracketRounds.flatMap(round => round.matches).find(match => match.id === matchId);
+    if (!sourceMatch) return;
+
+    let newRounds = advanceWinner(bracketRounds, matchId, winner, effectiveTournamentSettings);
+    let nextTeams = teams;
+    let nextRedemption = pendingRedemption;
+
+    if (
+      winner &&
+      pendingRedemption &&
+      !pendingRedemption.isResolved &&
+      sourceMatch.roundIndex === 0
+    ) {
+      const includesRedemptionTeam =
+        sourceMatch.teamA?.id === pendingRedemption.teamId ||
+        sourceMatch.teamB?.id === pendingRedemption.teamId;
+
+      if (!includesRedemptionTeam) {
+        const loserTeam = winner.id === sourceMatch.teamA?.id ? sourceMatch.teamB : sourceMatch.teamA;
+        if (loserTeam && loserTeam.players.length > 0) {
+          const randomIndex = Math.floor(Math.random() * loserTeam.players.length);
+          const chosenPartner = loserTeam.players[randomIndex];
+          const resolvedTeam: Team = {
+            id: pendingRedemption.teamId,
+            name: "Redemption Team",
+            players: [pendingRedemption.soloPlayer, chosenPartner],
+          };
+
+          nextTeams = teams.map(team => team.id === pendingRedemption.teamId ? resolvedTeam : team);
+          newRounds = replaceTeamReferences(newRounds, resolvedTeam);
+          nextRedemption = {
+            ...pendingRedemption,
+            isResolved: true,
+            sourceMatchId: sourceMatch.id,
+            resolvedPartner: chosenPartner,
+          };
+
+          toast.success(`${pendingRedemption.soloPlayer} is now teamed with ${chosenPartner}`);
+        }
+      }
+    }
+
+    if (nextTeams !== teams) {
+      setTeams(nextTeams);
+    }
+    if (nextRedemption !== pendingRedemption) {
+      setPendingRedemption(nextRedemption);
+    }
+
     setBracketRounds(newRounds);
-    
-    const newChampion = getChampion(newRounds, tournamentSettings);
+
+    const newChampion = getChampion(newRounds, effectiveTournamentSettings);
     setChampion(newChampion);
-    
+
     if (newChampion) {
-      toast.success(`🏆 ${newChampion.name} wins the tournament!`);
+      toast.success(`${formatTeamPlayers(newChampion)} wins the tournament`);
     }
   };
+
+  const addGame = (name: string) => {
+    const trimmed = name.trim();
+    if (!trimmed) {
+      toast.error("Enter a game name");
+      return;
+    }
+
+    const exists = games.some(game => game.name.toLowerCase() === trimmed.toLowerCase());
+    if (exists) {
+      toast.info(`${trimmed} is already in the game list`);
+      return;
+    }
+
+    setGames(prev => [...prev, createGame(trimmed)]);
+    setRotationSchedule([]);
+    toast.success(`${trimmed} added`);
+  };
+
+  const removeGame = (id: string) => {
+    if (games.length <= 1) {
+      toast.error("At least one game is required");
+      return;
+    }
+
+    setGames(prev => prev.filter(game => game.id !== id));
+    setRotationSchedule([]);
+  };
+
+  const addCustomGame = () => {
+    addGame(newGameName);
+    setNewGameName("");
+  };
+
+  const generateRotation = () => {
+    if (teams.length < 2) {
+      toast.error("Need at least 2 teams to generate a schedule");
+      return;
+    }
+
+    const invalidTeam = teams.find(team => team.players.length !== 2 || teamHasPendingPlaceholder(team));
+    if (invalidTeam) {
+      toast.error("Every scheduled team must have 2 named players");
+      return;
+    }
+
+    const activeGames = games.filter(game => game.name.trim().length > 0);
+    if (activeGames.length === 0) {
+      toast.error("Add at least one game first");
+      return;
+    }
+
+    const baseRounds = generateRoundRobinRounds(teams);
+    if (baseRounds.length === 0) {
+      toast.error("Could not generate schedule");
+      return;
+    }
+
+    const scheduled: ScheduledMatch[] = [];
+    let matchCounter = 1;
+
+    if (scheduleMode === "round-robin-once") {
+      baseRounds.forEach((pairings, roundIndex) => {
+        pairings.forEach((pairing, matchIndex) => {
+          const game = activeGames[(roundIndex + matchIndex) % activeGames.length];
+          scheduled.push({
+            id: `schedule-${matchCounter++}`,
+            round: roundIndex + 1,
+            groupLabel: `Round ${roundIndex + 1}`,
+            gameId: game.id,
+            gameName: game.name,
+            station: matchIndex + 1,
+            teamA: pairing.teamA,
+            teamB: pairing.teamB,
+            winnerId: null,
+          });
+        });
+      });
+    } else {
+      let roundCounter = 1;
+      activeGames.forEach((game) => {
+        baseRounds.forEach((pairings, roundIndex) => {
+          pairings.forEach((pairing, matchIndex) => {
+            scheduled.push({
+              id: `schedule-${matchCounter++}`,
+              round: roundCounter,
+              groupLabel: `${game.name} - Round ${roundIndex + 1}`,
+              gameId: game.id,
+              gameName: game.name,
+              station: matchIndex + 1,
+              teamA: pairing.teamA,
+              teamB: pairing.teamB,
+              winnerId: null,
+            });
+          });
+          roundCounter++;
+        });
+      });
+    }
+
+    setRotationSchedule(scheduled);
+    toast.success(`Scheduled ${scheduled.length} matches across ${activeGames.length} game(s)`);
+  };
+
+  const setRotationWinner = (matchId: string, winnerId: string | null) => {
+    setRotationSchedule(prev => prev.map(match => (
+      match.id === matchId ? { ...match, winnerId } : match
+    )));
+  };
+
+  const scheduleRounds = useMemo(() => {
+    const grouped = new Map<number, { label: string; matches: ScheduledMatch[] }>();
+
+    [...rotationSchedule]
+      .sort((a, b) => a.round - b.round || a.station - b.station)
+      .forEach((match) => {
+        if (!grouped.has(match.round)) {
+          grouped.set(match.round, { label: match.groupLabel, matches: [match] });
+          return;
+        }
+        grouped.get(match.round)!.matches.push(match);
+      });
+
+    return Array.from(grouped.entries())
+      .sort((a, b) => a[0] - b[0])
+      .map(([round, data]) => ({ round, ...data }));
+  }, [rotationSchedule]);
+
+  const rotationStandings = useMemo(() => {
+    const standings = teams.reduce((acc, team) => {
+      acc[team.id] = {
+        team,
+        wins: 0,
+        losses: 0,
+        played: 0,
+      };
+      return acc;
+    }, {} as Record<string, { team: Team; wins: number; losses: number; played: number }>);
+
+    rotationSchedule.forEach((match) => {
+      if (!match.winnerId) return;
+      const loserId = match.winnerId === match.teamA.id ? match.teamB.id : match.teamA.id;
+      standings[match.winnerId].wins += 1;
+      standings[match.winnerId].played += 1;
+      standings[loserId].losses += 1;
+      standings[loserId].played += 1;
+    });
+
+    return Object.values(standings).sort(
+      (a, b) => b.wins - a.wins || a.losses - b.losses || a.team.name.localeCompare(b.team.name)
+    );
+  }, [rotationSchedule, teams]);
+
+  const rotationChampion = useMemo(() => {
+    if (rotationSchedule.length === 0) return null;
+    if (rotationSchedule.some(match => !match.winnerId)) return null;
+    return rotationStandings[0]?.team ?? null;
+  }, [rotationSchedule, rotationStandings]);
 
   // Update tournament setting
   const updateSetting = <K extends keyof TournamentSettings>(
@@ -349,8 +701,8 @@ const BeerBall = () => {
       <div className="w-full" style={{ height: '48px' }} />
       <div className="container max-w-6xl mx-auto px-4 py-8">
         <div className="text-center mb-8">
-          <h1 className="text-4xl font-bold mb-2 text-foreground">Beer Ball Tournament</h1>
-          <p className="text-muted-foreground">Create teams and run elimination brackets</p>
+          <h1 className="text-4xl font-bold mb-2 text-foreground">Partner Tournament Builder</h1>
+          <p className="text-muted-foreground">Create teams, schedule multiple games, and track winners</p>
         </div>
 
         {/* Step 1: Players */}
@@ -422,6 +774,24 @@ const BeerBall = () => {
                   <RadioGroupItem value="skill" id="skill" />
                   <Label htmlFor="skill" className="cursor-pointer ml-2">
                     Skill-Based Teams - Balance teams by ranking players
+                  </Label>
+                </div>
+              </RadioGroup>
+            </div>
+
+            <div>
+              <Label className="mb-3 block">Odd Player Handling</Label>
+              <RadioGroup value={oddPlayerMode} onValueChange={(v) => setOddPlayerMode(v as OddPlayerMode)}>
+                <div className="flex items-center space-x-2 mb-2">
+                  <RadioGroupItem value="bench" id="odd-bench" />
+                  <Label htmlFor="odd-bench" className="cursor-pointer ml-2">
+                    Bench leftover player
+                  </Label>
+                </div>
+                <div className="flex items-center space-x-2">
+                  <RadioGroupItem value="redemption" id="odd-redemption" />
+                  <Label htmlFor="odd-redemption" className="cursor-pointer ml-2">
+                    Redemption mode - leftover player gets a random partner from an opening-round losing team
                   </Label>
                 </div>
               </RadioGroup>
@@ -530,6 +900,24 @@ const BeerBall = () => {
               </Button>
             </div>
 
+            {leftoverPlayers.length > 0 && (
+              <div className="mb-4 p-3 bg-blue-500/10 border border-blue-500/20 rounded-lg text-sm text-blue-200">
+                Leftover player(s): {leftoverPlayers.join(", ")}
+              </div>
+            )}
+
+            {pendingRedemption && !pendingRedemption.isResolved && (
+              <div className="mb-4 p-3 bg-amber-500/10 border border-amber-500/30 rounded-lg text-sm text-amber-200">
+                Redemption pending: {pendingRedemption.soloPlayer} is waiting for a partner from the first completed opening-round loss.
+              </div>
+            )}
+
+            {pendingRedemption?.isResolved && (
+              <div className="mb-4 p-3 bg-green-500/10 border border-green-500/30 rounded-lg text-sm text-green-200">
+                Redemption resolved: {pendingRedemption.soloPlayer} + {pendingRedemption.resolvedPartner}
+              </div>
+            )}
+
             {isDraggingTeams && (
               <div className="mb-4 p-3 bg-blue-500/10 border border-blue-500/20 rounded-lg">
                 <p className="text-sm text-blue-300">
@@ -556,7 +944,10 @@ const BeerBall = () => {
                             : 'border-transparent'
                         }`}
                       >
-                        <h4 className="font-bold text-foreground mb-3">{team.name}</h4>
+                        <div className="flex items-center justify-between mb-3">
+                          <h4 className="font-bold text-foreground">{team.name}</h4>
+                          <Badge variant="secondary">{team.players.length}/2</Badge>
+                        </div>
                         <div className="space-y-2">
                           {team.players.map((player, idx) => (
                             <Draggable
@@ -602,13 +993,126 @@ const BeerBall = () => {
           </Card>
         )}
 
-        {/* Step 4: Tournament Settings */}
+        {/* Step 4: Games */}
+        <Card className="bg-gradient-card border-border p-6 mb-6">
+          <h3 className="text-xl font-bold text-foreground mb-4 flex items-center gap-2">
+            <Gamepad2 className="w-5 h-5" />
+            4. Games
+          </h3>
+
+          <div className="space-y-4">
+            <div>
+              <Label className="mb-2 block">Quick Add Preset Games</Label>
+              <div className="flex flex-wrap gap-2">
+                {PRESET_GAMES.map((preset) => (
+                  <Button
+                    key={preset}
+                    variant="outline"
+                    size="sm"
+                    onClick={() => addGame(preset)}
+                    className="text-xs"
+                  >
+                    <Plus className="w-3 h-3 mr-1" />
+                    {preset}
+                  </Button>
+                ))}
+              </div>
+            </div>
+
+            <div className="flex gap-2">
+              <Input
+                placeholder="Add custom game"
+                value={newGameName}
+                onChange={(e) => setNewGameName(e.target.value)}
+                onKeyPress={(e) => {
+                  if (e.key === "Enter") addCustomGame();
+                }}
+                className="bg-muted border-border"
+              />
+              <Button onClick={addCustomGame} className="bg-white text-black border border-border hover:bg-gray-100">
+                <Plus className="w-4 h-4" />
+              </Button>
+            </div>
+
+            <div className="flex flex-wrap gap-2">
+              {games.map((game) => (
+                <div key={game.id} className="flex items-center gap-2 bg-muted px-3 py-2 rounded-lg border border-border">
+                  <span className="text-foreground text-sm">{game.name}</span>
+                  <button
+                    onClick={() => removeGame(game.id)}
+                    className="text-muted-foreground hover:text-destructive transition-colors"
+                  >
+                    <X className="w-4 h-4" />
+                  </button>
+                </div>
+              ))}
+            </div>
+          </div>
+        </Card>
+
+        {/* Step 5: Competition Mode */}
         {teams.length >= 2 && (
+          <Card className="bg-gradient-card border-border p-6 mb-6">
+            <h3 className="text-xl font-bold text-foreground mb-4 flex items-center gap-2">
+              <ListChecks className="w-5 h-5" />
+              5. Competition Mode
+            </h3>
+
+            <Tabs value={competitionMode} onValueChange={(v) => setCompetitionMode(v as CompetitionMode)}>
+              <TabsList className="grid w-full grid-cols-2 mb-4">
+                <TabsTrigger value="bracket">Elimination Bracket</TabsTrigger>
+                <TabsTrigger value="rotation">Rotation Schedule</TabsTrigger>
+              </TabsList>
+
+              <TabsContent value="bracket" className="text-sm text-muted-foreground">
+                Configure bracket options below, then generate a bracket.
+              </TabsContent>
+
+              <TabsContent value="rotation" className="space-y-4">
+                <div>
+                  <Label className="mb-3 block font-semibold">Rotation Format</Label>
+                  <RadioGroup value={scheduleMode} onValueChange={(v) => setScheduleMode(v as ScheduleMode)}>
+                    <div className="flex items-start gap-3 p-3 rounded-lg bg-muted/50">
+                      <RadioGroupItem value="round-robin-once" id="rr-once" className="mt-1" />
+                      <div className="flex-1">
+                        <Label htmlFor="rr-once" className="cursor-pointer font-medium">
+                          Everyone plays each team once
+                        </Label>
+                        <p className="text-xs text-muted-foreground mt-1">
+                          Matchups rotate across your selected games and stations.
+                        </p>
+                      </div>
+                    </div>
+                    <div className="flex items-start gap-3 p-3 rounded-lg bg-muted/50">
+                      <RadioGroupItem value="round-robin-each-game" id="rr-each-game" className="mt-1" />
+                      <div className="flex-1">
+                        <Label htmlFor="rr-each-game" className="cursor-pointer font-medium">
+                          Everyone plays each team on every game
+                        </Label>
+                        <p className="text-xs text-muted-foreground mt-1">
+                          Full game-by-game round robin. Most wins takes tournament.
+                        </p>
+                      </div>
+                    </div>
+                  </RadioGroup>
+                </div>
+
+                <Button onClick={generateRotation} className="w-full bg-white text-black border border-border hover:bg-gray-100">
+                  <Shuffle className="w-4 h-4 mr-2" />
+                  Generate Rotation Schedule
+                </Button>
+              </TabsContent>
+            </Tabs>
+          </Card>
+        )}
+
+        {/* Step 6: Tournament Settings */}
+        {teams.length >= 2 && competitionMode === "bracket" && (
           <Card className="bg-gradient-card border-border p-6 mb-6">
             <div className="flex items-center justify-between mb-4">
               <h3 className="text-xl font-bold text-foreground flex items-center gap-2">
                 <Settings className="w-5 h-5" />
-                4. Tournament Settings
+                6. Tournament Settings
               </h3>
               <Button
                 variant="ghost"
@@ -624,8 +1128,9 @@ const BeerBall = () => {
               <div>
                 <Label className="mb-3 block font-semibold">Bracket Type</Label>
                 <RadioGroup 
-                  value={tournamentSettings.bracketType} 
+                  value={effectiveTournamentSettings.bracketType} 
                   onValueChange={(v) => updateSetting("bracketType", v as BracketType)}
+                  disabled={!!pendingRedemption && !pendingRedemption.isResolved}
                 >
                   <div className="space-y-3">
                     <div className="flex items-start space-x-3 p-3 rounded-lg bg-muted/50">
@@ -652,6 +1157,11 @@ const BeerBall = () => {
                     </div>
                   </div>
                 </RadioGroup>
+                {pendingRedemption && !pendingRedemption.isResolved && (
+                  <p className="text-xs text-amber-300 mt-2">
+                    Redemption mode forces single elimination until the partner is assigned.
+                  </p>
+                )}
               </div>
 
               {/* Collapsible Advanced Settings */}
@@ -767,7 +1277,7 @@ const BeerBall = () => {
                 className="w-full bg-white text-black border border-border hover:bg-gray-100"
               >
                 <Trophy className="w-4 h-4 mr-2" />
-                Generate {tournamentSettings.bracketType === "single-elimination" ? "Single" : "Double"} Elimination Bracket
+                Generate {effectiveTournamentSettings.bracketType === "single-elimination" ? "Single" : "Double"} Elimination Bracket
               </Button>
             </div>
           </Card>
@@ -778,8 +1288,14 @@ const BeerBall = () => {
           <Card className="bg-gradient-card border-border p-6 mb-6">
             <h3 className="text-xl font-bold text-foreground mb-4 flex items-center gap-2">
               <Trophy className="w-5 h-5" />
-              5. Tournament Bracket
+              Tournament Bracket
             </h3>
+
+            {pendingRedemption && !pendingRedemption.isResolved && (
+              <div className="mb-4 p-3 bg-amber-500/10 border border-amber-500/30 rounded-lg text-sm text-amber-200">
+                Matches involving the redemption team are locked until another opening-round match finishes.
+              </div>
+            )}
 
             <div className="space-y-6">
               {bracketRounds.map((round) => {
@@ -811,7 +1327,7 @@ const BeerBall = () => {
                       </h4>
                       <span className="text-sm text-muted-foreground">
                         {actualMatches.length} {actualMatches.length === 1 ? 'match' : 'matches'}
-                        {byeMatches.length > 0 && ` • ${byeMatches.length} bye${byeMatches.length > 1 ? 's' : ''}`}
+                        {byeMatches.length > 0 && ` | ${byeMatches.length} bye${byeMatches.length > 1 ? 's' : ''}`}
                       </span>
                     </div>
 
@@ -825,70 +1341,84 @@ const BeerBall = () => {
                     )}
 
                     <div className="grid gap-3 md:grid-cols-2">
-                      {actualMatches.map((match) => (
-                      <div 
-                        key={match.id} 
-                        className="bg-muted p-4 rounded-lg border border-border"
-                      >
-                        <div className="space-y-2">
-                          {/* Team A */}
-                          <button
-                            onClick={() => match.teamA && setMatchWinner(match.id, match.teamA)}
-                            disabled={!match.teamA || !match.teamB}
-                            className={`w-full text-left px-4 py-3 rounded-lg transition-all ${
-                              match.winner?.id === match.teamA?.id
-                                ? 'bg-white text-black font-bold shadow-lg scale-105'
-                                : match.teamA && match.teamB
-                                ? 'bg-background text-foreground hover:bg-background/80 hover:scale-102'
-                                : 'bg-background/50 text-muted-foreground cursor-not-allowed'
-                            }`}
+                      {actualMatches.map((match) => {
+                        const canSetWinner =
+                          !!match.teamA &&
+                          !!match.teamB &&
+                          isTeamPlayable(match.teamA) &&
+                          isTeamPlayable(match.teamB);
+
+                        return (
+                          <div
+                            key={match.id}
+                            className="bg-muted p-4 rounded-lg border border-border"
                           >
-                            <div className="flex items-center justify-between">
-                              <span>{match.teamA?.name || `TBD`}</span>
-                              {match.winner?.id === match.teamA?.id && (
-                                <Trophy className="w-4 h-4 text-yellow-500" />
+                            <div className="space-y-2">
+                              {/* Team A */}
+                              <button
+                                onClick={() => match.teamA && setMatchWinner(match.id, match.teamA)}
+                                disabled={!canSetWinner}
+                                className={`w-full text-left px-4 py-3 rounded-lg transition-all ${
+                                  match.winner?.id === match.teamA?.id
+                                    ? 'bg-white text-black font-bold shadow-lg'
+                                    : canSetWinner
+                                    ? 'bg-background text-foreground hover:bg-background/80'
+                                    : 'bg-background/50 text-muted-foreground cursor-not-allowed'
+                                }`}
+                              >
+                                <div className="flex items-center justify-between gap-2">
+                                  <div className="min-w-0">
+                                    <div className="font-semibold truncate">{formatTeamPlayers(match.teamA)}</div>
+                                    <div className="text-[11px] text-muted-foreground truncate">{match.teamA?.name || "TBD"}</div>
+                                  </div>
+                                  {match.winner?.id === match.teamA?.id && (
+                                    <Trophy className="w-4 h-4 text-yellow-500" />
+                                  )}
+                                </div>
+                              </button>
+
+                              {/* VS Divider */}
+                              <div className="text-center text-xs text-muted-foreground font-semibold">
+                                VS
+                              </div>
+
+                              {/* Team B */}
+                              <button
+                                onClick={() => match.teamB && setMatchWinner(match.id, match.teamB)}
+                                disabled={!canSetWinner}
+                                className={`w-full text-left px-4 py-3 rounded-lg transition-all ${
+                                  match.winner?.id === match.teamB?.id
+                                    ? 'bg-white text-black font-bold shadow-lg'
+                                    : canSetWinner
+                                    ? 'bg-background text-foreground hover:bg-background/80'
+                                    : 'bg-background/50 text-muted-foreground cursor-not-allowed'
+                                }`}
+                              >
+                                <div className="flex items-center justify-between gap-2">
+                                  <div className="min-w-0">
+                                    <div className="font-semibold truncate">{formatTeamPlayers(match.teamB)}</div>
+                                    <div className="text-[11px] text-muted-foreground truncate">{match.teamB?.name || "TBD"}</div>
+                                  </div>
+                                  {match.winner?.id === match.teamB?.id && (
+                                    <Trophy className="w-4 h-4 text-yellow-500" />
+                                  )}
+                                </div>
+                              </button>
+
+                              {/* Reset Button */}
+                              {match.winner && (
+                                <button
+                                  onClick={() => setMatchWinner(match.id, null)}
+                                  className="w-full text-center text-xs text-muted-foreground hover:text-foreground py-1"
+                                >
+                                  Reset Match
+                                </button>
                               )}
                             </div>
-                          </button>
-
-                          {/* VS Divider */}
-                          <div className="text-center text-xs text-muted-foreground font-semibold">
-                            VS
                           </div>
-
-                          {/* Team B */}
-                          <button
-                            onClick={() => match.teamB && setMatchWinner(match.id, match.teamB)}
-                            disabled={!match.teamA || !match.teamB}
-                            className={`w-full text-left px-4 py-3 rounded-lg transition-all ${
-                              match.winner?.id === match.teamB?.id
-                                ? 'bg-white text-black font-bold shadow-lg scale-105'
-                                : match.teamA && match.teamB
-                                ? 'bg-background text-foreground hover:bg-background/80 hover:scale-102'
-                                : 'bg-background/50 text-muted-foreground cursor-not-allowed'
-                            }`}
-                          >
-                            <div className="flex items-center justify-between">
-                              <span>{match.teamB?.name || `TBD`}</span>
-                              {match.winner?.id === match.teamB?.id && (
-                                <Trophy className="w-4 h-4 text-yellow-500" />
-                              )}
-                            </div>
-                          </button>
-
-                          {/* Reset Button */}
-                          {match.winner && (
-                            <button
-                              onClick={() => setMatchWinner(match.id, null)}
-                              className="w-full text-center text-xs text-muted-foreground hover:text-foreground py-1"
-                            >
-                              Reset Match
-                            </button>
-                          )}
-                        </div>
-                      </div>
-                    ))}
-                  </div>
+                        );
+                      })}
+                    </div>
                 </div>
               );
               })}
@@ -897,14 +1427,10 @@ const BeerBall = () => {
               {champion && (
                 <div className="mt-8 p-6 bg-gradient-to-r from-yellow-500/20 to-orange-500/20 border-2 border-yellow-500/50 rounded-lg text-center">
                   <Trophy className="w-12 h-12 mx-auto mb-3 text-yellow-500" />
-                  <h2 className="text-3xl font-bold text-foreground mb-2">
-                    🏆 Tournament Champion 🏆
-                  </h2>
-                  <p className="text-2xl font-bold text-white mb-4">
-                    {champion.name}
-                  </p>
+                  <h2 className="text-3xl font-bold text-foreground mb-2">Bracket Champion</h2>
+                  <p className="text-2xl font-bold text-white mb-4">{formatTeamPlayers(champion)}</p>
                   <div className="text-sm text-muted-foreground">
-                    Players: {champion.players.join(', ')}
+                    {champion.name}
                   </div>
 
                   {olympicsGameCode && olympicsEventId && (
@@ -916,7 +1442,7 @@ const BeerBall = () => {
                           const teamPoints: Record<string, number> = {};
                           
                           teams.forEach((team) => {
-                            const stats = calculateTeamStats(bracketRounds, team, tournamentSettings);
+                            const stats = calculateTeamStats(bracketRounds, team, effectiveTournamentSettings);
                             // Award points: 10 per win, bonus for champion
                             let points = stats.wins * 10;
                             if (team.id === champion.id) {
@@ -955,7 +1481,7 @@ const BeerBall = () => {
                             event_id: olympicsEventId,
                             player_id: p.id,
                             points: playerScores[p.name] || 0,
-                            notes: `Beer Ball - ${teams.find(t => t.players.includes(p.name))?.name || 'Unknown'}`,
+                            notes: `Tournament - ${teams.find(t => t.players.includes(p.name))?.name || 'Unknown'}`,
                           }));
 
                           const { error: scoreErr } = await supabase
@@ -1003,16 +1529,125 @@ const BeerBall = () => {
           </Card>
         )}
 
+        {/* Rotation Schedule */}
+        {rotationSchedule.length > 0 && (
+          <Card className="bg-gradient-card border-border p-6 mb-6">
+            <h3 className="text-xl font-bold text-foreground mb-4 flex items-center gap-2">
+              <Gamepad2 className="w-5 h-5" />
+              Rotation Schedule
+            </h3>
+
+            <div className="space-y-5">
+              {scheduleRounds.map((group) => (
+                <div key={`schedule-round-${group.round}`} className="space-y-3">
+                  <div className="flex items-center justify-between">
+                    <h4 className="font-bold text-lg text-foreground">{group.label}</h4>
+                    <span className="text-sm text-muted-foreground">{group.matches.length} matches</span>
+                  </div>
+
+                  <div className="grid gap-3 md:grid-cols-2">
+                    {group.matches.map((match) => (
+                      <div key={match.id} className="bg-muted p-4 rounded-lg border border-border space-y-3">
+                        <div className="flex items-center justify-between text-xs">
+                          <Badge variant="secondary">{match.gameName}</Badge>
+                          <span className="text-muted-foreground">Station {match.station}</span>
+                        </div>
+
+                        <button
+                          onClick={() => setRotationWinner(match.id, match.teamA.id)}
+                          className={`w-full text-left px-4 py-3 rounded-lg transition-all ${
+                            match.winnerId === match.teamA.id
+                              ? "bg-white text-black font-bold shadow-lg"
+                              : "bg-background text-foreground hover:bg-background/80"
+                          }`}
+                        >
+                          <div className="min-w-0">
+                            <div className="font-semibold truncate">{formatTeamPlayers(match.teamA)}</div>
+                            <div className="text-[11px] text-muted-foreground truncate">{match.teamA.name}</div>
+                          </div>
+                        </button>
+
+                        <div className="text-center text-xs text-muted-foreground font-semibold">VS</div>
+
+                        <button
+                          onClick={() => setRotationWinner(match.id, match.teamB.id)}
+                          className={`w-full text-left px-4 py-3 rounded-lg transition-all ${
+                            match.winnerId === match.teamB.id
+                              ? "bg-white text-black font-bold shadow-lg"
+                              : "bg-background text-foreground hover:bg-background/80"
+                          }`}
+                        >
+                          <div className="min-w-0">
+                            <div className="font-semibold truncate">{formatTeamPlayers(match.teamB)}</div>
+                            <div className="text-[11px] text-muted-foreground truncate">{match.teamB.name}</div>
+                          </div>
+                        </button>
+
+                        {match.winnerId && (
+                          <button
+                            onClick={() => setRotationWinner(match.id, null)}
+                            className="w-full text-center text-xs text-muted-foreground hover:text-foreground"
+                          >
+                            Reset Match
+                          </button>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              ))}
+            </div>
+
+            <Button onClick={generateRotation} variant="outline" className="w-full mt-4">
+              <Shuffle className="w-4 h-4 mr-2" />
+              Re-generate Schedule
+            </Button>
+          </Card>
+        )}
+
+        {/* Rotation Standings */}
+        {rotationSchedule.length > 0 && (
+          <Card className="bg-gradient-card border-border p-6 mb-6">
+            <h3 className="text-xl font-bold text-foreground mb-4">Rotation Standings</h3>
+
+            {rotationChampion && (
+              <div className="mb-4 p-4 bg-green-500/10 border border-green-500/30 rounded-lg">
+                <div className="text-sm text-green-200 mb-1">Tournament winner by most wins</div>
+                <div className="text-xl font-bold text-foreground">{formatTeamPlayers(rotationChampion)}</div>
+                <div className="text-xs text-muted-foreground">{rotationChampion.name}</div>
+              </div>
+            )}
+
+            <div className="grid gap-3 md:grid-cols-2 lg:grid-cols-3">
+              {rotationStandings.map((entry, index) => (
+                <div key={entry.team.id} className="bg-muted p-4 rounded-lg border border-border">
+                  <div className="flex items-center justify-between mb-2">
+                    <span className="text-xs text-muted-foreground">Rank #{index + 1}</span>
+                    <span className="text-xs text-muted-foreground">{entry.played} played</span>
+                  </div>
+                  <div className="font-semibold text-foreground truncate">{formatTeamPlayers(entry.team)}</div>
+                  <div className="text-[11px] text-muted-foreground truncate mb-2">{entry.team.name}</div>
+                  <div className="text-sm flex items-center gap-3">
+                    <span className="text-green-400">W {entry.wins}</span>
+                    <span className="text-red-400">L {entry.losses}</span>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </Card>
+        )}
+
         {/* Team Stats (if bracket exists) */}
         {bracketRounds.length > 0 && (
           <Card className="bg-gradient-card border-border p-6 mb-6">
             <h3 className="text-xl font-bold text-foreground mb-4">Team Statistics</h3>
             <div className="grid gap-3 md:grid-cols-2 lg:grid-cols-3">
               {teams.map((team) => {
-                const stats = calculateTeamStats(bracketRounds, team, tournamentSettings);
+                const stats = calculateTeamStats(bracketRounds, team, effectiveTournamentSettings);
                 return (
                   <div key={team.id} className="bg-muted p-4 rounded-lg">
-                    <h4 className="font-bold text-foreground mb-2">{team.name}</h4>
+                    <h4 className="font-bold text-foreground mb-1">{formatTeamPlayers(team)}</h4>
+                    <p className="text-xs text-muted-foreground mb-2">{team.name}</p>
                     <div className="text-sm space-y-1">
                       <div className="flex justify-between">
                         <span className="text-muted-foreground">Wins:</span>
@@ -1040,4 +1675,6 @@ const BeerBall = () => {
   );
 };
 
-export default BeerBall;
+export default PartnerTournament;
+
+

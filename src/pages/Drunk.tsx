@@ -5,7 +5,7 @@ import Index from "../../drunk/pages/Index";
 import PowerHour from "../../drunk/pages/PowerHour";
 import BeerPong from "../../drunk/pages/BeerPong";
 import KingsCup from "../../drunk/pages/KingsCup";
-import BeerBall from "../../drunk/pages/BeerBall";
+import PartnerTournament from "../../drunk/pages/BeerBall";
 import Drunkopoly from "../../drunk/pages/Drunkopoly";
 import Messages from "../../drunk/pages/Messages";
 import Blackjack from "../../drunk/pages/Blackjack";
@@ -58,7 +58,8 @@ const Drunk = () => {
         <Route path="power-hour" element={<PowerHour />} />
         <Route path="beer-pong" element={<BeerPong />} />
         <Route path="kings-cup" element={<KingsCup />} />
-        <Route path="beer-ball" element={<BeerBall />} />
+        <Route path="partner-tournament" element={<PartnerTournament />} />
+        <Route path="beer-ball" element={<PartnerTournament />} />
         <Route path="*" element={<NotFound />} />
       </Routes>
     </div>

@@ -22,10 +22,10 @@ const Index = () => {
       path: "power-hour",
     },
     {
-      title: "Beer Ball",
-      description: "Organize teams and create match schedules.",
+      title: "Partner Tournament",
+      description: "Build multi-game teams, schedules, and brackets.",
       icon: Users,
-      path: "beer-ball",
+      path: "partner-tournament",
     },
     {
       title: "King's Cup Tracker",
