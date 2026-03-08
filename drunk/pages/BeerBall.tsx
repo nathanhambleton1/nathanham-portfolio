@@ -34,6 +34,7 @@ type TeamMode = "random" | "skill";
 type OddPlayerMode = "bench" | "redemption";
 type CompetitionMode = "bracket" | "rotation";
 type ScheduleMode = "round-robin-once" | "round-robin-each-game";
+type BracketGameMode = "single-game" | "rotate-games" | "all-games";
 
 type Player = {
   id: string;
@@ -69,6 +70,13 @@ type PendingRedemption = {
 type RoundRobinPairing = {
   teamA: Team;
   teamB: Team;
+};
+
+type BracketMatchPlan = {
+  station: number;
+  games: TournamentGame[];
+  winners: Record<string, string | null>;
+  tieBreakerWinnerId: string | null;
 };
 
 const PRESET_GAMES = ["Beer Ball", "Dye", "Cornhole", "Darts", "Pool", "Pong"];
@@ -130,6 +138,44 @@ const generateRoundRobinRounds = (inputTeams: Team[]): RoundRobinPairing[][] => 
   return rounds;
 };
 
+const getMatchPlanScore = (match: BracketMatch, plan: BracketMatchPlan) => {
+  const values = Object.values(plan.winners).filter(Boolean) as string[];
+  const winsA = match.teamA ? values.filter((id) => id === match.teamA?.id).length : 0;
+  const winsB = match.teamB ? values.filter((id) => id === match.teamB?.id).length : 0;
+
+  return {
+    winsA,
+    winsB,
+    completed: values.length,
+    total: plan.games.length,
+  };
+};
+
+const getPlanWinner = (match: BracketMatch, plan: BracketMatchPlan): Team | null => {
+  if (!match.teamA || !match.teamB) return null;
+
+  const score = getMatchPlanScore(match, plan);
+  const majority = Math.floor(score.total / 2) + 1;
+
+  if (score.winsA >= majority) return match.teamA;
+  if (score.winsB >= majority) return match.teamB;
+
+  if (score.completed === score.total) {
+    if (score.winsA > score.winsB) return match.teamA;
+    if (score.winsB > score.winsA) return match.teamB;
+    if (plan.tieBreakerWinnerId === match.teamA.id) return match.teamA;
+    if (plan.tieBreakerWinnerId === match.teamB.id) return match.teamB;
+  }
+
+  return null;
+};
+
+const isPlanTie = (match: BracketMatch, plan: BracketMatchPlan): boolean => {
+  if (!match.teamA || !match.teamB) return false;
+  const score = getMatchPlanScore(match, plan);
+  return score.completed === score.total && score.winsA === score.winsB;
+};
+
 const PartnerTournament = () => {
   const location = useLocation();
   const navigate = useNavigate();
@@ -160,6 +206,8 @@ const PartnerTournament = () => {
   // Games and schedule
   const [games, setGames] = useState<TournamentGame[]>([createGame("Beer Ball")]);
   const [newGameName, setNewGameName] = useState("");
+  const [bracketGameMode, setBracketGameMode] = useState<BracketGameMode>("rotate-games");
+  const [primaryBracketGameId, setPrimaryBracketGameId] = useState<string>("");
   const [competitionMode, setCompetitionMode] = useState<CompetitionMode>("bracket");
   const [scheduleMode, setScheduleMode] = useState<ScheduleMode>("round-robin-once");
   const [rotationSchedule, setRotationSchedule] = useState<ScheduledMatch[]>([]);
@@ -177,6 +225,7 @@ const PartnerTournament = () => {
   
   // Bracket State
   const [bracketRounds, setBracketRounds] = useState<BracketRound[]>([]);
+  const [bracketPlans, setBracketPlans] = useState<Record<string, BracketMatchPlan>>({});
   const [champion, setChampion] = useState<Team | null>(null);
   
   // UI State
@@ -220,6 +269,13 @@ const PartnerTournament = () => {
       toast.success(`Loaded ${names.length} players from Beer Olympics`);
     }
   }, [olympicsPlayers]);
+
+  useEffect(() => {
+    if (!games.length) return;
+    if (!primaryBracketGameId || !games.some(game => game.id === primaryBracketGameId)) {
+      setPrimaryBracketGameId(games[0].id);
+    }
+  }, [games, primaryBracketGameId]);
 
   // Add player
   const addPlayer = () => {
@@ -426,9 +482,42 @@ const PartnerTournament = () => {
     setLeftoverPlayers(leftover);
     setPendingRedemption(redemption);
     setBracketRounds([]);
+    setBracketPlans({});
     setRotationSchedule([]);
     setChampion(null);
     toast.success(`${generatedTeams.length} teams created!`);
+  };
+
+  const buildBracketPlans = (rounds: BracketRound[]): Record<string, BracketMatchPlan> => {
+    const activeGames = games.filter(game => game.name.trim().length > 0);
+    if (!activeGames.length) return {};
+
+    const primaryGame = activeGames.find(game => game.id === primaryBracketGameId) ?? activeGames[0];
+    const plans: Record<string, BracketMatchPlan> = {};
+
+    rounds.forEach((round) => {
+      round.matches.forEach((match, matchIndex) => {
+        let matchGames: TournamentGame[] = [primaryGame];
+
+        if (bracketGameMode === "rotate-games") {
+          matchGames = [activeGames[(round.roundIndex + matchIndex) % activeGames.length]];
+        } else if (bracketGameMode === "all-games") {
+          matchGames = activeGames;
+        }
+
+        plans[match.id] = {
+          station: matchIndex + 1,
+          games: matchGames,
+          winners: matchGames.reduce((acc, game) => {
+            acc[game.id] = null;
+            return acc;
+          }, {} as Record<string, string | null>),
+          tieBreakerWinnerId: null,
+        };
+      });
+    });
+
+    return plans;
   };
 
   // Generate bracket
@@ -453,7 +542,10 @@ const PartnerTournament = () => {
       rounds = generateDoubleEliminationBracket(teams, effectiveTournamentSettings);
     }
 
+    const plans = buildBracketPlans(rounds);
+
     setBracketRounds(rounds);
+    setBracketPlans(plans);
     setChampion(null);
 
     if (pendingRedemption && !pendingRedemption.isResolved) {
@@ -524,6 +616,74 @@ const PartnerTournament = () => {
     }
   };
 
+  const setBracketGameWinner = (matchId: string, gameId: string, winnerId: string | null) => {
+    const match = bracketRounds.flatMap(round => round.matches).find(current => current.id === matchId);
+    if (!match) return;
+    const plan = bracketPlans[matchId];
+    if (!plan) return;
+
+    const updatedPlan: BracketMatchPlan = {
+      ...plan,
+      winners: {
+        ...plan.winners,
+        [gameId]: winnerId,
+      },
+      tieBreakerWinnerId: null,
+    };
+
+    setBracketPlans(prev => ({
+      ...prev,
+      [matchId]: updatedPlan,
+    }));
+
+    const autoWinner = getPlanWinner(match, updatedPlan);
+    const currentWinnerId = match.winner?.id ?? null;
+    const nextWinnerId = autoWinner?.id ?? null;
+
+    if (currentWinnerId !== nextWinnerId) {
+      setMatchWinner(matchId, autoWinner);
+    }
+  };
+
+  const setBracketTieBreakerWinner = (matchId: string, winnerId: string | null) => {
+    const match = bracketRounds.flatMap(round => round.matches).find(current => current.id === matchId);
+    if (!match) return;
+    const plan = bracketPlans[matchId];
+    if (!plan) return;
+
+    const updatedPlan: BracketMatchPlan = {
+      ...plan,
+      tieBreakerWinnerId: winnerId,
+    };
+
+    setBracketPlans(prev => ({
+      ...prev,
+      [matchId]: updatedPlan,
+    }));
+
+    const autoWinner = getPlanWinner(match, updatedPlan);
+    setMatchWinner(matchId, autoWinner);
+  };
+
+  const resetBracketMatch = (matchId: string) => {
+    setBracketPlans((prev) => {
+      const plan = prev[matchId];
+      if (!plan) return prev;
+      return {
+        ...prev,
+        [matchId]: {
+          ...plan,
+          winners: Object.keys(plan.winners).reduce((acc, gameId) => {
+            acc[gameId] = null;
+            return acc;
+          }, {} as Record<string, string | null>),
+          tieBreakerWinnerId: null,
+        },
+      };
+    });
+    setMatchWinner(matchId, null);
+  };
+
   const addGame = (name: string) => {
     const trimmed = name.trim();
     if (!trimmed) {
@@ -539,6 +699,9 @@ const PartnerTournament = () => {
 
     setGames(prev => [...prev, createGame(trimmed)]);
     setRotationSchedule([]);
+    if (bracketRounds.length > 0) {
+      toast.info("Game list changed. Re-generate bracket to refresh match game assignments.");
+    }
     toast.success(`${trimmed} added`);
   };
 
@@ -550,6 +713,9 @@ const PartnerTournament = () => {
 
     setGames(prev => prev.filter(game => game.id !== id));
     setRotationSchedule([]);
+    if (bracketRounds.length > 0) {
+      toast.info("Game list changed. Re-generate bracket to refresh match game assignments.");
+    }
   };
 
   const addCustomGame = () => {
@@ -1164,6 +1330,69 @@ const PartnerTournament = () => {
                 )}
               </div>
 
+              <div>
+                <Label className="mb-3 block font-semibold">Bracket Game Assignment</Label>
+                <RadioGroup value={bracketGameMode} onValueChange={(v) => setBracketGameMode(v as BracketGameMode)}>
+                  <div className="space-y-3">
+                    <div className="flex items-start space-x-3 p-3 rounded-lg bg-muted/50">
+                      <RadioGroupItem value="single-game" id="single-game-plan" className="mt-1" />
+                      <div className="flex-1">
+                        <Label htmlFor="single-game-plan" className="cursor-pointer font-medium">
+                          Single game for all bracket matches
+                        </Label>
+                        <p className="text-xs text-muted-foreground mt-1">
+                          Every match uses one selected game.
+                        </p>
+                      </div>
+                    </div>
+                    <div className="flex items-start space-x-3 p-3 rounded-lg bg-muted/50">
+                      <RadioGroupItem value="rotate-games" id="rotate-game-plan" className="mt-1" />
+                      <div className="flex-1">
+                        <Label htmlFor="rotate-game-plan" className="cursor-pointer font-medium">
+                          Rotate games by match
+                        </Label>
+                        <p className="text-xs text-muted-foreground mt-1">
+                          Matchups are assigned a game based on round and station index.
+                        </p>
+                      </div>
+                    </div>
+                    <div className="flex items-start space-x-3 p-3 rounded-lg bg-muted/50">
+                      <RadioGroupItem value="all-games" id="all-games-plan" className="mt-1" />
+                      <div className="flex-1">
+                        <Label htmlFor="all-games-plan" className="cursor-pointer font-medium">
+                          Play every selected game per matchup
+                        </Label>
+                        <p className="text-xs text-muted-foreground mt-1">
+                          Each bracket matchup tracks winner per game; series winner advances.
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+                </RadioGroup>
+
+                {bracketGameMode === "single-game" && (
+                  <div className="mt-3 space-y-2">
+                    <Label className="text-sm">Primary Bracket Game</Label>
+                    <RadioGroup value={primaryBracketGameId} onValueChange={setPrimaryBracketGameId}>
+                      {games.map((game) => (
+                        <div key={game.id} className="flex items-center space-x-2">
+                          <RadioGroupItem value={game.id} id={`primary-game-${game.id}`} />
+                          <Label htmlFor={`primary-game-${game.id}`} className="cursor-pointer text-sm">
+                            {game.name}
+                          </Label>
+                        </div>
+                      ))}
+                    </RadioGroup>
+                  </div>
+                )}
+
+                {bracketRounds.length > 0 && (
+                  <p className="text-xs text-amber-300 mt-2">
+                    Re-generate bracket after changing game assignment rules.
+                  </p>
+                )}
+              </div>
+
               {/* Collapsible Advanced Settings */}
               {showSettings && (
                 <div className="space-y-4 pt-4 border-t border-border">
@@ -1342,11 +1571,18 @@ const PartnerTournament = () => {
 
                     <div className="grid gap-3 md:grid-cols-2">
                       {actualMatches.map((match) => {
+                        const plan = bracketPlans[match.id];
+                        const planScore = plan ? getMatchPlanScore(match, plan) : null;
+                        const requiresTieBreaker =
+                          bracketGameMode === "all-games" &&
+                          !!plan &&
+                          isPlanTie(match, plan);
                         const canSetWinner =
                           !!match.teamA &&
                           !!match.teamB &&
                           isTeamPlayable(match.teamA) &&
-                          isTeamPlayable(match.teamB);
+                          isTeamPlayable(match.teamB) &&
+                          (bracketGameMode !== "all-games" || requiresTieBreaker);
 
                         return (
                           <div
@@ -1354,9 +1590,78 @@ const PartnerTournament = () => {
                             className="bg-muted p-4 rounded-lg border border-border"
                           >
                             <div className="space-y-2">
+                              {plan && (
+                                <div className="flex items-center justify-between text-xs text-muted-foreground bg-background/60 px-3 py-2 rounded">
+                                  <span>
+                                    {plan.games.length === 1
+                                      ? `Game: ${plan.games[0].name}`
+                                      : `${plan.games.length} games in series`}
+                                  </span>
+                                  <span>Station {plan.station}</span>
+                                </div>
+                              )}
+
+                              {bracketGameMode === "all-games" && plan && match.teamA && match.teamB && (
+                                <div className="bg-background/60 border border-border rounded p-2 space-y-2">
+                                  {plan.games.map((game) => (
+                                    <div key={game.id} className="flex items-center justify-between gap-2">
+                                      <span className="text-xs text-muted-foreground">{game.name}</span>
+                                      <div className="flex items-center gap-1">
+                                        <button
+                                          onClick={() => setBracketGameWinner(match.id, game.id, match.teamA!.id)}
+                                          disabled={!isTeamPlayable(match.teamA) || !isTeamPlayable(match.teamB)}
+                                          className={`px-2 py-1 rounded text-xs ${
+                                            plan.winners[game.id] === match.teamA.id
+                                              ? "bg-white text-black font-semibold"
+                                              : "bg-muted hover:bg-muted/70"
+                                          }`}
+                                        >
+                                          A
+                                        </button>
+                                        <button
+                                          onClick={() => setBracketGameWinner(match.id, game.id, match.teamB!.id)}
+                                          disabled={!isTeamPlayable(match.teamA) || !isTeamPlayable(match.teamB)}
+                                          className={`px-2 py-1 rounded text-xs ${
+                                            plan.winners[game.id] === match.teamB.id
+                                              ? "bg-white text-black font-semibold"
+                                              : "bg-muted hover:bg-muted/70"
+                                          }`}
+                                        >
+                                          B
+                                        </button>
+                                        {plan.winners[game.id] && (
+                                          <button
+                                            onClick={() => setBracketGameWinner(match.id, game.id, null)}
+                                            className="px-2 py-1 rounded text-xs bg-muted hover:bg-muted/70"
+                                          >
+                                            Reset
+                                          </button>
+                                        )}
+                                      </div>
+                                    </div>
+                                  ))}
+
+                                  {planScore && (
+                                    <div className="text-xs text-muted-foreground">
+                                      Series score: {planScore.winsA}-{planScore.winsB} ({planScore.completed}/{planScore.total} completed)
+                                    </div>
+                                  )}
+                                  {requiresTieBreaker && (
+                                    <div className="text-xs text-amber-300">
+                                      Series tied. Pick tiebreak winner below.
+                                    </div>
+                                  )}
+                                </div>
+                              )}
+
                               {/* Team A */}
                               <button
-                                onClick={() => match.teamA && setMatchWinner(match.id, match.teamA)}
+                                onClick={() =>
+                                  match.teamA &&
+                                  (bracketGameMode === "all-games"
+                                    ? setBracketTieBreakerWinner(match.id, match.teamA.id)
+                                    : setMatchWinner(match.id, match.teamA))
+                                }
                                 disabled={!canSetWinner}
                                 className={`w-full text-left px-4 py-3 rounded-lg transition-all ${
                                   match.winner?.id === match.teamA?.id
@@ -1384,7 +1689,12 @@ const PartnerTournament = () => {
 
                               {/* Team B */}
                               <button
-                                onClick={() => match.teamB && setMatchWinner(match.id, match.teamB)}
+                                onClick={() =>
+                                  match.teamB &&
+                                  (bracketGameMode === "all-games"
+                                    ? setBracketTieBreakerWinner(match.id, match.teamB.id)
+                                    : setMatchWinner(match.id, match.teamB))
+                                }
                                 disabled={!canSetWinner}
                                 className={`w-full text-left px-4 py-3 rounded-lg transition-all ${
                                   match.winner?.id === match.teamB?.id
@@ -1408,7 +1718,7 @@ const PartnerTournament = () => {
                               {/* Reset Button */}
                               {match.winner && (
                                 <button
-                                  onClick={() => setMatchWinner(match.id, null)}
+                                  onClick={() => resetBracketMatch(match.id)}
                                   className="w-full text-center text-xs text-muted-foreground hover:text-foreground py-1"
                                 >
                                   Reset Match
