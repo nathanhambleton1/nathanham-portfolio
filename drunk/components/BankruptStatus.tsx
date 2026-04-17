@@ -118,7 +118,7 @@ export default function BankruptStatus({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogPortal>
         <DialogOverlay />
-        <DialogPrimitive.Content className="fixed left-1/2 top-1/2 z-50 w-full max-w-2xl -translate-x-1/2 -translate-y-1/2 border bg-background p-6 shadow-lg sm:rounded-lg md:w-full">
+        <DialogPrimitive.Content className="fixed left-1/2 top-1/2 z-50 mx-4 w-full max-w-2xl -translate-x-1/2 -translate-y-1/2 border bg-background p-6 shadow-lg sm:rounded-lg md:w-full">
           <DialogHeader>
             <DialogTitle>Game Stats Recap</DialogTitle>
             <DialogDescription>

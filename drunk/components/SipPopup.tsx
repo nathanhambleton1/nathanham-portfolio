@@ -35,16 +35,16 @@ export default function SipPopup({
   onSubmit: (to: string | string[], sip_count: number) => void;
   allowSelf?: boolean;
 }) {
-  const [viewMode, setViewMode] = useState<'classic' | 'seating'>('classic');
+  const [viewMode, setViewMode] = useState<'classic' | 'seating'>('seating');
 
   // Load saved view mode when component mounts or opens
   useEffect(() => {
     if (open) {
       try {
         const saved = typeof window !== "undefined" ? localStorage.getItem(STORAGE_KEY_VIEW) : null;
-        setViewMode((saved === 'seating' ? 'seating' : 'classic') as 'classic' | 'seating');
+        setViewMode((saved === 'classic' ? 'classic' : 'seating') as 'classic' | 'seating');
       } catch {
-        setViewMode('classic');
+        setViewMode('seating');
       }
     }
   }, [open]);

@@ -261,16 +261,6 @@ export default function ActivityLog({
         <div className="max-w-4xl mx-auto px-4 sm:px-6 pt-8 pb-3">
           <div className="flex items-center gap-2 mb-1">
             <div className="font-semibold text-xs sm:text-sm">Activity</div>
-            {isCommissioner ? (
-              <button
-                type="button"
-                onClick={() => setShowAdminEvents((v) => !v)}
-                className="ml-2 text-[10px] sm:text-xs text-muted-foreground hover:text-foreground underline decoration-dotted underline-offset-4"
-                title="Toggle visibility of commissioner corrections"
-              >
-                {showAdminEvents ? 'Hide corrections' : 'Show corrections'}
-              </button>
-            ) : null}
             <div className="ml-auto flex items-center gap-2 text-[10px] sm:text-xs text-muted-foreground">
               <label className="sr-only">Filter by player</label>
               <select

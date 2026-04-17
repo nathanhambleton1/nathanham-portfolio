@@ -174,7 +174,7 @@ const Drunkopoly = () => {
   const sipsOverlayOpen = (player?.pending_sips ?? 0) > 0;
   const tradeOverlayOpen = !!game?.trade_locked;
 
-  useLockBodyScroll(jailOverlayOpen || sipsOverlayOpen || tradeOverlayOpen, { scrollToTop: true });
+  useLockBodyScroll(jailOverlayOpen || tradeOverlayOpen, { scrollToTop: true });
 
   // If a blocking overlay (jail or trade) is active, close other action popups
   // so they don't persist or auto-open when overlays toggle. But do NOT close
@@ -2271,7 +2271,7 @@ const Drunkopoly = () => {
 
   // Step 3: Home (main game screen)
   return (
-    <div className="min-h-screen bg-gradient-bg flex flex-col">
+    <div className="min-h-screen bg-gradient-bg flex flex-col" style={sipsOverlayOpen ? { paddingBottom: '110px' } : undefined}>
       <Toaster />
       <AlertDialog open={removedNoticeOpen} onOpenChange={(v) => { if (!v) handleLogoutOfGame(); setRemovedNoticeOpen(v); }}>
         <AlertDialogContent>
