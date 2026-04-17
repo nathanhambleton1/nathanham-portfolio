@@ -1,4 +1,5 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
+import { Search, X } from "lucide-react";
 import { createClient } from '@supabase/supabase-js';
 
 const supabaseUrl = 'https://kcyrvubzhsphpxfsewii.supabase.co';
@@ -32,9 +33,11 @@ export default function ActivityLog({
 }) {
   const [events, setEvents] = useState<EventRow[]>([]);
   const [expanded, setExpanded] = useState(false);
-  // Default to hiding commissioner corrections even for commissioners to keep the feed clean.
   const [showAdminEvents, setShowAdminEvents] = useState(false);
   const [selectedPlayerId, setSelectedPlayerId] = useState<string | 'all'>('all');
+  const [searchOpen, setSearchOpen] = useState(false);
+  const [searchQuery, setSearchQuery] = useState('');
+  const searchInputRef = useRef<HTMLInputElement>(null);
   const isCommissioner = !!currentPlayer?.is_commissioner;
 
   useEffect(() => {
@@ -251,17 +254,63 @@ export default function ActivityLog({
       )
     : adminFilteredEvents;
 
-  const visibleFilteredEvents = expanded ? playerFilteredEvents : playerFilteredEvents.slice(0, 5);
+  const query = searchQuery.trim().toLowerCase();
+
+  const formatTime = (ts: string) =>
+    new Date(ts).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+
+  const searchFilteredEvents = query
+    ? playerFilteredEvents.filter((ev) =>
+        formatEvent(ev).toLowerCase().includes(query) ||
+        formatTime(ev.created_at).toLowerCase().includes(query)
+      )
+    : playerFilteredEvents;
+
+  const visibleFilteredEvents = expanded ? searchFilteredEvents : searchFilteredEvents.slice(0, 5);
+
+  const highlight = (text: string) => {
+    if (!query) return <>{text}</>;
+    const idx = text.toLowerCase().indexOf(query);
+    if (idx === -1) return <>{text}</>;
+    return (
+      <>
+        {text.slice(0, idx)}
+        <mark className="rounded-sm px-0.5" style={{ background: 'hsl(var(--primary) / 0.25)', color: 'inherit' }}>
+          {text.slice(idx, idx + query.length)}
+        </mark>
+        {text.slice(idx + query.length)}
+      </>
+    );
+  };
 
   return (
     <>
-      <style>{`@keyframes nhp-live-pulse { 0% { transform: scale(1); opacity: 0.85; } 70% { transform: scale(2); opacity: 0; } 100% { transform: scale(2); opacity: 0; } } @keyframes nhp-live-scale { 0% { transform: scale(0.8); box-shadow: 0 0 6px rgba(16,185,129,0.4); } 50% { transform: scale(1.2); box-shadow: 0 0 12px rgba(16,185,129,0.95); } 100% { transform: scale(0.8); box-shadow: 0 0 6px rgba(16,185,129,0.4); } }`}</style>
+      <style>{`
+        @keyframes nhp-live-pulse { 0% { transform: scale(1); opacity: 0.85; } 70% { transform: scale(2); opacity: 0; } 100% { transform: scale(2); opacity: 0; } }
+        @keyframes nhp-live-scale { 0% { transform: scale(0.8); box-shadow: 0 0 6px rgba(16,185,129,0.4); } 50% { transform: scale(1.2); box-shadow: 0 0 12px rgba(16,185,129,0.95); } 100% { transform: scale(0.8); box-shadow: 0 0 6px rgba(16,185,129,0.4); } }
+        @keyframes activity-search-in { from { opacity: 0; transform: translateY(-6px); } to { opacity: 1; transform: translateY(0); } }
+      `}</style>
       <div style={{ height: 40 }} aria-hidden="true" />
       <footer className="activity-log w-full bg-white/95 border-t border-border" style={{ boxShadow: '0 -2px 8px 0 rgba(0,0,0,0.03)' }}>
         <div className="max-w-4xl mx-auto px-4 sm:px-6 pt-8 pb-3">
           <div className="flex items-center gap-2 mb-1">
             <div className="font-semibold text-xs sm:text-sm">Activity</div>
             <div className="ml-auto flex items-center gap-2 text-[10px] sm:text-xs text-muted-foreground">
+              <button
+                type="button"
+                onClick={() => {
+                  setSearchOpen((v) => {
+                    if (!v) setTimeout(() => searchInputRef.current?.focus(), 50);
+                    else setSearchQuery('');
+                    return !v;
+                  });
+                }}
+                className="p-1 rounded hover:opacity-70 transition-opacity"
+                style={{ color: searchOpen ? 'hsl(var(--primary))' : 'hsl(var(--muted-foreground))' }}
+                aria-label="Search activity"
+              >
+                <Search className="w-3.5 h-3.5" />
+              </button>
               <label className="sr-only">Filter by player</label>
               <select
                 value={selectedPlayerId}
@@ -310,29 +359,75 @@ export default function ActivityLog({
               <span>Live</span>
             </div>
           </div>
+          {searchOpen && (
+            <div
+              className="mb-3 mt-1"
+              style={{ animation: 'activity-search-in 0.18s ease-out both' }}
+            >
+              <div
+                className="flex items-center gap-2 rounded-xl px-3 py-2"
+                style={{
+                  background: 'hsl(var(--muted) / 0.5)',
+                  border: '1px solid hsl(var(--border) / 0.4)',
+                }}
+              >
+                <Search className="w-3.5 h-3.5 flex-shrink-0" style={{ color: 'hsl(var(--muted-foreground))' }} />
+                <input
+                  ref={searchInputRef}
+                  type="text"
+                  value={searchQuery}
+                  onChange={(e) => { setSearchQuery(e.target.value); setExpanded(true); }}
+                  placeholder="Search activity…"
+                  className="flex-1 bg-transparent text-xs focus:outline-none placeholder:text-muted-foreground min-w-0"
+                  style={{ color: 'hsl(var(--foreground))' }}
+                />
+                {query && (
+                  <span
+                    className="text-[10px] whitespace-nowrap flex-shrink-0 tabular-nums"
+                    style={{ color: 'hsl(var(--muted-foreground))' }}
+                  >
+                    {searchFilteredEvents.length} result{searchFilteredEvents.length !== 1 ? 's' : ''}
+                  </span>
+                )}
+                {searchQuery && (
+                  <button
+                    type="button"
+                    onClick={() => setSearchQuery('')}
+                    className="flex-shrink-0 rounded-full p-0.5 transition-opacity hover:opacity-60"
+                    style={{ color: 'hsl(var(--muted-foreground))' }}
+                    aria-label="Clear search"
+                  >
+                    <X className="w-3 h-3" />
+                  </button>
+                )}
+              </div>
+            </div>
+          )}
           <div>
             <ul className="space-y-1 text-[10px] sm:text-xs">
-              {playerFilteredEvents.length === 0 && (
-                <li className="text-[10px] text-muted-foreground">No activity yet</li>
+              {searchFilteredEvents.length === 0 && (
+                <li className="text-[10px] text-muted-foreground">
+                  {query ? 'No matching activity' : 'No activity yet'}
+                </li>
               )}
               {visibleFilteredEvents.map((ev) => (
                 <li key={ev.id} className="text-foreground/90 flex items-start gap-2">
                   <span className="text-muted-foreground min-w-[44px] text-[9px] sm:text-[10px]">
-                    {new Date(ev.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                    {highlight(formatTime(ev.created_at))}
                   </span>
-                  <span className="whitespace-normal break-words">{formatEvent(ev)}</span>
+                  <span className="whitespace-normal break-words">{highlight(formatEvent(ev))}</span>
                 </li>
               ))}
             </ul>
 
-            {playerFilteredEvents.length > 10 && (
+            {searchFilteredEvents.length > 5 && (
               <div className="mt-2 flex items-center">
                 <button
                   className="text-[10px] text-primary underline hover:no-underline"
                   onClick={() => setExpanded((s) => !s)}
                   aria-expanded={expanded}
                 >
-                  {expanded ? 'Show less' : `Show ${playerFilteredEvents.length - 10} more`}
+                  {expanded ? 'Show less' : `Show ${searchFilteredEvents.length - 5} more`}
                 </button>
               </div>
             )}
