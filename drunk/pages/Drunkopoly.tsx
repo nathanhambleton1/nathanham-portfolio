@@ -6,6 +6,7 @@ import BankruptStatus from "../components/BankruptStatus";
 import SipsLockOverlay from "../components/SipsLockOverlay";
 import PropertiesPopup from "../components/PropertiesPopup";
 import RankingsPopup from "../components/RankingsPopup";
+import SipLeaderboardPopup from "../components/SipLeaderboardPopup";
 import { UserPlus, DollarSign, Users, Percent, Crown, PiggyBank, Clock, Copy, Settings, QrCode, ChevronDown, Info, Eye, EyeOff, Building2, MessagesSquare } from "lucide-react";
 import { QRCodeSVG } from "qrcode.react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "../components/ui/dialog";
@@ -99,6 +100,7 @@ const Drunkopoly = () => {
   const [jailModalOpen, setJailModalOpen] = useState(false);
   const [propertiesModalOpen, setPropertiesModalOpen] = useState(false);
   const [rankingsModalOpen, setRankingsModalOpen] = useState(false);
+  const [sipLeaderboardOpen, setSipLeaderboardOpen] = useState(false);
   const [payProcessing, setPayProcessing] = useState(false);
   const [cardProcessing, setCardProcessing] = useState(false);
   const [insufficientFundsFlash, setInsufficientFundsFlash] = useState(false);
@@ -128,6 +130,42 @@ const Drunkopoly = () => {
     window.addEventListener('resize', onResize);
     return () => window.removeEventListener('resize', onResize);
   }, []);
+  // Commissioner unlock / PIN (centralized so parent and popover agree)
+  const [commPinOpen, setCommPinOpen] = useState(false);
+  const [commToolsOpen, setCommToolsOpen] = useState(false);
+  const [commPinValue, setCommPinValue] = useState('');
+  const [commUnlockedUntil, setCommUnlockedUntil] = useState<number>(() => {
+    try { return Number(localStorage.getItem('drunkopoly:commUnlockedUntil') || 0); } catch { return 0; }
+  });
+
+  // NOTE: This is NOT a secret. Vite env vars are bundled into the client.
+  // Real security must be enforced server-side (Supabase RLS / policies).
+  const commissionerPin = 'drunk1234';
+  const commUnlocked = Date.now() < (commUnlockedUntil || 0);
+
+  const openCommissionerTools = () => {
+    // GameCodePopover will set default selection; just open the PIN or tools here.
+    if (commUnlocked) {
+      setCommToolsOpen(true);
+      return;
+    }
+    setCommPinValue('');
+    setCommPinOpen(true);
+  };
+
+  const tryUnlockCommissionerTools = () => {
+    if ((commPinValue || '') === String(commissionerPin || '')) {
+      const until = Date.now() + 24 * 60 * 60 * 1000; // 24 hours
+      setCommUnlockedUntil(until);
+      try { localStorage.setItem('drunkopoly:commUnlockedUntil', String(until)); } catch { /* ignore */ }
+      setCommPinOpen(false);
+      setCommToolsOpen(true);
+      setCommPinValue('');
+      try { toast({ title: 'Unlocked', description: 'Commissioner Tools unlocked for 24 hours.' }); } catch { /* ignore */ }
+      return;
+    }
+    try { toast({ title: 'Incorrect PIN', description: 'Commissioner Tools PIN was incorrect.', variant: 'destructive' }); } catch { /* ignore */ }
+  };
   const [soundEnabled, setSoundEnabled] = useState<boolean>(() => {
     try {
       const stored = typeof window !== "undefined" ? localStorage.getItem("drunkopoly:soundEnabled") : null;
@@ -218,6 +256,16 @@ const Drunkopoly = () => {
     try {
       if (typeof window !== "undefined") localStorage.setItem(STORAGE_KEY_RECENT, JSON.stringify(list));
     } catch (e) { /* ignore */ }
+  };
+
+  const hasCommissionerAccess = () => {
+    try {
+      const unlocked = Number(localStorage.getItem('drunkopoly:commUnlockedUntil') || '0');
+      // Require explicit PIN unlock for access. Being the commissioner no longer grants automatic UI access.
+      return Date.now() < unlocked;
+    } catch (e) {
+      return false;
+    }
   };
 
   const pushRecentGame = (code: string) => {
@@ -1152,7 +1200,7 @@ const Drunkopoly = () => {
   // Toggle show balances (only commissioner)
   const toggleShowBalances = async (enabled: boolean) => {
     if (!game || !player) return;
-    if (!player.is_commissioner) {
+    if (!hasCommissionerAccess()) {
       try { toast({ title: 'Not allowed', description: 'Only the commissioner can change game settings.' }); } catch {}
       return;
     }
@@ -1175,7 +1223,7 @@ const Drunkopoly = () => {
   // Toggle sips enabled (only commissioner)
   const toggleSipsEnabled = async (enabled: boolean) => {
     if (!game || !player) return;
-    if (!player.is_commissioner) {
+    if (!hasCommissionerAccess()) {
       try { toast({ title: 'Not allowed', description: 'Only the commissioner can change game settings.' }); } catch {}
       return;
     }
@@ -1198,7 +1246,7 @@ const Drunkopoly = () => {
   // Toggle expansion pack (only commissioner)
   const toggleExpansionEnabled = async (enabled: boolean) => {
     if (!game || !player) return;
-    if (!player.is_commissioner) {
+    if (!hasCommissionerAccess()) {
       try { toast({ title: 'Not allowed', description: 'Only the commissioner can change game settings.' }); } catch {}
       return;
     }
@@ -1761,7 +1809,7 @@ const Drunkopoly = () => {
   const handleRemovePlayer = async (id: string) => {
     try {
       if (!game) return;
-      if (!player || !player.is_commissioner) {
+      if (!hasCommissionerAccess()) {
         try { toast({ title: 'Not allowed', description: 'Only the commissioner can remove players.' }); } catch {}
         return;
       }
@@ -2318,12 +2366,17 @@ const Drunkopoly = () => {
             >
               <div className="font-semibold text-lg">{player?.name ?? name}</div>
               {(game?.sips_enabled ?? true) && (
-                <div className="text-sm opacity-90">{(player?.total_sips ?? 0)} sips</div>
+                <div
+                  className="text-sm opacity-90 cursor-pointer hover:opacity-100 hover:underline"
+                  onClick={() => setSipLeaderboardOpen(true)}
+                >
+                  {(player?.total_sips ?? 0)} sips
+                </div>
               )}
             </div>
           </div>
           <div className="flex items-center gap-2">
-          {(game?.sips_enabled ?? true) && !isNarrow && (
+          {!isNarrow && (
             <Button variant="ghost" size="sm" onClick={() => navigate('/drunk/drunkopoly/rules')}>Rules</Button>
           )}
           {/* Messages moved into the code popover; header icon removed for a cleaner UI */}
@@ -2348,6 +2401,17 @@ const Drunkopoly = () => {
             onToggleShowBalances={toggleShowBalances}
             onToggleSipsEnabled={toggleSipsEnabled}
             onToggleExpansion={toggleExpansionEnabled}
+            commPinOpen={commPinOpen}
+            setCommPinOpen={setCommPinOpen}
+            commToolsOpen={commToolsOpen}
+            setCommToolsOpen={setCommToolsOpen}
+            commPinValue={commPinValue}
+            setCommPinValue={setCommPinValue}
+            commUnlocked={commUnlocked}
+            openCommissionerTools={openCommissionerTools}
+            tryUnlockCommissionerTools={tryUnlockCommissionerTools}
+            setCommUnlockedUntil={setCommUnlockedUntil}
+            hasCommissionerAccess={hasCommissionerAccess}
           />
         </div>
       </div>
@@ -2779,6 +2843,13 @@ const Drunkopoly = () => {
           onOpenChange={(v) => setRankingsModalOpen(v)}
           gameCode={gameCode}
           players={playersList}
+        />
+
+        <SipLeaderboardPopup
+          open={sipLeaderboardOpen}
+          onOpenChange={setSipLeaderboardOpen}
+          players={playersList}
+          currentPlayerId={player?.id}
         />
 
         <JailLockOverlay
@@ -3286,28 +3357,20 @@ function AnimatedNumber({ value, soundEnabled = true, maskIfGameHidden = false, 
   );
 }
 
-function GameCodePopover({ code, onLogout, players, currentPlayer, game, onRemovePlayer, soundEnabled, onToggleSound, showBalances = true, onToggleShowBalances, onToggleSipsEnabled, onToggleExpansion, showRulesInPopover }: { code: string; onLogout?: () => void; players?: any[]; currentPlayer?: any; game?: any; onRemovePlayer?: (id: string) => Promise<void>; soundEnabled?: boolean; onToggleSound?: (enabled: boolean) => void; showBalances?: boolean; onToggleShowBalances?: (enabled: boolean) => void; onToggleSipsEnabled?: (enabled: boolean) => void; onToggleExpansion?: (enabled: boolean) => void; showRulesInPopover?: boolean }) {
+function GameCodePopover({ code, onLogout, players, currentPlayer, game, onRemovePlayer, soundEnabled, onToggleSound, showBalances = true, onToggleShowBalances, onToggleSipsEnabled, onToggleExpansion, showRulesInPopover,
+  // centralized commissioner state/handlers from parent
+  commPinOpen, setCommPinOpen, commToolsOpen, setCommToolsOpen, commPinValue, setCommPinValue, commUnlocked, openCommissionerTools, tryUnlockCommissionerTools, setCommUnlockedUntil, hasCommissionerAccess
+}: { code: string; onLogout?: () => void; players?: any[]; currentPlayer?: any; game?: any; onRemovePlayer?: (id: string) => Promise<void>; soundEnabled?: boolean; onToggleSound?: (enabled: boolean) => void; showBalances?: boolean; onToggleShowBalances?: (enabled: boolean) => void; onToggleSipsEnabled?: (enabled: boolean) => void; onToggleExpansion?: (enabled: boolean) => void; showRulesInPopover?: boolean; commPinOpen: boolean; setCommPinOpen: (v:boolean)=>void; commToolsOpen: boolean; setCommToolsOpen: (v:boolean)=>void; commPinValue: string; setCommPinValue: (v:string)=>void; commUnlocked: boolean; openCommissionerTools: ()=>void; tryUnlockCommissionerTools: ()=>void; setCommUnlockedUntil: (n:number)=>void; hasCommissionerAccess: ()=>boolean }) {
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [settingsOpenSection, setSettingsOpenSection] = useState<'game' | 'players' | null>(null);
   const [confirmOpen, setConfirmOpen] = useState(false);
   const [qrCodeOpen, setQrCodeOpen] = useState(false);
   const [pendingRemove, setPendingRemove] = useState<{ id: string; name?: string } | null>(null);
-  const [commPinOpen, setCommPinOpen] = useState(false);
-  const [commToolsOpen, setCommToolsOpen] = useState(false);
-  const [commPinValue, setCommPinValue] = useState('');
-  const [commUnlockedUntil, setCommUnlockedUntil] = useState<number>(0);
   const [commSelectedPlayerId, setCommSelectedPlayerId] = useState<string>('');
   const [commBalanceMode, setCommBalanceMode] = useState<'set' | 'delta'>('delta');
   const [commBalanceValue, setCommBalanceValue] = useState<string>('');
   const [commPendingSipsValue, setCommPendingSipsValue] = useState<string>('');
-  const [commNote, setCommNote] = useState<string>('');
   const navigate = useNavigate();
-
-  // NOTE: This is NOT a secret. Vite env vars are bundled into the client.
-  // Real security must be enforced server-side (Supabase RLS / policies).
-  const commissionerPin ='drunk1234';
-
-  const commUnlocked = Date.now() < (commUnlockedUntil || 0);
 
   const requestRemove = (id: string, name?: string) => {
     setPendingRemove({ id, name });
@@ -3355,34 +3418,10 @@ function GameCodePopover({ code, onLogout, players, currentPlayer, game, onRemov
     }
   };
 
-  const openCommissionerTools = () => {
-    if (!currentPlayer?.is_commissioner) return;
-    // Default selection to self if available; otherwise first player in list.
-    const fallback = (currentPlayer?.id ? String(currentPlayer.id) : (players && players.length ? String(players[0]?.id) : '')) || '';
-    setCommSelectedPlayerId((prev) => (prev ? prev : fallback));
-    if (commUnlocked) {
-      setCommToolsOpen(true);
-      return;
-    }
-    setCommPinValue('');
-    setCommPinOpen(true);
-  };
-
-  const tryUnlockCommissionerTools = () => {
-    if (!currentPlayer?.is_commissioner) return;
-    if ((commPinValue || '') === String(commissionerPin || '')) {
-      setCommUnlockedUntil(Date.now() + 10 * 60 * 1000); // 10 minutes
-      setCommPinOpen(false);
-      setCommToolsOpen(true);
-      setCommPinValue('');
-      try { toast({ title: 'Unlocked', description: 'Commissioner Tools unlocked for 10 minutes.' }); } catch { /* ignore */ }
-      return;
-    }
-    try { toast({ title: 'Incorrect PIN', description: 'Commissioner Tools PIN was incorrect.', variant: 'destructive' }); } catch { /* ignore */ }
-  };
+  
 
   const commissionerAdjustBalance = async () => {
-    if (!currentPlayer?.is_commissioner) return;
+    if (!hasCommissionerAccess()) return;
     if (!game?.id) return;
     const targetId = String(commSelectedPlayerId || '');
     const parsed = Number(commBalanceValue);
@@ -3415,7 +3454,6 @@ function GameCodePopover({ code, onLogout, players, currentPlayer, game, onRemov
       await supabase.from('players').update({ balance: nextBal }).eq('id', targetId).eq('game_id', game.id);
 
       const delta = nextBal - currentBal;
-      const note = (commNote || '').trim();
       const modeDesc = commBalanceMode === 'set' ? `set balance to $${Number(nextBal).toLocaleString()}` : `adjusted balance by $${Number(parsed).toLocaleString()}`;
       await supabase.from('money_events').insert([{
         game_id: game.id,
@@ -3424,7 +3462,7 @@ function GameCodePopover({ code, onLogout, players, currentPlayer, game, onRemov
         to_player_id: targetId,
         amount: delta,
         type: 'admin_balance_adjust',
-        description: `Commissioner ${modeDesc} for ${target?.name || targetId}.${note ? ` Note: ${note}` : ''}`,
+        description: `Commissioner ${modeDesc} for ${target?.name || targetId}.`,
       }]);
 
       try { toast({ title: 'Balance updated', description: `${target?.name || 'Player'} now has $${Number(nextBal).toLocaleString()}.` }); } catch { /* ignore */ }
@@ -3438,7 +3476,7 @@ function GameCodePopover({ code, onLogout, players, currentPlayer, game, onRemov
   };
 
   const commissionerSetPendingSips = async () => {
-    if (!currentPlayer?.is_commissioner) return;
+    if (!hasCommissionerAccess()) return;
     if (!game?.id) return;
     const targetId = String(commSelectedPlayerId || '');
     const parsed = Number(commPendingSipsValue);
@@ -3465,7 +3503,6 @@ function GameCodePopover({ code, onLogout, players, currentPlayer, game, onRemov
       const prev = Number(target.pending_sips || 0);
       await supabase.from('players').update({ pending_sips: parsed }).eq('id', targetId).eq('game_id', game.id);
 
-      const note = (commNote || '').trim();
       await supabase.from('money_events').insert([{
         game_id: game.id,
         actor_player_id: currentPlayer?.id ?? null,
@@ -3473,7 +3510,7 @@ function GameCodePopover({ code, onLogout, players, currentPlayer, game, onRemov
         to_player_id: targetId,
         amount: 0,
         type: 'admin_pending_sips_set',
-        description: `Commissioner set pending sips for ${target?.name || targetId} from ${prev} to ${parsed}.${note ? ` Note: ${note}` : ''}`,
+        description: `Commissioner set pending sips for ${target?.name || targetId} from ${prev} to ${parsed}.`,
       }]);
 
       try { toast({ title: 'Pending sips updated', description: `${target?.name || 'Player'} now has ${parsed} pending sip${parsed !== 1 ? 's' : ''}.` }); } catch { /* ignore */ }
@@ -3505,12 +3542,10 @@ function GameCodePopover({ code, onLogout, players, currentPlayer, game, onRemov
             <Copy size={16} />
             Invite Link
           </Button>
-          {showRulesInPopover && (
-            <Button variant="secondary" className="w-full mt-1" onClick={() => { setQrCodeOpen(false); setSettingsOpen(false); onLogout && /* no-op */ null; navigate('/drunk/drunkopoly/rules'); }}>
-              <Info size={16} />
-              Rules
-            </Button>
-          )}
+          <Button variant="secondary" className="w-full mt-1" onClick={() => { setQrCodeOpen(false); setSettingsOpen(false); onLogout && /* no-op */ null; navigate('/drunk/drunkopoly/rules'); }}>
+            <Info size={16} />
+            Rules
+          </Button>
           <Button
             variant="secondary"
             className="w-full mt-1"
@@ -3601,52 +3636,54 @@ function GameCodePopover({ code, onLogout, players, currentPlayer, game, onRemov
                     />
                   </div>
 
-                  {currentPlayer && currentPlayer.is_commissioner && (
-                    <>
-                      <div className="flex items-center justify-between py-2 px-3 rounded-lg bg-muted/10">
-                        <div className="flex-1">
-                          <div className="font-medium text-sm">Show Player Balances</div>
-                          <div className="text-xs text-muted-foreground">Allow players to see each other's money</div>
-                        </div>
-                        <Switch
-                          checked={!!(game?.show_balances ?? showBalances)}
-                          onCheckedChange={(checked) => { if (onToggleShowBalances) onToggleShowBalances(checked); }}
-                        />
+                  <>
+                    <div className="flex items-center justify-between py-2 px-3 rounded-lg bg-muted/10">
+                      <div className="flex-1">
+                        <div className="font-medium text-sm">Show Player Balances</div>
+                        <div className="text-xs text-muted-foreground">Allow players to see each other's money</div>
                       </div>
-                      <div className="flex items-center justify-between py-2 px-3 rounded-lg bg-muted/10">
-                        <div className="flex-1">
-                          <div className="font-medium text-sm">Play With Sips</div>
-                          <div className="text-xs text-muted-foreground">Enable sip counters and Give Sips features</div>
-                        </div>
-                        <Switch
-                          checked={!!(game?.sips_enabled ?? true)}
-                          onCheckedChange={(checked) => { if (onToggleSipsEnabled) onToggleSipsEnabled(checked); }}
-                        />
+                      <Switch
+                        checked={!!(game?.show_balances ?? showBalances)}
+                        onCheckedChange={(checked) => { if (onToggleShowBalances) onToggleShowBalances(checked); }}
+                      />
+                    </div>
+                    <div className="flex items-center justify-between py-2 px-3 rounded-lg bg-muted/10">
+                      <div className="flex-1">
+                        <div className="font-medium text-sm">Play With Sips</div>
+                        <div className="text-xs text-muted-foreground">Enable sip counters and Give Sips features</div>
                       </div>
-                      <div className="flex items-center justify-between py-2 px-3 rounded-lg bg-muted/10">
-                        <div className="flex-1">
-                          <div className="font-medium text-sm">Expansion Pack</div>
-                          <div className="text-xs text-muted-foreground">Route payments to the bank into Free Parking</div>
-                        </div>
-                        <Switch
-                          checked={!!(game?.expansion_enabled ?? false)}
-                          onCheckedChange={(checked) => { if (onToggleExpansion) onToggleExpansion(checked); }}
-                        />
+                      <Switch
+                        checked={!!(game?.sips_enabled ?? true)}
+                        onCheckedChange={(checked) => { if (onToggleSipsEnabled) onToggleSipsEnabled(checked); }}
+                      />
+                    </div>
+                    <div className="flex items-center justify-between py-2 px-3 rounded-lg bg-muted/10">
+                      <div className="flex-1">
+                        <div className="font-medium text-sm">Expansion Pack</div>
+                        <div className="text-xs text-muted-foreground">Route payments to the bank into Free Parking</div>
                       </div>
+                      <Switch
+                        checked={!!(game?.expansion_enabled ?? false)}
+                        onCheckedChange={(checked) => { if (onToggleExpansion) onToggleExpansion(checked); }}
+                      />
+                    </div>
 
-                      <div className="pt-2">
-                        <Button
-                          type="button"
-                          variant="secondary"
-                          className="w-full justify-center"
-                          onClick={openCommissionerTools}
-                          title="Commissioner-only tools (audited)"
-                        >
-                          Advanced (Commissioner)
-                        </Button>
-                      </div>
-                    </>
-                  )}
+                    <div className="pt-2">
+                      <Button
+                        type="button"
+                        variant="secondary"
+                        className="w-full justify-center"
+                        onClick={() => {
+                          const fallback = (currentPlayer?.id ? String(currentPlayer.id) : (players && players.length ? String(players[0]?.id) : '')) || '';
+                          setCommSelectedPlayerId((prev) => (prev ? prev : fallback));
+                          openCommissionerTools();
+                        }}
+                        title="Commissioner-only tools (audited)"
+                      >
+                        Advanced (Commissioner)
+                      </Button>
+                    </div>
+                  </>
                 </div>
               </div>
             )}
@@ -3679,7 +3716,7 @@ function GameCodePopover({ code, onLogout, players, currentPlayer, game, onRemov
                       players.map((p: any) => {
                         const isSelf = currentPlayer && String(currentPlayer.id) === String(p.id);
                         const isCommissioner = !!p.is_commissioner;
-                        const canRemove = currentPlayer && (currentPlayer.is_commissioner || currentPlayer.is_commissioner === true) && !isCommissioner && !isSelf;
+                        const canRemove = currentPlayer && commUnlocked && !isCommissioner && !isSelf;
                         const canSeeBalance = showBalances;
                         return (
                           <div key={p.id} className="flex items-center gap-3 py-2 px-2 border rounded">
@@ -3734,7 +3771,7 @@ function GameCodePopover({ code, onLogout, players, currentPlayer, game, onRemov
             Note: this is a UI-only gate. Security must be enforced with Supabase RLS.
           </div>
         </div>
-        <DialogFooter>
+        <DialogFooter className="flex flex-row justify-end gap-2 pt-2">
           <Button variant="secondary" onClick={() => setCommPinOpen(false)}>Cancel</Button>
           <Button onClick={tryUnlockCommissionerTools}>Unlock</Button>
         </DialogFooter>
@@ -3784,12 +3821,22 @@ function GameCodePopover({ code, onLogout, players, currentPlayer, game, onRemov
                 Set Exact
               </Button>
             </div>
-            <Input
-              inputMode="numeric"
-              value={commBalanceValue}
-              placeholder={commBalanceMode === 'set' ? 'New balance (e.g. 1500)' : 'Delta (e.g. -200 or 200)'}
-              onChange={(e) => setCommBalanceValue(e.target.value)}
-            />
+            <div className="flex items-center gap-2">
+              <Button size="sm" variant="secondary" onClick={() => {
+                setCommBalanceValue((prev) => {
+                  if (!prev) return '-';
+                  return String(prev).startsWith('-') ? String(prev).slice(1) : `-${prev}`;
+                });
+              }} title="Toggle sign">+/-</Button>
+              <Input
+                type="text"
+                inputMode="numeric"
+                value={commBalanceValue}
+                placeholder={commBalanceMode === 'set' ? 'New balance (e.g. 1500)' : 'Delta (e.g. -200 or 200)'}
+                onChange={(e) => setCommBalanceValue(e.target.value)}
+                className="flex-1"
+              />
+            </div>
             <div className="flex justify-end">
               <Button type="button" onClick={commissionerAdjustBalance}>
                 Apply Balance Change
@@ -3812,18 +3859,6 @@ function GameCodePopover({ code, onLogout, players, currentPlayer, game, onRemov
             </div>
           </div>
 
-          <div className="rounded border border-muted bg-muted/20 p-3 space-y-2">
-            <div className="text-sm font-medium">Audit Note (optional)</div>
-            <Input
-              value={commNote}
-              placeholder="Reason for correction (shows in Activity Log)"
-              onChange={(e) => setCommNote(e.target.value)}
-            />
-          </div>
-
-          <div className="text-xs text-muted-foreground">
-            All changes here are recorded in Activity Log.
-          </div>
         </div>
 
         <DialogFooter>

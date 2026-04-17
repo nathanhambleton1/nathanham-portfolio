@@ -378,8 +378,8 @@ export default function ActivityLog({
                   value={searchQuery}
                   onChange={(e) => { setSearchQuery(e.target.value); setExpanded(true); }}
                   placeholder="Search activity…"
-                  className="flex-1 bg-transparent text-xs focus:outline-none placeholder:text-muted-foreground min-w-0"
-                  style={{ color: 'hsl(var(--foreground))' }}
+                  className="flex-1 bg-transparent text-xs sm:text-xs focus:outline-none placeholder:text-muted-foreground min-w-0"
+                  style={{ color: 'hsl(var(--foreground))', fontSize: '16px' }}
                 />
                 {query && (
                   <span
