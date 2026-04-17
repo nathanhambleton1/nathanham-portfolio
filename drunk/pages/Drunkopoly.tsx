@@ -103,6 +103,8 @@ const Drunkopoly = () => {
   const [cardProcessing, setCardProcessing] = useState(false);
   const [insufficientFundsFlash, setInsufficientFundsFlash] = useState(false);
   const [completingSips, setCompletingSips] = useState(false);
+  const [sipBatches, setSipBatches] = useState<{ id: string; count: number }[]>([]);
+  const prevPendingSipsRef = useRef<number>(0);
   const [freeParkingPot, setFreeParkingPot] = useState(0);
   const [collectModalOpen, setCollectModalOpen] = useState(false);
   const [collectMode, setCollectMode] = useState<'bank'|'pass_go'|'free_parking'|null>(null);
@@ -175,6 +177,29 @@ const Drunkopoly = () => {
   const tradeOverlayOpen = !!game?.trade_locked;
 
   useLockBodyScroll(jailOverlayOpen || tradeOverlayOpen, { scrollToTop: true });
+
+  // Track individual sip batches so the overlay can show stacked cards per round
+  useEffect(() => {
+    const current = player?.pending_sips ?? 0;
+    const prev = prevPendingSipsRef.current;
+
+    if (current === 0) {
+      setSipBatches([]);
+    } else if (current > prev) {
+      const delta = current - prev;
+      setSipBatches((b) => {
+        if (b.length === 0) {
+          return [{ id: `sip-${Date.now()}`, count: current }];
+        }
+        return [...b, { id: `sip-${Date.now()}-${delta}`, count: delta }];
+      });
+    } else if (current < prev && current > 0) {
+      // External reset — resync to a single batch
+      setSipBatches([{ id: `sip-${Date.now()}`, count: current }]);
+    }
+
+    prevPendingSipsRef.current = current;
+  }, [player?.pending_sips]);
 
   // If a blocking overlay (jail or trade) is active, close other action popups
   // so they don't persist or auto-open when overlays toggle. But do NOT close
@@ -2271,7 +2296,7 @@ const Drunkopoly = () => {
 
   // Step 3: Home (main game screen)
   return (
-    <div className="min-h-screen bg-gradient-bg flex flex-col" style={sipsOverlayOpen ? { paddingBottom: '110px' } : undefined}>
+    <div className="min-h-screen bg-gradient-bg flex flex-col" style={sipsOverlayOpen ? { paddingBottom: `${110 + Math.min(sipBatches.length - 1, 2) * 10}px` } : undefined}>
       <Toaster />
       <AlertDialog open={removedNoticeOpen} onOpenChange={(v) => { if (!v) handleLogoutOfGame(); setRemovedNoticeOpen(v); }}>
         <AlertDialogContent>
@@ -2949,22 +2974,29 @@ const Drunkopoly = () => {
 
         <SipsLockOverlay
           open={(player?.pending_sips ?? 0) > 0}
-          sipCount={player?.pending_sips ?? 0}
-          onDone={async () => {
+          batches={sipBatches}
+          onDismissBatch={async () => {
             if (!game || !player) return;
-            try {
-              setCompletingSips(true);
-              await completeSips(game.code, player.id);
-              // Refresh state
-              const players = await fetchPlayers(game.code);
-              setPlayersList(players);
-              const updatedPlayer = players.find((p: any) => p.id === player.id);
-              if (updatedPlayer) setPlayer(updatedPlayer);
-            } catch (err: any) {
-              console.error('Complete sips error:', err);
-              alert(err.message || 'Failed to complete sips');
-            } finally {
-              setCompletingSips(false);
+            if (sipBatches.length <= 1) {
+              // Last batch — hide bar immediately then clear in DB
+              setSipBatches([]);
+              prevPendingSipsRef.current = 0;
+              try {
+                setCompletingSips(true);
+                await completeSips(game.code, player.id);
+                const players = await fetchPlayers(game.code);
+                setPlayersList(players);
+                const updatedPlayer = players.find((p: any) => p.id === player.id);
+                if (updatedPlayer) setPlayer(updatedPlayer);
+              } catch (err: any) {
+                console.error('Complete sips error:', err);
+                alert(err.message || 'Failed to complete sips');
+              } finally {
+                setCompletingSips(false);
+              }
+            } else {
+              // More batches remain — just advance the queue locally
+              setSipBatches((b) => b.slice(1));
             }
           }}
           processing={completingSips}
