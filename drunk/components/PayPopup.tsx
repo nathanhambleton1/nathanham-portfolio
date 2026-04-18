@@ -1,6 +1,7 @@
 import React, { useMemo, useState, useEffect } from "react";
 import { setDropdownOpen } from "./ui/dropdown-menu";
 import useLockBodyScroll from "../hooks/use-lock-body-scroll";
+import PlayerAvatar from "./PlayerAvatar";
 import {
   Dialog,
   DialogPortal,
@@ -154,6 +155,7 @@ export default function PayPopup({
                       checked={selectedIds.has(p.id)}
                       onChange={() => togglePlayer(p.id)}
                     />
+                    <PlayerAvatar player={p} size="sm" />
                     <div className="flex-1">{p.name}</div>
                     {showBalances && (
                       <div className="text-sm text-muted-foreground">${(p.balance ?? 0).toLocaleString()}</div>

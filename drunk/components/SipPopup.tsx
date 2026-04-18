@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { setDropdownOpen } from "./ui/dropdown-menu";
 import useLockBodyScroll from "../hooks/use-lock-body-scroll";
+import PlayerAvatar from "./PlayerAvatar";
 import {
   Dialog,
   DialogPortal,
@@ -173,6 +174,7 @@ export default function SipPopup({
                     return (
                       <label key={first.id} className={`flex items-center gap-2 p-2 border rounded ${selectedIds.has(first.id) ? 'bg-primary/10' : ''}`}>
                         <input type="checkbox" name="sip-recipient" checked={selectedIds.has(first.id)} onChange={() => toggleSelected(first.id)} />
+                        <PlayerAvatar player={first} size="sm" />
                         <div className="flex-1">{first.name}{first.id === currentPlayer?.id ? ' (you)' : ''}</div>
                         <div className="text-sm text-muted-foreground">{(first.pending_sips || 0) > 0 ? `${first.pending_sips} pending` : ''}</div>
                       </label>
@@ -185,6 +187,7 @@ export default function SipPopup({
                   {others.slice(1).map((p) => (
                     <label key={p.id} className={`flex items-center gap-2 p-2 border rounded ${selectedIds.has(p.id) ? 'bg-primary/10' : ''}`}>
                       <input type="checkbox" name="sip-recipient" checked={selectedIds.has(p.id)} onChange={() => toggleSelected(p.id)} />
+                      <PlayerAvatar player={p} size="sm" />
                       <div className="flex-1">{p.name}{p.id === currentPlayer?.id ? ' (you)' : ''}</div>
                       <div className="text-sm text-muted-foreground">{(p.pending_sips || 0) > 0 ? `${p.pending_sips} pending` : ''}</div>
                     </label>

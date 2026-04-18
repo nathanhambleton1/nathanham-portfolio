@@ -3,6 +3,7 @@ import { createClient } from "@supabase/supabase-js";
 import { useNavigate } from "react-router-dom";
 import { toast } from "../components/ui/use-toast";
 import { ArrowLeft, ArrowUp, ChevronLeft, Pencil } from "lucide-react";
+import PlayerAvatar from "../components/PlayerAvatar";
 
 const supabaseUrl = "https://kcyrvubzhsphpxfsewii.supabase.co";
 const supabaseAnonKey =
@@ -182,67 +183,70 @@ export default function Messages() {
 
   async function refreshChats(gid: string, myId: string) {
     if (!chatsInitializedRef.current) setChatsLoading(true);
-    const { data: memberRows, error: mErr } = await supabase
-      .from("drunkopoly_chat_members")
-      .select("chat_id, player_id, last_read_at")
-      .eq("player_id", myId);
-    if (mErr) throw mErr;
-    const myMembers = (memberRows || []) as any[];
-    const chatIds = myMembers.map((r) => r.chat_id);
-    const nextMembers: Record<string, ChatMemberRow> = {};
-    for (const r of myMembers) nextMembers[r.chat_id] = r;
-    setMembers(nextMembers);
+    try {
+      const { data: memberRows, error: mErr } = await supabase
+        .from("drunkopoly_chat_members")
+        .select("chat_id, player_id, last_read_at")
+        .eq("player_id", myId);
+      if (mErr) throw mErr;
+      const myMembers = (memberRows || []) as any[];
+      const chatIds = myMembers.map((r) => r.chat_id);
+      const nextMembers: Record<string, ChatMemberRow> = {};
+      for (const r of myMembers) nextMembers[r.chat_id] = r;
+      setMembers(nextMembers);
 
-    if (chatIds.length === 0) {
-      setChats([]);
-      setActiveChatId((prev) => (prev ? null : prev));
-      setChatMembersByChat({});
-      return;
+      if (chatIds.length === 0) {
+        setChats([]);
+        setActiveChatId((prev) => (prev ? null : prev));
+        setChatMembersByChat({});
+        return;
+      }
+
+      const { data: chatRows, error: cErr } = await supabase
+        .from("drunkopoly_chats")
+        .select("*")
+        .eq("game_id", gid)
+        .in("id", chatIds)
+        .order("created_at", { ascending: false });
+      if (cErr) throw cErr;
+      setChats((chatRows || []) as any);
+
+      const { data: allMemberRows, error: allMemErr } = await supabase
+        .from("drunkopoly_chat_members")
+        .select("chat_id, player_id")
+        .in("chat_id", chatIds);
+      if (allMemErr) throw allMemErr;
+      const byChat: Record<string, string[]> = {};
+      for (const r of (allMemberRows || []) as unknown as ChatMemberLiteRow[]) {
+        if (!byChat[r.chat_id]) byChat[r.chat_id] = [];
+        byChat[r.chat_id].push(r.player_id);
+      }
+      setChatMembersByChat(byChat);
+
+      // Fetch last message per chat for preview
+      if (chatIds.length > 0) {
+        const previews: Record<string, MessageRow> = {};
+        await Promise.all(
+          chatIds.map(async (cid) => {
+            const { data } = await supabase
+              .from("drunkopoly_chat_messages")
+              .select("*")
+              .eq("chat_id", cid)
+              .order("created_at", { ascending: false })
+              .limit(1);
+            if (data && data[0]) previews[cid] = data[0] as MessageRow;
+          })
+        );
+        setLastMessageByChat(previews);
+      }
+      setActiveChatId((prev) => {
+        if (prev && chatIds.includes(prev)) return prev;
+        return null;
+      });
+    } finally {
+      setChatsLoading(false);
+      chatsInitializedRef.current = true;
     }
-
-    const { data: chatRows, error: cErr } = await supabase
-      .from("drunkopoly_chats")
-      .select("*")
-      .eq("game_id", gid)
-      .in("id", chatIds)
-      .order("created_at", { ascending: false });
-    if (cErr) throw cErr;
-    setChats((chatRows || []) as any);
-
-    const { data: allMemberRows, error: allMemErr } = await supabase
-      .from("drunkopoly_chat_members")
-      .select("chat_id, player_id")
-      .in("chat_id", chatIds);
-    if (allMemErr) throw allMemErr;
-    const byChat: Record<string, string[]> = {};
-    for (const r of (allMemberRows || []) as unknown as ChatMemberLiteRow[]) {
-      if (!byChat[r.chat_id]) byChat[r.chat_id] = [];
-      byChat[r.chat_id].push(r.player_id);
-    }
-    setChatMembersByChat(byChat);
-
-    // Fetch last message per chat for preview
-    if (chatIds.length > 0) {
-      const previews: Record<string, MessageRow> = {};
-      await Promise.all(
-        chatIds.map(async (cid) => {
-          const { data } = await supabase
-            .from("drunkopoly_chat_messages")
-            .select("*")
-            .eq("chat_id", cid)
-            .order("created_at", { ascending: false })
-            .limit(1);
-          if (data && data[0]) previews[cid] = data[0] as MessageRow;
-        })
-      );
-      setLastMessageByChat(previews);
-    }
-    setActiveChatId((prev) => {
-      if (prev && chatIds.includes(prev)) return prev;
-      return null;
-    });
-    setChatsLoading(false);
-    chatsInitializedRef.current = true;
   }
 
   async function refreshMessages(chatId: string) {
@@ -516,6 +520,7 @@ export default function Messages() {
                     chatId === activeChatId ? "bg-primary/10" : "hover:bg-muted/40 active:bg-muted/60",
                   ].join(" ")}
                 >
+                  <PlayerAvatar player={player} size="md" />
                   <div className="flex-1 min-w-0">
                     <div className="flex items-baseline justify-between gap-3">
                       <span className={`text-base truncate ${isUnread ? "font-semibold" : "font-medium"}`}>{label}</span>
@@ -600,6 +605,14 @@ export default function Messages() {
                           </div>
                         )}
                         <div className={`flex ${mine ? "justify-end" : "justify-start"} items-end gap-1.5`}>
+                          {!mine && isLastInGroup && (
+                            <PlayerAvatar
+                              player={players.find((p: any) => p.id === m.sender_player_id) ?? { name: '?' }}
+                              size="sm"
+                              className="mb-0.5 shrink-0"
+                            />
+                          )}
+                          {!mine && !isLastInGroup && <div className="w-6 shrink-0" />}
                           <div
                             className={[
                               "max-w-[95%] sm:max-w-[85%] inline-flex items-center px-6 py-3 text-base leading-normal rounded-xl",

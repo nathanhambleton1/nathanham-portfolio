@@ -3,6 +3,7 @@ import { setDropdownOpen } from './ui/dropdown-menu';
 import useLockBodyScroll from '../hooks/use-lock-body-scroll';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from './ui/dialog';
 import { Button } from './ui/button';
+import PlayerAvatar from './PlayerAvatar';
 
 export default function JailPopup({
   open,
@@ -67,6 +68,7 @@ export default function JailPopup({
                   checked={selected === p.id}
                   onChange={() => setSelected(p.id)}
                 />
+                <PlayerAvatar player={p} size="sm" />
                 <div className="flex-1">{p.name}{p.id === currentPlayer?.id ? ' (you)' : ''}</div>
                 {showBalances && (
                   <div className="text-sm text-muted-foreground">${(p.balance ?? 0).toLocaleString()}</div>

@@ -25,11 +25,13 @@ export default function ActivityLog({
   players,
   currentPlayer,
   pollInterval = 2000,
+  soundEnabled = true,
 }: {
   gameCode: string | undefined | null;
   players: any[];
   currentPlayer?: any;
   pollInterval?: number;
+  soundEnabled?: boolean;
 }) {
   const [events, setEvents] = useState<EventRow[]>([]);
   const [expanded, setExpanded] = useState(false);
@@ -265,6 +267,47 @@ export default function ActivityLog({
         formatTime(ev.created_at).toLowerCase().includes(query)
       )
     : playerFilteredEvents;
+
+  // Play a sound when the current player is assigned sips/money of type `sip_assigned`.
+  // Avoid playing on initial load — only play for events that arrive after we've seen
+  // the initial batch (initializedRef guards that).
+  const prevEventIdsRef = useRef<Set<string>>(new Set());
+  const initializedRef = useRef(false);
+  useEffect(() => {
+    try {
+      // On first pass, wait until we have a real batch of events so we can
+      // seed the seen-ID set correctly. If we seed with an empty set and then
+      // the initial fetch returns 20 events, all 20 would look "new" and the
+      // sound would fire incorrectly.
+      if (!initializedRef.current) {
+        if (events.length === 0) return;
+        prevEventIdsRef.current = new Set(events.map((e) => e.id));
+        initializedRef.current = true;
+        return;
+      }
+
+      const prev = prevEventIdsRef.current;
+      const newEvents = events.filter((e) => !prev.has(e.id));
+      if (newEvents.length > 0 && soundEnabled && currentPlayer) {
+        for (const ev of newEvents) {
+          try {
+            const isSipAssignedMoney = String(ev.kind) === 'money' && String(ev.type) === 'sip_assigned' && ev.to_player_id && ev.to_player_id === currentPlayer.id;
+            const isSipKind = String(ev.kind) === 'sip' && ev.to_player_id && ev.to_player_id === currentPlayer.id;
+            if (isSipAssignedMoney || isSipKind) {
+              const a = new Audio('/drink.mp3');
+              const p = a.play();
+              if (p && typeof p.then === 'function') p.catch(() => {});
+            }
+          } catch (e) {
+            // ignore audio errors
+          }
+        }
+      }
+      prevEventIdsRef.current = new Set(events.map((e) => e.id));
+    } catch (e) {
+      // swallow
+    }
+  }, [events, soundEnabled, currentPlayer?.id]);
 
   const visibleFilteredEvents = expanded ? searchFilteredEvents : searchFilteredEvents.slice(0, 5);
 
