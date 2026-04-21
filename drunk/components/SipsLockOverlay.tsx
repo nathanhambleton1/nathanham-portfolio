@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useRef } from 'react';
 import { Lock, ChevronDown } from 'lucide-react';
 
 type SipBatch = { id: string; count: number };
@@ -8,11 +8,13 @@ export default function SipsLockOverlay({
   batches = [],
   onDismissBatch,
   processing,
+  onClearAll,
 }: {
   open: boolean;
   batches?: SipBatch[];
   onDismissBatch: () => void;
   processing?: boolean;
+  onClearAll?: () => Promise<void> | void;
   // legacy compat — no longer used
   sipCount?: number;
   onDone?: () => void;
@@ -29,6 +31,9 @@ export default function SipsLockOverlay({
 }) {
   const [fanned, setFanned] = useState(false);
   const [dismissingId, setDismissingId] = useState<string | null>(null);
+  const [displayedBatches, setDisplayedBatches] = useState<SipBatch[]>(batches);
+  const [closing, setClosing] = useState(false);
+  const touchStartY = useRef<number | null>(null);
   const prevFrontIdRef = React.useRef<string | null>(null);
   const frontIsNew =
     batches.length > 0 &&
@@ -40,14 +45,29 @@ export default function SipsLockOverlay({
 
   useEffect(() => {
     if (!open) setFanned(false);
+    // Sync displayed batches when prop changes
+    setDisplayedBatches(batches);
   }, [open]);
 
-  if (!open || batches.length === 0) return null;
+  const triggerCloseFan = () => {
+    if (closing) return;
+    setClosing(true);
+    setTimeout(() => {
+      setClosing(false);
+      setFanned(false);
+    }, 380);
+  };
 
-  const frontBatch = batches[0];
-  const totalSips = batches.reduce((s, b) => s + b.count, 0);
-  const hasStack = batches.length > 1;
-  const peekBatches = batches.slice(1, 6);
+  useEffect(() => {
+    setDisplayedBatches(batches);
+  }, [batches]);
+
+  if (!open || displayedBatches.length === 0) return null;
+
+  const frontBatch = displayedBatches[0];
+  const totalSips = displayedBatches.reduce((s, b) => s + b.count, 0);
+  const canOpenFan = displayedBatches.length > 0;
+  const peekBatches = displayedBatches.slice(1, 6);
   const peekCount = peekBatches.length;
 
   // Per-depth: [translateY-up, scale, opacity] — lift increments taper off each level
@@ -62,12 +82,58 @@ export default function SipsLockOverlay({
   const handleDone = (e?: React.MouseEvent) => {
     e?.stopPropagation();
     if (processing || dismissingId) return;
-    setDismissingId(frontBatch.id);
-    setFanned(false);
+    const id = frontBatch.id;
+    setDismissingId(id);
+    // Animate out, then call parent to advance queue / clear in DB
     setTimeout(() => {
       setDismissingId(null);
-      onDismissBatch();
+      try { onDismissBatch(); } catch (err) { /* ignore */ }
     }, 260);
+  };
+
+  const sleep = (ms: number) => new Promise((res) => setTimeout(res, ms));
+
+  const forwardWheel = (e: React.WheelEvent) => {
+    // Forward wheel scrolling to window so background scrolls
+    e.preventDefault();
+    if (typeof window !== 'undefined') {
+      window.scrollBy({ top: e.deltaY, left: 0, behavior: 'auto' });
+    }
+  };
+
+  const handleTouchStart = (e: React.TouchEvent) => {
+    touchStartY.current = e.touches?.[0]?.clientY ?? null;
+  };
+
+  const handleTouchMove = (e: React.TouchEvent) => {
+    if (touchStartY.current == null) return;
+    const y = e.touches?.[0]?.clientY ?? 0;
+    const delta = touchStartY.current - y;
+    touchStartY.current = y;
+    e.preventDefault();
+    if (typeof window !== 'undefined') {
+      window.scrollBy({ top: delta, left: 0, behavior: 'auto' });
+    }
+  };
+
+  const handleClearAllAnimated = async (e?: React.MouseEvent) => {
+    e?.stopPropagation();
+    if (processing || dismissingId) return;
+    // Animate each displayed batch out in sequence
+    const local = [...displayedBatches];
+    for (const b of local) {
+      setDismissingId(b.id);
+      await sleep(220);
+      setDisplayedBatches((prev) => prev.filter((x) => x.id !== b.id));
+      setDismissingId(null);
+      await sleep(40);
+    }
+    // After animation complete, ask parent to clear in DB
+    try {
+      if (onClearAll) await onClearAll();
+    } catch (err) {
+      console.error('onClearAll failed', err);
+    }
   };
 
   return (
@@ -89,6 +155,10 @@ export default function SipsLockOverlay({
           from { opacity: 0; transform: translateY(8px) scale(0.98); }
           to   { opacity: 1; transform: translateY(0) scale(1); }
         }
+        @keyframes sips-fan-out {
+          from { opacity: 1; transform: translateY(0) scale(1); }
+          to { opacity: 0; transform: translateY(110%) scale(0.98); }
+        }
       `}</style>
 
       {/* Backdrop — only rendered when fanned, clicking it closes the fan */}
@@ -96,11 +166,17 @@ export default function SipsLockOverlay({
         <div
           className="fixed inset-0 z-[100000]"
           style={{
-            background: 'rgba(0,0,0,0.25)',
-            backdropFilter: 'blur(6px)',
-            WebkitBackdropFilter: 'blur(6px)',
+            background: closing ? 'rgba(0,0,0,0)' : 'rgba(0,0,0,0.25)',
+            backdropFilter: closing ? 'blur(0px)' : 'blur(6px)',
+            WebkitBackdropFilter: closing ? 'blur(0px)' : 'blur(6px)',
+            touchAction: 'none',
+            transition: 'opacity 0.42s ease, backdrop-filter 0.42s ease, -webkit-backdrop-filter 0.42s ease, background 0.42s ease',
+            opacity: closing ? 0 : 1,
           }}
-          onClick={() => setFanned(false)}
+          onClick={() => triggerCloseFan()}
+          onWheel={forwardWheel}
+          onTouchStart={handleTouchStart}
+          onTouchMove={handleTouchMove}
         />
       )}
 
@@ -111,30 +187,65 @@ export default function SipsLockOverlay({
       >
         {/* ── FANNED view ── */}
         {fanned && (
-          <div className="pb-3 flex flex-col gap-2" onClick={(e) => e.stopPropagation()}>
+          <div
+            className="pb-4 sm:pb-5 flex flex-col gap-2"
+            onClick={(e) => e.stopPropagation()}
+            onWheel={forwardWheel}
+            onTouchStart={handleTouchStart}
+            onTouchMove={handleTouchMove}
+            style={{ touchAction: 'none' }}
+          >
             {/* Down arrow to close */}
-            <div className="flex justify-center" style={{ animation: 'sips-fan-item 0.15s ease-out both' }}>
-              <button
-                type="button"
-                onClick={() => setFanned(false)}
-                className="p-1.5 rounded-full"
-                style={{ color: 'hsl(var(--foreground) / 0.7)', background: 'hsl(var(--background) / 0.6)' }}
-                aria-label="Collapse"
+            {/* Header row aligned to card width: collapse chevron centered above total, Clear all aligned with right edge of cards */}
+              <div
+                className="w-full max-w-lg mx-auto"
+                onClick={(e) => e.stopPropagation()}
+                style={{
+                  animation: closing ? undefined : 'sips-fan-item 0.15s ease-out both',
+                  transition: 'transform 0.28s ease, opacity 0.28s ease',
+                  transform: closing ? 'translateY(8px)' : undefined,
+                  opacity: closing ? 0 : 1,
+                }}
               >
-                <ChevronDown className="w-5 h-5" />
-              </button>
-            </div>
-            {/* Total header */}
-            <div
-              className="text-center text-xs font-medium"
-              style={{ color: 'hsl(var(--foreground) / 0.85)', animation: 'sips-fan-item 0.15s ease-out both' }}
-            >
-              {totalSips} total sip{totalSips !== 1 ? 's' : ''} · {batches.length} round{batches.length !== 1 ? 's' : ''}
-            </div>
+              <div className="flex justify-center mb-2">
+                <button
+                  type="button"
+                  onClick={(e) => { e.stopPropagation(); triggerCloseFan(); }}
+                  className="p-1.5 rounded-full"
+                  style={{ color: 'hsl(var(--foreground) / 0.7)', background: 'hsl(var(--background) / 0.6)' }}
+                  aria-label="Collapse"
+                >
+                  <ChevronDown className="w-5 h-5" />
+                </button>
+              </div>
 
+              <div className="flex items-center justify-between">
+                <div className="flex-1 min-w-0">
+                  <div className="text-left text-xs font-medium whitespace-nowrap truncate" style={{ color: 'hsl(var(--foreground) / 0.85)' }}>
+                    {totalSips} total sip{totalSips !== 1 ? 's' : ''} · {displayedBatches.length} round{displayedBatches.length !== 1 ? 's' : ''}
+                  </div>
+                </div>
+                <div className="flex-1" />
+                <div className="flex-1 flex justify-end">
+                  <button
+                    type="button"
+                    onClick={handleClearAllAnimated}
+                    className="text-xs font-medium transition-colors"
+                    aria-label="Clear all pending sips"
+                    style={{ background: 'transparent', border: 'none', padding: 6, cursor: 'pointer', color: 'hsl(var(--foreground) / 0.85)'}}
+                  >
+                    Clear all
+                  </button>
+                </div>
+              </div>
+            </div>
             {/* Cards listed newest on top, current (active) at bottom */}
-            {[...batches].reverse().map((batch, i) => {
+            {[...displayedBatches].reverse().map((batch, i) => {
               const isActive = batch.id === frontBatch.id;
+              const depthFromFront = Math.max(0, displayedBatches.length - 1 - i);
+              // Non-active cards fade out + drift down slightly; active card stays in place
+              const closingDelay = `${depthFromFront * 0.03}s`;
+
               return (
                 <div
                   key={batch.id}
@@ -145,8 +256,16 @@ export default function SipsLockOverlay({
                     WebkitBackdropFilter: 'blur(24px)',
                     border: '1px solid hsl(var(--foreground) / 0.18)',
                     boxShadow: isActive ? '0 4px 20px rgba(0,0,0,0.18)' : 'none',
-                    opacity: isActive ? 1 : 0.6,
-                    animation: `sips-fan-item 0.18s ease-out ${i * 0.04}s both`,
+                    opacity: closing && !isActive ? 0 : (isActive ? 1 : 0.6),
+                    animation: dismissingId === batch.id
+                      ? 'sips-dismiss 0.26s cubic-bezier(0.4,0,1,1) forwards'
+                      : closing
+                      ? undefined
+                      : `sips-fan-item 0.18s ease-out ${i * 0.04}s both`,
+                    transform: closing && !isActive ? 'translateY(10px) scale(0.97)' : undefined,
+                    transition: closing ? `transform 0.32s ease ${closingDelay}, opacity 0.28s ease ${closingDelay}` : undefined,
+                    overflow: 'hidden',
+                    touchAction: 'none',
                   }}
                 >
                   <Lock
@@ -158,8 +277,13 @@ export default function SipsLockOverlay({
                       className="font-semibold text-sm"
                       style={{ color: 'hsl(var(--foreground))' }}
                     >
-                      {batch.count} sip{batch.count !== 1 ? 's' : ''}
+                      {batch.count} sip{batch.count !== 1 ? 's' : ''}{isActive ? ' pending' : ''}
                     </span>
+                    {isActive && (
+                      <div className="text-xs leading-tight truncate" style={{ color: 'hsl(var(--foreground) / 0.5)' }}>
+                        Drink up, then tap done
+                      </div>
+                    )}
                   </div>
                   {isActive && (
                     <button
@@ -226,14 +350,14 @@ export default function SipsLockOverlay({
                   border: '1px solid hsl(var(--foreground) / 0.18)',
                   boxShadow: '0 -2px 32px rgba(0,0,0,0.35), 0 4px 24px rgba(0,0,0,0.2)',
                   zIndex: 30,
-                  cursor: hasStack ? 'pointer' : 'default',
+                  cursor: canOpenFan ? 'pointer' : 'default',
                   animation: dismissingId === frontBatch.id
                     ? 'sips-dismiss 0.26s cubic-bezier(0.4,0,1,1) forwards'
                     : frontIsNew
                     ? 'sips-promote 0.28s cubic-bezier(0.34,1.3,0.64,1) both'
                     : undefined,
                 }}
-                onClick={() => { if (hasStack) setFanned(true); }}
+                onClick={() => { if (canOpenFan) setFanned(true); }}
               >
                 <Lock className="w-4 h-4 flex-shrink-0" style={{ color: 'hsl(var(--foreground) / 0.7)' }} />
                 <div className="flex-1 min-w-0">

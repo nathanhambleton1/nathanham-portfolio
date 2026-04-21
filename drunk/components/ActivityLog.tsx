@@ -44,7 +44,6 @@ export default function ActivityLog({
 
   useEffect(() => {
     if (!gameCode) return;
-
     let mounted = true;
     let gameId: string | null = null;
 
@@ -56,21 +55,19 @@ export default function ActivityLog({
           .select('id')
           .eq('code', gameCode)
           .limit(1);
-        
+
         if (gErr || !games || games.length === 0) return;
-        
+
         gameId = games[0].id;
-        
-        // Get events from the game_events view
-        const { data: eventsData, error: eErr } = await supabase
-          .from('game_events')
-          .select('*')
-          .eq('game_id', gameId)
-          .order('created_at', { ascending: false })
-          .limit(110);
-        
+
+        // Build query for events. If expanded, fetch full history; otherwise fetch a limited recent window.
+        let q: any = supabase.from('game_events').select('*').eq('game_id', gameId).order('created_at', { ascending: false });
+        if (!expanded) q = q.limit(110);
+
+        const { data: eventsData, error: eErr } = await q;
+
         if (!mounted) return;
-        
+
         if (!eErr && eventsData) {
           setEvents(eventsData);
         }
@@ -93,7 +90,7 @@ export default function ActivityLog({
         },
         (payload) => {
           if (!mounted) return;
-          
+
           // Refresh events when there are changes
           fetchEvents();
         }
@@ -105,10 +102,10 @@ export default function ActivityLog({
 
     return () => {
       mounted = false;
-      subscription.unsubscribe();
+      try { subscription.unsubscribe(); } catch (e) {}
       if (timer) clearInterval(timer);
     };
-  }, [gameCode, pollInterval]);
+  }, [gameCode, pollInterval, expanded]);
 
   // If the selected player disappears (players list changes), reset to 'all'
   useEffect(() => {

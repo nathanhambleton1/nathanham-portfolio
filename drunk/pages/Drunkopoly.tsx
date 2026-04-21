@@ -291,8 +291,8 @@ const Drunkopoly = () => {
   const hasCommissionerAccess = () => {
     try {
       const unlocked = Number(localStorage.getItem('drunkopoly:commUnlockedUntil') || '0');
-      // Require explicit PIN unlock for access. Being the commissioner no longer grants automatic UI access.
-      return Date.now() < unlocked;
+      // Allow either an explicit PIN unlock OR the current player being the commissioner.
+      return Date.now() < unlocked || (!!player?.is_commissioner);
     } catch (e) {
       return false;
     }
@@ -419,15 +419,18 @@ const Drunkopoly = () => {
       const url = URL.createObjectURL(file);
       img.onload = () => {
         URL.revokeObjectURL(url);
-        const scale = Math.min(maxDim / img.width, maxDim / img.height, 1);
-        const w = Math.round(img.width * scale);
-        const h = Math.round(img.height * scale);
+        // Crop to a centered square then resize to maxDim (or smaller if image is smaller)
+        const srcSide = Math.min(img.width, img.height);
+        const sx = Math.round((img.width - srcSide) / 2);
+        const sy = Math.round((img.height - srcSide) / 2);
+        const outSide = Math.min(maxDim, srcSide);
         const canvas = document.createElement('canvas');
-        canvas.width = w;
-        canvas.height = h;
+        canvas.width = outSide;
+        canvas.height = outSide;
         const ctx = canvas.getContext('2d');
         if (!ctx) { reject(new Error('No canvas context')); return; }
-        ctx.drawImage(img, 0, 0, w, h);
+        // draw the centered square portion of the source image into the output square canvas
+        ctx.drawImage(img, sx, sy, srcSide, srcSide, 0, 0, outSide, outSide);
         canvas.toBlob((blob) => {
           if (!blob) { reject(new Error('Compression failed')); return; }
           resolve(blob);
@@ -3757,6 +3760,27 @@ const Drunkopoly = () => {
               }
             }
           }}
+          onClearAll={async () => {
+            if (!game || !player) return;
+            try {
+              setCompletingSips(true);
+              // Clear all pending sips for this player in the DB
+              await completeSips(game.code, player.id);
+              // Refresh state
+              const players = await fetchPlayers(game.code);
+              setPlayersList(players);
+              const updatedPlayer = players.find((p: any) => p.id === player.id);
+              if (updatedPlayer) setPlayer(updatedPlayer);
+              // Clear local batches
+              setSipBatches([]);
+              prevPendingSipsRef.current = 0;
+            } catch (err: any) {
+              console.error('Clear all sips failed', err);
+              try { toast({ title: 'Clear failed', description: err.message || 'Unable to clear sips', variant: 'destructive' }); } catch {}
+            } finally {
+              setCompletingSips(false);
+            }
+          }}
           onOpenCollect={() => { setCollectModalOpen(true); setCollectMode('bank'); }}
           onCollect={handleCollect}
         />
@@ -4227,8 +4251,9 @@ function GameCodePopover({ code, onLogout, players, currentPlayer, game, onRemov
             {settingsOpenSection === 'game' && (
               <div className="mt-3 px-0">
                 <div className="rounded bg-muted/30 border border-muted p-3 space-y-2">
+                  {/* Always-visible items: Theme and App Sounds */}
                   <ThemeSelector />
-                  
+
                   <div className="flex items-center justify-between py-2 px-3 rounded-lg bg-muted/10">
                     <div className="flex-1">
                       <div className="font-medium text-sm">App Sounds</div>
@@ -4240,54 +4265,57 @@ function GameCodePopover({ code, onLogout, players, currentPlayer, game, onRemov
                     />
                   </div>
 
-                  <>
-                    <div className="flex items-center justify-between py-2 px-3 rounded-lg bg-muted/10">
-                      <div className="flex-1">
-                        <div className="font-medium text-sm">Show Player Balances</div>
-                        <div className="text-xs text-muted-foreground">Allow players to see each other's money</div>
+                  {/* Additional game-level settings visible only to the commissioner */}
+                  {currentPlayer?.is_commissioner && (
+                    <>
+                      <div className="flex items-center justify-between py-2 px-3 rounded-lg bg-muted/10">
+                        <div className="flex-1">
+                          <div className="font-medium text-sm">Show Player Balances</div>
+                          <div className="text-xs text-muted-foreground">Allow players to see each other's money</div>
+                        </div>
+                        <Switch
+                          checked={!!(game?.show_balances ?? showBalances)}
+                          onCheckedChange={(checked) => { if (onToggleShowBalances) onToggleShowBalances(checked); }}
+                        />
                       </div>
-                      <Switch
-                        checked={!!(game?.show_balances ?? showBalances)}
-                        onCheckedChange={(checked) => { if (onToggleShowBalances) onToggleShowBalances(checked); }}
-                      />
-                    </div>
-                    <div className="flex items-center justify-between py-2 px-3 rounded-lg bg-muted/10">
-                      <div className="flex-1">
-                        <div className="font-medium text-sm">Play With Sips</div>
-                        <div className="text-xs text-muted-foreground">Enable sip counters and Give Sips features</div>
+                      <div className="flex items-center justify-between py-2 px-3 rounded-lg bg-muted/10">
+                        <div className="flex-1">
+                          <div className="font-medium text-sm">Play With Sips</div>
+                          <div className="text-xs text-muted-foreground">Enable sip counters and Give Sips features</div>
+                        </div>
+                        <Switch
+                          checked={!!(game?.sips_enabled ?? true)}
+                          onCheckedChange={(checked) => { if (onToggleSipsEnabled) onToggleSipsEnabled(checked); }}
+                        />
                       </div>
-                      <Switch
-                        checked={!!(game?.sips_enabled ?? true)}
-                        onCheckedChange={(checked) => { if (onToggleSipsEnabled) onToggleSipsEnabled(checked); }}
-                      />
-                    </div>
-                    <div className="flex items-center justify-between py-2 px-3 rounded-lg bg-muted/10">
-                      <div className="flex-1">
-                        <div className="font-medium text-sm">Expansion Pack</div>
-                        <div className="text-xs text-muted-foreground">Route payments to the bank into Free Parking</div>
+                      <div className="flex items-center justify-between py-2 px-3 rounded-lg bg-muted/10">
+                        <div className="flex-1">
+                          <div className="font-medium text-sm">Expansion Pack</div>
+                          <div className="text-xs text-muted-foreground">Route payments to the bank into Free Parking</div>
+                        </div>
+                        <Switch
+                          checked={!!(game?.expansion_enabled ?? false)}
+                          onCheckedChange={(checked) => { if (onToggleExpansion) onToggleExpansion(checked); }}
+                        />
                       </div>
-                      <Switch
-                        checked={!!(game?.expansion_enabled ?? false)}
-                        onCheckedChange={(checked) => { if (onToggleExpansion) onToggleExpansion(checked); }}
-                      />
-                    </div>
+                    </>
+                  )}
 
-                    <div className="pt-2">
-                      <Button
-                        type="button"
-                        variant="secondary"
-                        className="w-full justify-center"
-                        onClick={() => {
-                          const fallback = (currentPlayer?.id ? String(currentPlayer.id) : (players && players.length ? String(players[0]?.id) : '')) || '';
-                          setCommSelectedPlayerId((prev) => (prev ? prev : fallback));
-                          openCommissionerTools();
-                        }}
-                        title="Commissioner-only tools (audited)"
-                      >
-                        Advanced (Commissioner)
-                      </Button>
-                    </div>
-                  </>
+                  <div className="pt-2">
+                    <Button
+                      type="button"
+                      variant="secondary"
+                      className="w-full justify-center"
+                      onClick={() => {
+                        const fallback = (currentPlayer?.id ? String(currentPlayer.id) : (players && players.length ? String(players[0]?.id) : '')) || '';
+                        setCommSelectedPlayerId((prev) => (prev ? prev : fallback));
+                        openCommissionerTools();
+                      }}
+                      title="Commissioner-only tools (audited)"
+                    >
+                      Advanced (Commissioner)
+                    </Button>
+                  </div>
                 </div>
               </div>
             )}
@@ -4318,9 +4346,10 @@ function GameCodePopover({ code, onLogout, players, currentPlayer, game, onRemov
                   <div className="space-y-2">
                     {(players && players.length > 0) ? (
                       players.map((p: any) => {
-                        const isSelf = currentPlayer && String(currentPlayer.id) === String(p.id);
-                        const isCommissioner = !!p.is_commissioner;
-                        const canRemove = currentPlayer && commUnlocked && !isCommissioner && !isSelf;
+                          const isSelf = currentPlayer && String(currentPlayer.id) === String(p.id);
+                          const isCommissioner = !!p.is_commissioner;
+                          // Only the current commissioner may remove other players.
+                          const canRemove = !!(currentPlayer && currentPlayer.is_commissioner) && !isCommissioner && !isSelf;
                         const canSeeBalance = showBalances;
                         return (
                           <div key={p.id} className="flex items-center gap-3 py-2 px-2 border rounded">
