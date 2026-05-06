@@ -11,6 +11,7 @@ import { UserPlus, DollarSign, Users, Percent, Crown, PiggyBank, Clock, Copy, Se
 import { QRCodeSVG } from "qrcode.react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "../components/ui/dialog";
 import CollectPopup from "../components/CollectPopup";
+import RoulettePopup from "../components/RoulettePopup";
 import SipPopup from "../components/SipPopup";
 import TradeTimerControl from "../components/TradeTimerControl";
 import TradeLockOverlay from "../components/TradeLockOverlay";
@@ -85,6 +86,7 @@ const Drunkopoly = () => {
   const [tempShowBalances, setTempShowBalances] = useState<boolean>(true);
   const [tempSipsEnabled, setTempSipsEnabled] = useState<boolean>(true);
   const [tempExpansionEnabled, setTempExpansionEnabled] = useState<boolean>(false);
+  const [tempGamblingEnabled, setTempGamblingEnabled] = useState<boolean>(false);
   const [game, setGame] = useState<any | null>(null);
   const [player, setPlayer] = useState<any | null>(null);
   const [recentGames, setRecentGames] = useState<string[]>([]);
@@ -111,11 +113,28 @@ const Drunkopoly = () => {
   const [freeParkingPot, setFreeParkingPot] = useState(0);
   const [collectModalOpen, setCollectModalOpen] = useState(false);
   const [collectMode, setCollectMode] = useState<'bank'|'pass_go'|'free_parking'|null>(null);
+  const [rouletteOpen, setRouletteOpen] = useState(false);
+  const [rouletteAmount, setRouletteAmount] = useState(0);
+  const [rouletteMode, setRouletteMode] = useState<'pass_go'|'free_parking'|null>(null);
+  const [rouletteDoubled, setRouletteDoubled] = useState(false);
   const [bankruptModalOpen, setBankruptModalOpen] = useState(false);
   const [bankruptStatusOpen, setBankruptStatusOpen] = useState(false);
   const [blockedPaymentMessage, setBlockedPaymentMessage] = useState<string | null>(null);
   const [unreadMessageCount, setUnreadMessageCount] = useState<number>(0);
   const prevBalanceRef = useRef<number | null>(null);
+
+  // Transaction metadata for the orbital animation around the money tower
+  type TransactionType = 'bank' | 'player' | 'tax' | 'free_parking' | 'pass_go' | 'jail' | null;
+  type OrbitalEntity = { id: string; name: string; avatar_url?: string | null };
+  const [transactionMeta, setTransactionMeta] = useState<{
+    type: TransactionType;
+    direction: 'in' | 'out';
+    entities?: OrbitalEntity[];
+    key: number;
+  } | null>(null);
+  const txMetaKeyRef = useRef(0);
+  // Set to true by direct collect actions so the realtime subscription knows not to fire a second animation
+  const directAnimationFiredRef = useRef(false);
   const navigate = useNavigate();
   const [isNarrow, setIsNarrow] = useState<boolean>(() => {
     try {
@@ -262,7 +281,7 @@ const Drunkopoly = () => {
         return [...b, { id: `sip-${Date.now()}-${delta}`, count: delta }];
       });
     } else if (current < prev && current > 0) {
-      // External reset — resync to a single batch
+      // External reset (e.g. commissioner edit) — resync to a single batch
       setSipBatches([{ id: `sip-${Date.now()}`, count: current }]);
     }
 
@@ -1040,6 +1059,10 @@ const Drunkopoly = () => {
         const base = Number(game.pass_go_amount || 200);
         const doubled = !!opts.doubled;
         amount = doubled ? base * 2 : base;
+        if (opts.gamblingWon) amount *= 2;
+        if (opts.gamblingLost) {
+          return { ok: true, money_event: null, new_balance: player.balance || 0 };
+        }
 
         const { data: meData, error: meErr } = await supabase
           .from('money_events')
@@ -1050,20 +1073,35 @@ const Drunkopoly = () => {
             to_player_id: actor_player_id,
             amount,
             type: 'go',
-            description: opts.description || null
+            description: opts.gamblingWon ? 'Gambled Pass Go and won' : (opts.description || null)
           }])
           .select()
           .single();
-        
+
         if (meErr) throw meErr;
         meRow = meData;
-        
+
         // Track money from passing Go
         await trackMoneyFromGo(game.id, actor_player_id, amount);
       } else if (opts.type === 'free_parking') {
         const pot = Number(game.free_parking_balance || 0);
+
+        if (opts.gamblingLost) {
+          await supabase.from('games').update({ free_parking_balance: 0 }).eq('id', game.id);
+          await supabase.from('money_events').insert([{
+            game_id: game.id,
+            actor_player_id,
+            from_player_id: null,
+            to_player_id: actor_player_id,
+            amount: 0,
+            type: 'free_parking_collect',
+            description: 'Gambled Free Parking and lost',
+          }]);
+          return { ok: true, money_event: null, new_balance: player.balance || 0 };
+        }
+
         if (pot <= 0) throw new Error('Free parking pot is empty');
-        amount = pot;
+        amount = opts.gamblingWon ? pot * 2 : pot;
 
         const { data: meData, error: meErr } = await supabase
           .from('money_events')
@@ -1074,11 +1112,11 @@ const Drunkopoly = () => {
             to_player_id: actor_player_id,
             amount,
             type: 'free_parking_collect',
-            description: opts.description || null
+            description: opts.gamblingWon ? 'Gambled Free Parking and won' : (opts.description || null)
           }])
           .select()
           .single();
-        
+
         if (meErr) throw meErr;
         meRow = meData;
 
@@ -1087,7 +1125,7 @@ const Drunkopoly = () => {
           .from('games')
           .update({ free_parking_balance: 0 })
           .eq('id', game.id);
-        
+
         // Track money from free parking
         await trackMoneyFromFreeParking(game.id, actor_player_id, amount);
       } else {
@@ -1111,6 +1149,14 @@ const Drunkopoly = () => {
   // Shared collect handler used by the main CollectPopup and the lock overlays
   const handleCollect = async (opts: any): Promise<void> => {
     if (!game || !player) return;
+    // Fire orbital animation before the balance change lands
+    const collectType: TransactionType =
+      collectMode === 'pass_go' ? 'pass_go' :
+      collectMode === 'free_parking' ? 'free_parking' :
+      'bank';
+    directAnimationFiredRef.current = true;
+    txMetaKeyRef.current++;
+    setTransactionMeta({ type: collectType, direction: 'in', key: txMetaKeyRef.current });
     try {
       await collectMoney(game.code, player.id, opts);
       // Refresh state
@@ -1130,6 +1176,33 @@ const Drunkopoly = () => {
       alert(err.message || 'Failed to collect');
       throw err;
     }
+  };
+
+  // Open the roulette popup when a player chooses to gamble from CollectPopup
+  const handleGamble = (amount: number, doubled: boolean) => {
+    if (!collectMode || (collectMode !== 'pass_go' && collectMode !== 'free_parking')) return;
+    setRouletteAmount(amount);
+    setRouletteMode(collectMode);
+    setRouletteDoubled(doubled);
+    setRouletteOpen(true);
+  };
+
+  // Called when the roulette spin resolves
+  const handleRouletteResult = async (won: boolean) => {
+    if (!rouletteMode) return;
+    try {
+      if (won) {
+        await handleCollect({ type: rouletteMode, doubled: rouletteDoubled, gamblingWon: true });
+      } else if (rouletteMode === 'free_parking') {
+        await handleCollect({ type: 'free_parking', gamblingLost: true });
+      } else {
+        // pass_go lost — nothing to collect, just show feedback
+        try { toast({ title: '💸 Gamble Lost!', description: 'You lost your Pass Go bonus.' }); } catch {}
+      }
+    } catch (err: any) {
+      console.error('Roulette collect error', err);
+    }
+    setRouletteMode(null);
   };
 
   // Handle bankruptcy - send all money to another player and enter ghost mode
@@ -1398,6 +1471,80 @@ const Drunkopoly = () => {
     }
   };
 
+  // Complete a single sip batch — clears the oldest pending sip_event for this player
+  // so pending_sips drops in real-time as the player drinks each round
+  const completeSipBatch = async (code: string, actor_player_id: string) => {
+    try {
+      const { data: games, error: gErr } = await supabase
+        .from('games')
+        .select('*')
+        .eq('code', code)
+        .limit(1);
+      if (gErr) throw gErr;
+      if (!games || games.length === 0) throw new Error('Game not found');
+      const game = games[0];
+
+      // Find the oldest pending sip_event for this player
+      const { data: events, error: eErr } = await supabase
+        .from('sip_events')
+        .select('*')
+        .eq('game_id', game.id)
+        .eq('to_player_id', actor_player_id)
+        .eq('status', 'pending')
+        .order('created_at', { ascending: true })
+        .limit(1);
+      if (eErr) throw eErr;
+      if (!events || events.length === 0) return { ok: true, cleared: 0 };
+
+      const event = events[0];
+      const sipCount = Number(event.sip_count || 0);
+
+      // Mark this event as cleared
+      await supabase
+        .from('sip_events')
+        .update({ status: 'cleared', cleared_at: new Date().toISOString() })
+        .eq('id', event.id);
+
+      // Decrement pending_sips, increment total_sips
+      const { data: pRows, error: pErr } = await supabase
+        .from('players')
+        .select('pending_sips,total_sips,name')
+        .eq('id', actor_player_id)
+        .eq('game_id', game.id)
+        .limit(1);
+      if (pErr) throw pErr;
+      if (!pRows || pRows.length === 0) throw new Error('Player not found');
+
+      const playerRow = pRows[0];
+      const newPending = Math.max(0, (playerRow.pending_sips || 0) - sipCount);
+      const newTotal = (playerRow.total_sips || 0) + sipCount;
+
+      await supabase
+        .from('players')
+        .update({ pending_sips: newPending, total_sips: newTotal })
+        .eq('id', actor_player_id);
+
+      try {
+        await supabase.from('money_events').insert([{
+          game_id: game.id,
+          actor_player_id,
+          from_player_id: null,
+          to_player_id: actor_player_id,
+          amount: 0,
+          type: 'sip_completed',
+          description: `${playerRow.name || actor_player_id} completed ${sipCount} sip${sipCount !== 1 ? 's' : ''}`,
+        }]);
+      } catch (logErr) {
+        console.warn('Failed to log sip batch completion', logErr);
+      }
+
+      return { ok: true, cleared: sipCount, new_pending: newPending, new_total: newTotal };
+    } catch (err) {
+      console.error('Complete sip batch error:', err);
+      throw err;
+    }
+  };
+
   // Start trade timer
   const startTradeTimer = async (seconds: number) => {
     if (!game) return;
@@ -1512,6 +1659,29 @@ const Drunkopoly = () => {
     }
   };
 
+  // Toggle gambling (only commissioner)
+  const toggleGamblingEnabled = async (enabled: boolean) => {
+    if (!game || !player) return;
+    if (!hasCommissionerAccess()) {
+      try { toast({ title: 'Not allowed', description: 'Only the commissioner can change game settings.' }); } catch {}
+      return;
+    }
+    try {
+      const { data: updatedGames, error } = await supabase
+        .from('games')
+        .update({ gambling_enabled: enabled, updated_at: new Date().toISOString() })
+        .eq('id', game.id)
+        .select()
+        .limit(1);
+      if (error) throw error;
+      if (updatedGames && updatedGames.length > 0) setGame(updatedGames[0]);
+      try { toast({ title: 'Updated', description: `Gambling ${enabled ? 'enabled' : 'disabled'}.` }); } catch {}
+    } catch (err: any) {
+      console.error('Toggle gambling failed', err);
+      try { toast({ title: 'Failed', description: err?.message || 'Unable to update setting' }); } catch {}
+    }
+  };
+
   // Send a player to jail
   const sendPlayerToJail = async (targetPlayerId: string) => {
     if (!game || !player) return;
@@ -1570,6 +1740,9 @@ const Drunkopoly = () => {
       return;
     }
     setPayProcessing(true);
+    // Fire jail payment orbital animation
+    txMetaKeyRef.current++;
+    setTransactionMeta({ type: 'jail', direction: 'out', key: txMetaKeyRef.current });
     try {
       // Deduct $50 from the jailed player and send it to Free Parking
       await processPayments(game.code, player.id, [{ to: null, amount: 50 }], { type: 'jail_payment', freeParking: true });
@@ -1881,7 +2054,8 @@ const Drunkopoly = () => {
             } else {
               setPlayer(updatedPlayer);
             }
-            prevBalanceRef.current = Number(updatedPlayer.balance ?? 0);
+            // Do NOT update prevBalanceRef here — let the realtime subscription own that
+            // so incoming payments from other players are detected correctly.
           } else {
             // Current player no longer exists in players list — they were removed
             try {
@@ -2006,7 +2180,24 @@ const Drunkopoly = () => {
             const players = await fetchPlayers(game.code);
             setPlayersList(players);
             const updatedPlayer = players.find((p: any) => p.id === player?.id);
-            if (updatedPlayer) setPlayer(updatedPlayer);
+            if (updatedPlayer) {
+              // Detect balance changes caused by another player paying us
+              const prevBal = prevBalanceRef.current ?? (player?.balance ?? 0);
+              const newBal = Number(updatedPlayer.balance ?? 0);
+              if (newBal > prevBal) {
+                if (directAnimationFiredRef.current) {
+                  // A direct collect action already fired the animation — consume the flag
+                  directAnimationFiredRef.current = false;
+                } else {
+                  // Money arrived from another player — fire the received animation
+                  txMetaKeyRef.current++;
+                  setTransactionMeta({ type: 'player', direction: 'in', key: txMetaKeyRef.current });
+                }
+              }
+              // Don't animate decreases here — direct pay actions already handle those
+              prevBalanceRef.current = newBal;
+              setPlayer(updatedPlayer);
+            }
           } catch (e) {
             // ignore
           }
@@ -2817,6 +3008,7 @@ const Drunkopoly = () => {
                       show_balances: tempShowBalances,
                       sips_enabled: tempSipsEnabled,
                       expansion_enabled: tempExpansionEnabled,
+                      gambling_enabled: tempGamblingEnabled,
                     }])
                     .select()
                     .single();
@@ -2936,6 +3128,16 @@ const Drunkopoly = () => {
                     onCheckedChange={(checked) => setTempExpansionEnabled(checked)}
                   />
                 </div>
+                <div className="flex items-center justify-between py-2 px-3 rounded-lg bg-muted/30 mt-2">
+                  <div className="flex-1">
+                    <div className="font-medium text-sm">Gambling</div>
+                    <div className="text-xs text-muted-foreground">Lets players gamble Pass Go or Free Parking on a roulette spin</div>
+                  </div>
+                  <Switch
+                    checked={tempGamblingEnabled}
+                    onCheckedChange={(checked) => setTempGamblingEnabled(checked)}
+                  />
+                </div>
               </div>
 
               <div className="flex gap-2 mt-4">
@@ -3008,6 +3210,7 @@ const Drunkopoly = () => {
             onToggleShowBalances={toggleShowBalances}
             onToggleSipsEnabled={toggleSipsEnabled}
             onToggleExpansion={toggleExpansionEnabled}
+            onToggleGambling={toggleGamblingEnabled}
             commPinOpen={commPinOpen}
             setCommPinOpen={setCommPinOpen}
             commToolsOpen={commToolsOpen}
@@ -3121,18 +3324,22 @@ const Drunkopoly = () => {
         ) : (
           /* Normal UI for active players */
           <>
-            <div className="mb-8">
+            <div className="mb-8 flex flex-col items-center">
               <div className="text-muted-foreground text-lg mb-2 text-center">
                 Current Balance
               </div>
-              <div className="text-6xl font-extrabold text-primary text-center">
-                <AnimatedNumber
-                  value={player?.balance ?? game?.initial_balance ?? 1500}
-                  soundEnabled={soundEnabled}
-                  maskIfGameHidden={!((game && game.show_balances) ?? true)}
-                  gameCode={game?.code ?? null}
-                />
-              </div>
+              <MoneyOrbitals
+                transactionMeta={transactionMeta}
+              >
+                <div className="text-6xl font-extrabold text-primary text-center px-8 py-4">
+                  <AnimatedNumber
+                    value={player?.balance ?? game?.initial_balance ?? 1500}
+                    soundEnabled={soundEnabled}
+                    maskIfGameHidden={!((game && game.show_balances) ?? true)}
+                    gameCode={game?.code ?? null}
+                  />
+                </div>
+              </MoneyOrbitals>
             </div>
 
             {/* SIP section (hidden when sips_enabled is false) */}
@@ -3278,6 +3485,16 @@ const Drunkopoly = () => {
           showBalances={game?.show_balances ?? true}
           onSubmit={async (payments, opts) => {
             if (!game || !player) return;
+            // Fire orbital animation before the balance update lands
+            const payType: TransactionType =
+              payMode === 'players' ? 'player' :
+              payMode === 'tax' ? 'tax' :
+              'bank';
+            const payEntities: OrbitalEntity[] = payMode === 'players'
+              ? (payments as any[]).map((pmt: any) => playersList.find((pl: any) => String(pl.id) === String(pmt.to))).filter(Boolean)
+              : [];
+            txMetaKeyRef.current++;
+            setTransactionMeta({ type: payType, direction: 'out', entities: payEntities.length ? payEntities : undefined, key: txMetaKeyRef.current });
             try {
               const result = await processPayments(game.code, player.id, payments, { ...(opts || {}), mode: payMode });
               
@@ -3355,6 +3572,15 @@ const Drunkopoly = () => {
           currentPlayer={player}
           game={game}
           onCollect={async (opts) => { await handleCollect(opts); }}
+          gamblingEnabled={!!(game?.gambling_enabled)}
+          onGamble={handleGamble}
+        />
+
+        <RoulettePopup
+          open={rouletteOpen}
+          onOpenChange={(v) => setRouletteOpen(v)}
+          amount={rouletteAmount}
+          onResult={async (won) => { await handleRouletteResult(won); }}
         />
 
         <SipPopup
@@ -3655,26 +3881,31 @@ const Drunkopoly = () => {
           batches={sipBatches}
           onDismissBatch={async () => {
             if (!game || !player) return;
-            if (sipBatches.length <= 1) {
-              // Last batch — hide bar immediately then clear in DB
+            const isLast = sipBatches.length <= 1;
+            const batchCount = sipBatches[0]?.count ?? 0;
+            // Preemptively update prevPendingSipsRef to the value we expect the DB
+            // to return. This prevents the pending_sips useEffect from treating the
+            // DB decrement as an unexpected external reset and collapsing batches.
+            prevPendingSipsRef.current = isLast ? 0 : Math.max(0, (player.pending_sips ?? 0) - batchCount);
+            // Advance local queue immediately for smooth animation
+            if (isLast) {
               setSipBatches([]);
-              prevPendingSipsRef.current = 0;
-              try {
-                setCompletingSips(true);
-                await completeSips(game.code, player.id);
-                const players = await fetchPlayers(game.code);
-                setPlayersList(players);
-                const updatedPlayer = players.find((p: any) => p.id === player.id);
-                if (updatedPlayer) setPlayer(updatedPlayer);
-              } catch (err: any) {
-                console.error('Complete sips error:', err);
-                alert(err.message || 'Failed to complete sips');
-              } finally {
-                setCompletingSips(false);
-              }
             } else {
-              // More batches remain — just advance the queue locally
               setSipBatches((b) => b.slice(1));
+            }
+            // Complete this batch in DB every time so pending count drops in real-time
+            try {
+              setCompletingSips(true);
+              await completeSipBatch(game.code, player.id);
+              const players = await fetchPlayers(game.code);
+              setPlayersList(players);
+              const updatedPlayer = players.find((p: any) => p.id === player.id);
+              if (updatedPlayer) setPlayer(updatedPlayer);
+            } catch (err: any) {
+              console.error('Complete sips error:', err);
+              alert(err.message || 'Failed to complete sips');
+            } finally {
+              setCompletingSips(false);
             }
           }}
           processing={completingSips}
@@ -3806,6 +4037,174 @@ function Section({
     </div>
   );
 }
+
+// ─── Money Tower Orbital Animation ───────────────────────────────────────────
+//
+// Renders animated entities (player avatars, bank icons, etc.) that fly toward
+// or away from the money tower whenever the player's balance changes.
+//
+type OrbitalTransactionType = 'bank' | 'player' | 'tax' | 'free_parking' | 'pass_go' | 'jail' | null;
+
+interface OrbitalParticle {
+  id: string;
+  node: React.ReactNode;
+  angleDeg: number;
+  radius: number;
+  delay: number;
+  size: number;
+}
+
+function MoneyOrbitals({
+  transactionMeta,
+  children,
+}: {
+  transactionMeta: { type: OrbitalTransactionType; direction: 'in' | 'out'; entities?: { id: string; name: string; avatar_url?: string | null }[]; key: number } | null;
+  children: React.ReactNode;
+}) {
+  const [activeParticles, setActiveParticles] = useState<{ key: number; direction: 'in' | 'out'; particles: OrbitalParticle[] } | null>(null);
+  const clearTimerRef = useRef<number | null>(null);
+
+  useEffect(() => {
+    if (!transactionMeta) return;
+
+    const { type, direction, entities, key } = transactionMeta;
+
+    // Tint colors matching the AnimatedNumber green/red
+    const col = direction === 'in' ? '#34D399' : '#EF4444';
+    const colFaint = direction === 'in' ? '#6EE7B7' : '#FCA5A5';
+
+    // Build particle list based on transaction type
+    const particleNodes: { id: string; node: React.ReactNode; size: number }[] = [];
+
+    if (type === 'bank') {
+      particleNodes.push(
+        { id: 'b0', size: 28, node: <Building2 className="money-orbital-icon" style={{ width: 28, height: 28, color: col }} /> },
+        { id: 'b1', size: 22, node: <DollarSign className="money-orbital-icon" style={{ width: 22, height: 22, color: colFaint }} /> },
+        { id: 'b2', size: 26, node: <Building2 className="money-orbital-icon" style={{ width: 26, height: 26, color: col }} /> },
+        { id: 'b3', size: 20, node: <DollarSign className="money-orbital-icon" style={{ width: 20, height: 20, color: colFaint }} /> },
+      );
+    } else if (type === 'tax') {
+      particleNodes.push(
+        { id: 't0', size: 28, node: <Percent className="money-orbital-icon" style={{ width: 28, height: 28, color: col }} /> },
+        { id: 't1', size: 22, node: <DollarSign className="money-orbital-icon" style={{ width: 22, height: 22, color: colFaint }} /> },
+        { id: 't2', size: 26, node: <Percent className="money-orbital-icon" style={{ width: 26, height: 26, color: col }} /> },
+        { id: 't3', size: 20, node: <DollarSign className="money-orbital-icon" style={{ width: 20, height: 20, color: colFaint }} /> },
+      );
+    } else if (type === 'free_parking') {
+      particleNodes.push(
+        { id: 'fp0', size: 28, node: <PiggyBank className="money-orbital-icon" style={{ width: 28, height: 28, color: col }} /> },
+        { id: 'fp1', size: 22, node: <DollarSign className="money-orbital-icon" style={{ width: 22, height: 22, color: colFaint }} /> },
+        { id: 'fp2', size: 26, node: <PiggyBank className="money-orbital-icon" style={{ width: 26, height: 26, color: col }} /> },
+        { id: 'fp3', size: 20, node: <DollarSign className="money-orbital-icon" style={{ width: 20, height: 20, color: colFaint }} /> },
+      );
+    } else if (type === 'pass_go') {
+      particleNodes.push(
+        { id: 'g0', size: 30, node: <Crown className="money-orbital-icon" style={{ width: 30, height: 30, color: col }} /> },
+        { id: 'g1', size: 22, node: <DollarSign className="money-orbital-icon" style={{ width: 22, height: 22, color: colFaint }} /> },
+        { id: 'g2', size: 26, node: <Crown className="money-orbital-icon" style={{ width: 26, height: 26, color: col }} /> },
+        { id: 'g3', size: 20, node: <DollarSign className="money-orbital-icon" style={{ width: 20, height: 20, color: colFaint }} /> },
+      );
+    } else if (type === 'jail') {
+      particleNodes.push(
+        { id: 'j0', size: 28, node: <span className="money-orbital-icon" style={{ fontSize: 28, lineHeight: 1 }}>⛓️</span> },
+        { id: 'j1', size: 22, node: <DollarSign className="money-orbital-icon" style={{ width: 22, height: 22, color: col }} /> },
+        { id: 'j2', size: 26, node: <span className="money-orbital-icon" style={{ fontSize: 24, lineHeight: 1 }}>🔒</span> },
+        { id: 'j3', size: 20, node: <DollarSign className="money-orbital-icon" style={{ width: 20, height: 20, color: colFaint }} /> },
+      );
+    } else if (type === 'player' && entities && entities.length > 0) {
+      entities.slice(0, 4).forEach((e, i) => {
+        particleNodes.push({
+          id: e.id,
+          size: 32,
+          node: <PlayerAvatar player={e} size="sm" className="money-orbital-avatar" />,
+        });
+      });
+      // Pad with generic coins if fewer than 4 players
+      while (particleNodes.length < 4) {
+        particleNodes.push({ id: `coin-${particleNodes.length}`, size: 20, node: <DollarSign className="money-orbital-icon" style={{ width: 20, height: 20, color: col }} /> });
+      }
+    } else {
+      // generic: money coins flying in/out
+      particleNodes.push(
+        { id: 'gen0', size: 28, node: <DollarSign className="money-orbital-icon" style={{ width: 28, height: 28, color: col }} /> },
+        { id: 'gen1', size: 22, node: <DollarSign className="money-orbital-icon" style={{ width: 22, height: 22, color: colFaint }} /> },
+        { id: 'gen2', size: 26, node: <DollarSign className="money-orbital-icon" style={{ width: 26, height: 26, color: col }} /> },
+        { id: 'gen3', size: 20, node: <DollarSign className="money-orbital-icon" style={{ width: 20, height: 20, color: colFaint }} /> },
+      );
+    }
+
+    // Spread particles evenly around a circle, with slight phase offset for visual variety
+    const baseAngles = [320, 40, 130, 220];
+    const radii = [115, 105, 120, 100];
+    const delays = [0, 90, 55, 145];
+
+    const particles: OrbitalParticle[] = particleNodes.slice(0, 4).map((p, i) => ({
+      id: p.id,
+      node: p.node,
+      angleDeg: baseAngles[i],
+      radius: radii[i],
+      delay: delays[i],
+      size: p.size,
+    }));
+
+    if (clearTimerRef.current) clearTimeout(clearTimerRef.current);
+    setActiveParticles({ key, direction, particles });
+    clearTimerRef.current = window.setTimeout(() => setActiveParticles(null), 1800);
+  }, [transactionMeta]);
+
+  // Cleanup on unmount
+  useEffect(() => () => { if (clearTimerRef.current) clearTimeout(clearTimerRef.current); }, []);
+
+  return (
+    <div className="relative money-tower-wrap" style={{ isolation: 'isolate' }}>
+      {children}
+      {activeParticles && (
+        <div
+          aria-hidden="true"
+          className="money-orbital-layer"
+          style={{ position: 'absolute', inset: 0, overflow: 'visible', pointerEvents: 'none', zIndex: 20 }}
+        >
+          {activeParticles.particles.map((p) => {
+            const angleRad = (p.angleDeg * Math.PI) / 180;
+            const dx = Math.cos(angleRad) * p.radius;
+            const dy = Math.sin(angleRad) * p.radius;
+            const isIn = activeParticles.direction === 'in';
+
+            return (
+              <div
+                key={`${activeParticles.key}-${p.id}`}
+                className={isIn ? 'money-orbital-in' : 'money-orbital-out'}
+                style={{
+                  position: 'absolute',
+                  left: '50%',
+                  top: '50%',
+                  width: p.size,
+                  height: p.size,
+                  marginLeft: -(p.size / 2),
+                  marginTop: -(p.size / 2),
+                  '--dx-start': isIn ? `${dx}px` : '0px',
+                  '--dy-start': isIn ? `${dy}px` : '0px',
+                  '--dx-end': isIn ? '0px' : `${dx}px`,
+                  '--dy-end': isIn ? '0px' : `${dy}px`,
+                  '--anim-delay': `${p.delay}ms`,
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  filter: isIn
+                    ? 'drop-shadow(0 0 6px rgba(52,211,153,0.7))'
+                    : 'drop-shadow(0 0 6px rgba(239,68,68,0.65))',
+                } as React.CSSProperties}
+              >
+                {p.node}
+              </div>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
+}
+// ─────────────────────────────────────────────────────────────────────────────
 
 function AnimatedNumber({ value, soundEnabled = true, maskIfGameHidden = false, gameCode, }: { value: number; soundEnabled?: boolean; maskIfGameHidden?: boolean; gameCode?: string | null }) {
   const [display, setDisplay] = useState<number>(value ?? 0);
@@ -3985,10 +4384,10 @@ function AnimatedNumber({ value, soundEnabled = true, maskIfGameHidden = false, 
   );
 }
 
-function GameCodePopover({ code, onLogout, players, currentPlayer, game, onRemovePlayer, soundEnabled, onToggleSound, showBalances = true, onToggleShowBalances, onToggleSipsEnabled, onToggleExpansion, showRulesInPopover,
+function GameCodePopover({ code, onLogout, players, currentPlayer, game, onRemovePlayer, soundEnabled, onToggleSound, showBalances = true, onToggleShowBalances, onToggleSipsEnabled, onToggleExpansion, onToggleGambling, showRulesInPopover,
   // centralized commissioner state/handlers from parent
   commPinOpen, setCommPinOpen, commToolsOpen, setCommToolsOpen, commPinValue, setCommPinValue, commUnlocked, openCommissionerTools, tryUnlockCommissionerTools, setCommUnlockedUntil, hasCommissionerAccess
-}: { code: string; onLogout?: () => void; players?: any[]; currentPlayer?: any; game?: any; onRemovePlayer?: (id: string) => Promise<void>; soundEnabled?: boolean; onToggleSound?: (enabled: boolean) => void; showBalances?: boolean; onToggleShowBalances?: (enabled: boolean) => void; onToggleSipsEnabled?: (enabled: boolean) => void; onToggleExpansion?: (enabled: boolean) => void; showRulesInPopover?: boolean; commPinOpen: boolean; setCommPinOpen: (v:boolean)=>void; commToolsOpen: boolean; setCommToolsOpen: (v:boolean)=>void; commPinValue: string; setCommPinValue: (v:string)=>void; commUnlocked: boolean; openCommissionerTools: ()=>void; tryUnlockCommissionerTools: ()=>void; setCommUnlockedUntil: (n:number)=>void; hasCommissionerAccess: ()=>boolean }) {
+}: { code: string; onLogout?: () => void; players?: any[]; currentPlayer?: any; game?: any; onRemovePlayer?: (id: string) => Promise<void>; soundEnabled?: boolean; onToggleSound?: (enabled: boolean) => void; showBalances?: boolean; onToggleShowBalances?: (enabled: boolean) => void; onToggleSipsEnabled?: (enabled: boolean) => void; onToggleExpansion?: (enabled: boolean) => void; onToggleGambling?: (enabled: boolean) => void; showRulesInPopover?: boolean; commPinOpen: boolean; setCommPinOpen: (v:boolean)=>void; commToolsOpen: boolean; setCommToolsOpen: (v:boolean)=>void; commPinValue: string; setCommPinValue: (v:string)=>void; commUnlocked: boolean; openCommissionerTools: ()=>void; tryUnlockCommissionerTools: ()=>void; setCommUnlockedUntil: (n:number)=>void; hasCommissionerAccess: ()=>boolean }) {
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [settingsOpenSection, setSettingsOpenSection] = useState<'game' | 'players' | null>(null);
   const [confirmOpen, setConfirmOpen] = useState(false);
@@ -4296,6 +4695,16 @@ function GameCodePopover({ code, onLogout, players, currentPlayer, game, onRemov
                         <Switch
                           checked={!!(game?.expansion_enabled ?? false)}
                           onCheckedChange={(checked) => { if (onToggleExpansion) onToggleExpansion(checked); }}
+                        />
+                      </div>
+                      <div className="flex items-center justify-between py-2 px-3 rounded-lg bg-muted/10">
+                        <div className="flex-1">
+                          <div className="font-medium text-sm">Gambling</div>
+                          <div className="text-xs text-muted-foreground">Lets players gamble Pass Go or Free Parking on a roulette spin</div>
+                        </div>
+                        <Switch
+                          checked={!!(game?.gambling_enabled ?? false)}
+                          onCheckedChange={(checked) => { if (onToggleGambling) onToggleGambling(checked); }}
                         />
                       </div>
                     </>

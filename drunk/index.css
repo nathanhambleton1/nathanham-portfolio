@@ -292,3 +292,77 @@ body.drunk-overlay-open .drunk-eye-toggle {
   visibility: hidden !important;
   pointer-events: none !important;
 }
+
+/* ─── Money Tower Orbital Animation ─────────────────────────────────────────
+ *
+ * Entities fly IN toward the money tower (collect/receive) or OUT away from it
+ * (pay/send).  Each particle uses CSS custom properties --dx-start, --dy-start,
+ * --dx-end, --dy-end, and --anim-delay set via inline style.
+ */
+@keyframes moneyOrbitalIn {
+  0% {
+    transform: translate(var(--dx-start), var(--dy-start)) scale(1.25);
+    opacity: 0;
+  }
+  12% {
+    opacity: 1;
+  }
+  65% {
+    opacity: 1;
+    transform: translate(calc(var(--dx-start) * 0.15), calc(var(--dy-start) * 0.15)) scale(0.85);
+  }
+  100% {
+    transform: translate(0px, 0px) scale(0.35);
+    opacity: 0;
+  }
+}
+
+@keyframes moneyOrbitalOut {
+  0% {
+    transform: translate(0px, 0px) scale(0.35);
+    opacity: 0;
+  }
+  12% {
+    opacity: 1;
+    transform: translate(0px, 0px) scale(0.9);
+  }
+  65% {
+    opacity: 1;
+    transform: translate(calc(var(--dx-end) * 0.55), calc(var(--dy-end) * 0.55)) scale(1.05);
+  }
+  100% {
+    transform: translate(var(--dx-end), var(--dy-end)) scale(1.3);
+    opacity: 0;
+  }
+}
+
+.money-orbital-in {
+  animation: moneyOrbitalIn 1.5s cubic-bezier(0.25, 0.46, 0.45, 0.94) var(--anim-delay, 0ms) both;
+}
+
+.money-orbital-out {
+  animation: moneyOrbitalOut 1.5s cubic-bezier(0.25, 0.46, 0.45, 0.94) var(--anim-delay, 0ms) both;
+}
+
+/* Avatar particles: circular crop */
+.money-orbital-avatar {
+  width: 32px !important;
+  height: 32px !important;
+  border-radius: 9999px;
+  border: 2px solid rgba(255, 255, 255, 0.25);
+  box-shadow: 0 0 8px rgba(0, 0, 0, 0.45);
+  object-fit: cover;
+}
+
+/* Icon particles: inherits size from inline style */
+.money-orbital-icon {
+  display: block;
+  flex-shrink: 0;
+}
+
+/* Isolate the tower wrapper so the overflow:visible orbital layer
+   doesn't escape the page scroll container unexpectedly. */
+.money-tower-wrap {
+  display: inline-block;
+}
+/* ─────────────────────────────────────────────────────────────────────────── */

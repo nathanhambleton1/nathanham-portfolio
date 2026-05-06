@@ -19,6 +19,8 @@ export default function CollectPopup({
   currentPlayer,
   game,
   onCollect,
+  gamblingEnabled,
+  onGamble,
 }: {
   open: boolean;
   onOpenChange: (v: boolean) => void;
@@ -26,6 +28,8 @@ export default function CollectPopup({
   currentPlayer: any | null;
   game: any | null;
   onCollect: (opts: any) => void;
+  gamblingEnabled?: boolean;
+  onGamble?: (amount: number, doubled: boolean) => void;
 }) {
   // typed input starts blank so users can click and type immediately
   const [rawAmount, setRawAmount] = useState<string>("");
@@ -173,8 +177,25 @@ export default function CollectPopup({
         <DialogFooter>
           <div className="flex gap-2 w-full justify-end">
             <Button variant="secondary" onClick={() => onOpenChange(false)}>Cancel</Button>
-            <Button 
-              onClick={handleSubmit} 
+            {gamblingEnabled && (mode === 'pass_go' || mode === 'free_parking') && (
+              <Button
+                variant="outline"
+                className="border-red-500 text-red-500 hover:bg-red-50 dark:hover:bg-red-950"
+                disabled={mode === 'free_parking' && (game?.free_parking_balance || 0) === 0}
+                onClick={() => {
+                  const gambleAmt =
+                    mode === 'pass_go'
+                      ? (doubled ? (game?.pass_go_amount || 200) * 2 : (game?.pass_go_amount || 200))
+                      : (game?.free_parking_balance || 0);
+                  if (onGamble) onGamble(gambleAmt, doubled);
+                  onOpenChange(false);
+                }}
+              >
+                🎰 Gamble!
+              </Button>
+            )}
+            <Button
+              onClick={handleSubmit}
               className="bg-primary"
               disabled={mode === 'free_parking' && (game?.free_parking_balance || 0) === 0}
             >
