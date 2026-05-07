@@ -2189,9 +2189,27 @@ const Drunkopoly = () => {
                   // A direct collect action already fired the animation — consume the flag
                   directAnimationFiredRef.current = false;
                 } else {
-                  // Money arrived from another player — fire the received animation
+                  // Money arrived from another player — look up who paid us so we can show their avatar
+                  let payerEntities: OrbitalEntity[] | undefined;
+                  try {
+                    const { data: recentPayment } = await supabase
+                      .from('money_events')
+                      .select('from_player_id')
+                      .eq('game_id', gameId)
+                      .eq('to_player_id', player!.id)
+                      .not('from_player_id', 'is', null)
+                      .order('created_at', { ascending: false })
+                      .limit(1)
+                      .single();
+                    if (recentPayment?.from_player_id) {
+                      const payer = players.find((p: any) => String(p.id) === String(recentPayment.from_player_id));
+                      if (payer) payerEntities = [payer];
+                    }
+                  } catch {
+                    // ignore — fall back to generic coins
+                  }
                   txMetaKeyRef.current++;
-                  setTransactionMeta({ type: 'player', direction: 'in', key: txMetaKeyRef.current });
+                  setTransactionMeta({ type: 'player', direction: 'in', entities: payerEntities, key: txMetaKeyRef.current });
                 }
               }
               // Don't animate decreases here — direct pay actions already handle those
