@@ -172,6 +172,9 @@ export default function ActivityLog({
         return `${target} was removed from the game`;
       }
 
+      if (e.type === 'gamble')
+        return e.description || `${actor} gambled`;
+
       if (e.type === "free_parking_collect")
         return `${to} collected $${(e.amount || 0).toLocaleString()} from Free Parking`;
 

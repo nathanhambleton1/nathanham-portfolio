@@ -11,7 +11,8 @@ import { UserPlus, DollarSign, Users, Percent, Crown, PiggyBank, Clock, Copy, Se
 import { QRCodeSVG } from "qrcode.react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "../components/ui/dialog";
 import CollectPopup from "../components/CollectPopup";
-import RoulettePopup from "../components/RoulettePopup";
+import RoulettePopup, { type RouletteSpinBroadcast } from "../components/RoulettePopup";
+import RouletteSpectatorPopup from "../components/RouletteSpectatorPopup";
 import SipPopup from "../components/SipPopup";
 import TradeTimerControl from "../components/TradeTimerControl";
 import TradeLockOverlay from "../components/TradeLockOverlay";
@@ -108,8 +109,7 @@ const Drunkopoly = () => {
   const [cardProcessing, setCardProcessing] = useState(false);
   const [insufficientFundsFlash, setInsufficientFundsFlash] = useState(false);
   const [completingSips, setCompletingSips] = useState(false);
-  const [sipBatches, setSipBatches] = useState<{ id: string; count: number }[]>([]);
-  const prevPendingSipsRef = useRef<number>(0);
+  const [pendingSipEvents, setPendingSipEvents] = useState<{ id: string; sip_count: number }[]>([]);
   const [freeParkingPot, setFreeParkingPot] = useState(0);
   const [collectModalOpen, setCollectModalOpen] = useState(false);
   const [collectMode, setCollectMode] = useState<'bank'|'pass_go'|'free_parking'|null>(null);
@@ -117,6 +117,9 @@ const Drunkopoly = () => {
   const [rouletteAmount, setRouletteAmount] = useState(0);
   const [rouletteMode, setRouletteMode] = useState<'pass_go'|'free_parking'|null>(null);
   const [rouletteDoubled, setRouletteDoubled] = useState(false);
+  const [spectatorOpen, setSpectatorOpen] = useState(false);
+  const [spectatorData, setSpectatorData] = useState<RouletteSpinBroadcast | null>(null);
+  const realtimeChannelRef = useRef<any>(null);
   const [bankruptModalOpen, setBankruptModalOpen] = useState(false);
   const [bankruptStatusOpen, setBankruptStatusOpen] = useState(false);
   const [blockedPaymentMessage, setBlockedPaymentMessage] = useState<string | null>(null);
@@ -260,33 +263,13 @@ const Drunkopoly = () => {
   // we should NOT forcibly close other action popups when only the sips
   // overlay appears. Only jail or trade overlays should interrupt other flows.
   const jailOverlayOpen = !!player?.in_jail;
-  const sipsOverlayOpen = (player?.pending_sips ?? 0) > 0;
+  // Derive sip batches directly from DB sip_events rows so separate rounds are
+  // always tracked individually rather than being merged into a single counter.
+  const sipBatches = pendingSipEvents.map(e => ({ id: e.id, count: e.sip_count }));
+  const sipsOverlayOpen = sipBatches.length > 0;
   const tradeOverlayOpen = !!game?.trade_locked;
 
   useLockBodyScroll(jailOverlayOpen || tradeOverlayOpen, { scrollToTop: true });
-
-  // Track individual sip batches so the overlay can show stacked cards per round
-  useEffect(() => {
-    const current = player?.pending_sips ?? 0;
-    const prev = prevPendingSipsRef.current;
-
-    if (current === 0) {
-      setSipBatches([]);
-    } else if (current > prev) {
-      const delta = current - prev;
-      setSipBatches((b) => {
-        if (b.length === 0) {
-          return [{ id: `sip-${Date.now()}`, count: current }];
-        }
-        return [...b, { id: `sip-${Date.now()}-${delta}`, count: delta }];
-      });
-    } else if (current < prev && current > 0) {
-      // External reset (e.g. commissioner edit) — resync to a single batch
-      setSipBatches([{ id: `sip-${Date.now()}`, count: current }]);
-    }
-
-    prevPendingSipsRef.current = current;
-  }, [player?.pending_sips]);
 
   // If a blocking overlay (jail or trade) is active, close other action popups
   // so they don't persist or auto-open when overlays toggle. But do NOT close
@@ -604,6 +587,7 @@ const Drunkopoly = () => {
       newOrExistingPlayer = existingPlayers[0];
       const rejoinUpdate: any = { is_online: true, last_seen_at: new Date().toISOString() };
       if (currentUser?.avatar_url) rejoinUpdate.avatar_url = currentUser.avatar_url;
+      if (currentUser?.id) rejoinUpdate.user_id = currentUser.id;
       await supabase.from('players').update(rejoinUpdate).eq('id', newOrExistingPlayer.id);
       if (currentUser?.avatar_url) newOrExistingPlayer = { ...newOrExistingPlayer, avatar_url: currentUser.avatar_url };
     } else {
@@ -628,6 +612,7 @@ const Drunkopoly = () => {
           balance: localGame.initial_balance ?? 0,
           is_commissioner: isFirstPlayer,
           avatar_url: currentUser?.avatar_url || null,
+          user_id: currentUser?.id || null,
         }])
         .select()
         .single();
@@ -1059,7 +1044,7 @@ const Drunkopoly = () => {
         const base = Number(game.pass_go_amount || 200);
         const doubled = !!opts.doubled;
         amount = doubled ? base * 2 : base;
-        if (opts.gamblingWon) amount *= 2;
+        if (opts.gamblingWon) amount *= (opts.gamblingMultiplier ?? 2);
         if (opts.gamblingLost) {
           return { ok: true, money_event: null, new_balance: player.balance || 0 };
         }
@@ -1088,20 +1073,11 @@ const Drunkopoly = () => {
 
         if (opts.gamblingLost) {
           await supabase.from('games').update({ free_parking_balance: 0 }).eq('id', game.id);
-          await supabase.from('money_events').insert([{
-            game_id: game.id,
-            actor_player_id,
-            from_player_id: null,
-            to_player_id: actor_player_id,
-            amount: 0,
-            type: 'free_parking_collect',
-            description: 'Gambled Free Parking and lost',
-          }]);
           return { ok: true, money_event: null, new_balance: player.balance || 0 };
         }
 
         if (pot <= 0) throw new Error('Free parking pot is empty');
-        amount = opts.gamblingWon ? pot * 2 : pot;
+        amount = opts.gamblingWon ? pot * (opts.gamblingMultiplier ?? 2) : pot;
 
         const { data: meData, error: meErr } = await supabase
           .from('money_events')
@@ -1187,17 +1163,50 @@ const Drunkopoly = () => {
     setRouletteOpen(true);
   };
 
+  // Broadcast the spin to all other players so they can spectate
+  const handleRouletteSpin = (data: RouletteSpinBroadcast) => {
+    if (!player) return;
+    const payload: RouletteSpinBroadcast = {
+      ...data,
+      spinnerPlayerId: String(player.id),
+      spinnerName: player.name || 'Someone',
+      spinnerAvatar: (player as any).avatar_url ?? null,
+    };
+    try {
+      realtimeChannelRef.current?.send({ type: 'broadcast', event: 'roulette_spin', payload });
+    } catch (e) {
+      console.warn('Failed to broadcast roulette spin', e);
+    }
+  };
+
   // Called when the roulette spin resolves
-  const handleRouletteResult = async (won: boolean) => {
-    if (!rouletteMode) return;
+  const handleRouletteResult = async (won: boolean, multiplier: number) => {
+    if (!rouletteMode || !game || !player) return;
+
+    const modeLabel = rouletteMode === 'pass_go' ? 'Pass Go' : 'Free Parking';
+    const winAmount = rouletteAmount * multiplier;
+    const description = won
+      ? `${player.name} gambled on ${modeLabel} and won $${winAmount.toLocaleString()}`
+      : `${player.name} gambled on ${modeLabel} and lost`;
+
+    try {
+      await supabase.from('money_events').insert([{
+        game_id: game.id,
+        actor_player_id: player.id,
+        to_player_id: player.id,
+        amount: won ? winAmount : 0,
+        type: 'gamble',
+        description,
+      }]);
+    } catch (e) {
+      console.warn('Failed to log gamble event', e);
+    }
+
     try {
       if (won) {
-        await handleCollect({ type: rouletteMode, doubled: rouletteDoubled, gamblingWon: true });
+        await handleCollect({ type: rouletteMode, doubled: rouletteDoubled, gamblingWon: true, gamblingMultiplier: multiplier });
       } else if (rouletteMode === 'free_parking') {
         await handleCollect({ type: 'free_parking', gamblingLost: true });
-      } else {
-        // pass_go lost — nothing to collect, just show feedback
-        try { toast({ title: '💸 Gamble Lost!', description: 'You lost your Pass Go bonus.' }); } catch {}
       }
     } catch (err: any) {
       console.error('Roulette collect error', err);
@@ -1271,16 +1280,54 @@ const Drunkopoly = () => {
         console.warn('Failed to log bankruptcy', logErr);
       }
 
+      // Record loss for the bankrupt user's account
+      if (currentUser?.id) {
+        try {
+          await supabase
+            .from('drunk_users')
+            .update({ losses: (currentUser.losses ?? 0) + 1 })
+            .eq('id', currentUser.id);
+          persistAuthUser({ ...currentUser, losses: (currentUser.losses ?? 0) + 1 });
+        } catch (lossErr) {
+          console.warn('Failed to record loss', lossErr);
+        }
+      }
+
       // Refresh state
       const players = await fetchPlayers(game.code);
       setPlayersList(players);
       const updatedPlayer = players.find((p: any) => String(p.id) === String(player.id));
       if (updatedPlayer) setPlayer(updatedPlayer);
 
+      // Check if only one non-bankrupt player remains — they win
+      const remaining = players.filter((p: any) => !p.is_bankrupt);
+      if (remaining.length === 1 && remaining[0].user_id) {
+        try {
+          const winnerId = remaining[0].user_id;
+          const { data: winnerUser } = await supabase
+            .from('drunk_users')
+            .select('wins')
+            .eq('id', winnerId)
+            .single();
+          if (winnerUser) {
+            await supabase
+              .from('drunk_users')
+              .update({ wins: (winnerUser.wins ?? 0) + 1 })
+              .eq('id', winnerId);
+            // If the winner is the current user (edge case), refresh local state too
+            if (currentUser?.id === winnerId) {
+              persistAuthUser({ ...currentUser, wins: (winnerUser.wins ?? 0) + 1 });
+            }
+          }
+        } catch (winErr) {
+          console.warn('Failed to record win', winErr);
+        }
+      }
+
       try {
-        toast({ 
-          title: 'Bankruptcy Declared', 
-          description: 'You are now in ghost mode. You can spectate but cannot participate in payments.' 
+        toast({
+          title: 'Bankruptcy Declared',
+          description: 'You are now in ghost mode. You can spectate but cannot participate in payments.'
         });
       } catch (e) {
         // ignore toast errors
@@ -1986,11 +2033,13 @@ const Drunkopoly = () => {
       if (stopped) return;
       
       try {
-        const [players, gameData] = await Promise.all([
+        const [players, gameData, sipEvData] = await Promise.all([
           fetchPlayers(game.code),
-          supabase.from('games').select('*').eq('code', game.code).limit(1).single()
+          supabase.from('games').select('*').eq('code', game.code).limit(1).single(),
+          supabase.from('sip_events').select('id,sip_count').eq('game_id', game.id).eq('to_player_id', player.id).eq('status', 'pending').order('created_at', { ascending: true }),
         ]);
 
+        if (sipEvData.data) setPendingSipEvents(sipEvData.data);
         if (players) setPlayersList(players);
         if (gameData.data) {
           setGame(gameData.data);
@@ -2054,8 +2103,43 @@ const Drunkopoly = () => {
             } else {
               setPlayer(updatedPlayer);
             }
-            // Do NOT update prevBalanceRef here — let the realtime subscription own that
-            // so incoming payments from other players are detected correctly.
+            // Detect incoming payment and fire orbital animation.
+            // This polling path serves as a reliable fallback for when the Supabase Realtime
+            // subscription fires late or misses an event entirely.
+            // prevBalanceRef is shared with the subscription so only one of the two paths fires.
+            {
+              const prevBal = prevBalanceRef.current ?? (player?.balance ?? 0);
+              const newBal = Number(updatedPlayer.balance ?? 0);
+              if (newBal > prevBal) {
+                if (directAnimationFiredRef.current) {
+                  // A direct action (collect, etc.) already fired the animation — consume the flag
+                  directAnimationFiredRef.current = false;
+                } else {
+                  // Money arrived from another player — look up who paid us to show their avatar
+                  let payerEntities: OrbitalEntity[] | undefined;
+                  try {
+                    const { data: recentPayment } = await supabase
+                      .from('money_events')
+                      .select('from_player_id')
+                      .eq('game_id', gameData.data?.id ?? game?.id)
+                      .eq('to_player_id', updatedPlayer.id)
+                      .not('from_player_id', 'is', null)
+                      .order('created_at', { ascending: false })
+                      .limit(1)
+                      .single();
+                    if (recentPayment?.from_player_id) {
+                      const payer = players.find((p: any) => String(p.id) === String(recentPayment.from_player_id));
+                      if (payer) payerEntities = [payer];
+                    }
+                  } catch {
+                    // ignore — fall back to generic coins
+                  }
+                  txMetaKeyRef.current++;
+                  setTransactionMeta({ type: 'player', direction: 'in', entities: payerEntities, key: txMetaKeyRef.current });
+                }
+              }
+              prevBalanceRef.current = newBal;
+            }
           } else {
             // Current player no longer exists in players list — they were removed
             try {
@@ -2170,6 +2254,13 @@ const Drunkopoly = () => {
     try {
       channel = supabase
         .channel(`public-games-${gameId}`)
+        .on('broadcast', { event: 'roulette_spin' }, (msg: any) => {
+          const data: RouletteSpinBroadcast = msg.payload;
+          // Only show spectator view to players who are NOT the spinner
+          if (data.spinnerPlayerId && player && String(data.spinnerPlayerId) === String(player.id)) return;
+          setSpectatorData(data);
+          setSpectatorOpen(true);
+        })
         .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'games', filter: `id=eq.${gameId}` }, (payload: any) => {
           if (payload && payload.new) {
             setGame(payload.new);
@@ -2236,11 +2327,13 @@ const Drunkopoly = () => {
           }
         })
         .subscribe();
+      realtimeChannelRef.current = channel;
     } catch (e) {
       console.warn('Supabase realtime subscribe failed', e);
     }
 
     return () => {
+      realtimeChannelRef.current = null;
       try {
         if (channel) channel.unsubscribe();
       } catch (e) {
@@ -3598,7 +3691,14 @@ const Drunkopoly = () => {
           open={rouletteOpen}
           onOpenChange={(v) => setRouletteOpen(v)}
           amount={rouletteAmount}
-          onResult={async (won) => { await handleRouletteResult(won); }}
+          onResult={async (won, multiplier) => { await handleRouletteResult(won, multiplier); }}
+          onSpin={handleRouletteSpin}
+        />
+
+        <RouletteSpectatorPopup
+          open={spectatorOpen}
+          onOpenChange={setSpectatorOpen}
+          data={spectatorData}
         />
 
         <SipPopup
@@ -3895,30 +3995,23 @@ const Drunkopoly = () => {
         />
 
         <SipsLockOverlay
-          open={(player?.pending_sips ?? 0) > 0}
+          open={sipsOverlayOpen}
           batches={sipBatches}
           onDismissBatch={async () => {
             if (!game || !player) return;
-            const isLast = sipBatches.length <= 1;
-            const batchCount = sipBatches[0]?.count ?? 0;
-            // Preemptively update prevPendingSipsRef to the value we expect the DB
-            // to return. This prevents the pending_sips useEffect from treating the
-            // DB decrement as an unexpected external reset and collapsing batches.
-            prevPendingSipsRef.current = isLast ? 0 : Math.max(0, (player.pending_sips ?? 0) - batchCount);
-            // Advance local queue immediately for smooth animation
-            if (isLast) {
-              setSipBatches([]);
-            } else {
-              setSipBatches((b) => b.slice(1));
-            }
-            // Complete this batch in DB every time so pending count drops in real-time
+            // Optimistically remove the front (oldest) sip event for smooth animation
+            setPendingSipEvents((prev) => prev.slice(1));
             try {
               setCompletingSips(true);
               await completeSipBatch(game.code, player.id);
-              const players = await fetchPlayers(game.code);
+              const [players, sipEvData] = await Promise.all([
+                fetchPlayers(game.code),
+                supabase.from('sip_events').select('id,sip_count').eq('game_id', game.id).eq('to_player_id', player.id).eq('status', 'pending').order('created_at', { ascending: true }),
+              ]);
               setPlayersList(players);
               const updatedPlayer = players.find((p: any) => p.id === player.id);
               if (updatedPlayer) setPlayer(updatedPlayer);
+              if (sipEvData.data) setPendingSipEvents(sipEvData.data);
             } catch (err: any) {
               console.error('Complete sips error:', err);
               alert(err.message || 'Failed to complete sips');
@@ -4013,16 +4106,12 @@ const Drunkopoly = () => {
             if (!game || !player) return;
             try {
               setCompletingSips(true);
-              // Clear all pending sips for this player in the DB
               await completeSips(game.code, player.id);
-              // Refresh state
               const players = await fetchPlayers(game.code);
               setPlayersList(players);
               const updatedPlayer = players.find((p: any) => p.id === player.id);
               if (updatedPlayer) setPlayer(updatedPlayer);
-              // Clear local batches
-              setSipBatches([]);
-              prevPendingSipsRef.current = 0;
+              setPendingSipEvents([]);
             } catch (err: any) {
               console.error('Clear all sips failed', err);
               try { toast({ title: 'Clear failed', description: err.message || 'Unable to clear sips', variant: 'destructive' }); } catch {}

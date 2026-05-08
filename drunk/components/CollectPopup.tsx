@@ -177,7 +177,7 @@ export default function CollectPopup({
         <DialogFooter>
           <div className="flex gap-2 w-full justify-end">
             <Button variant="secondary" onClick={() => onOpenChange(false)}>Cancel</Button>
-            {gamblingEnabled && (mode === 'pass_go' || mode === 'free_parking') && (
+            {gamblingEnabled && (mode === 'free_parking' || (mode === 'pass_go' && doubled)) && (
               <Button
                 variant="outline"
                 className="border-red-500 text-red-500 hover:bg-red-50 dark:hover:bg-red-950"
@@ -185,13 +185,13 @@ export default function CollectPopup({
                 onClick={() => {
                   const gambleAmt =
                     mode === 'pass_go'
-                      ? (doubled ? (game?.pass_go_amount || 200) * 2 : (game?.pass_go_amount || 200))
+                      ? (game?.pass_go_amount || 200) * 2
                       : (game?.free_parking_balance || 0);
                   if (onGamble) onGamble(gambleAmt, doubled);
                   onOpenChange(false);
                 }}
               >
-                🎰 Gamble!
+                Gamble
               </Button>
             )}
             <Button
