@@ -12,7 +12,7 @@ export default function TradeTimerControl({
   selected?: number;
   onSelect?: (s: number) => void;
 }) {
-  const options = [60, 120, 180];
+  const options = [30, 60, 120];
   const sel = selected ?? currentSeconds ?? 60;
 
   return (
@@ -23,11 +23,11 @@ export default function TradeTimerControl({
             key={s}
             variant={sel === s ? 'default' : 'ghost'}
             size="sm"
-            className={`px-3 py-1 rounded ${sel === s ? 'bg-primary text-white' : ''}`}
+            className={`px-3 py-1 rounded`}
             onClick={() => onSelect && onSelect(s)}
             disabled={tradeLocked}
           >
-            {s / 60}m
+            {s < 60 ? `${s}s` : `${s / 60}m`}
           </Button>
         ))}
       </div>

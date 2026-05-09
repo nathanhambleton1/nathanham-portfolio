@@ -45,8 +45,8 @@ export default function TradeLockOverlay({
   onCollect?: (opts: any) => Promise<void> | void;
 }) {
   const [now, setNow] = useState(() => Date.now());
-  const [flash, setFlash] = useState(false);
   const audioRef = React.useRef<HTMLAudioElement | null>(null);
+  const hasPlayedRef = React.useRef(false);
   const [sipModalOpen, setSipModalOpen] = useState(false);
   const [payModalOpen, setPayModalOpen] = useState(false);
   const [collectModalOpen, setCollectModalOpen] = useState(false);
@@ -58,7 +58,7 @@ export default function TradeLockOverlay({
       const a = new Audio('/alarm.mp3');
       a.preload = 'auto';
       a.volume = 0.85;
-      a.loop = true;
+      a.loop = false;
       audioRef.current = a;
       // Load the audio immediately
       a.load();
@@ -88,52 +88,40 @@ export default function TradeLockOverlay({
     if (open) {
       setSipModalOpen(false);
       setPayModalOpen(false);
+      setCollectModalOpen(false);
+      hasPlayedRef.current = false;
     }
   }, [open]);
 
-  // Update timer display
+  // Update timer display — stop ticking once expired (display is fixed at 00:00)
   useEffect(() => {
     if (!open) return;
-    const t = setInterval(() => setNow(Date.now()), 250);
+    const t = setInterval(() => {
+      const n = Date.now();
+      setNow(n);
+      const expires = expiresAt ? new Date(expiresAt).getTime() : null;
+      if (expires && n >= expires) clearInterval(t);
+    }, 250);
     return () => clearInterval(t);
-  }, [open]);
+  }, [open, expiresAt]);
 
-  // Handle expiration: flash effect and alarm sound
+  // Handle expiration: play alarm once
   useEffect(() => {
     if (!open) return;
     const expires = expiresAt ? new Date(expiresAt).getTime() : null;
     const expiredNow = expires ? (expires - Date.now() <= 0) : false;
-    let iv: number | null = null;
-    if (expiredNow) {
-      setFlash(true);
-      iv = window.setInterval(() => setFlash((v) => !v), 200);
-      // Start alarm audio on expiry
+    if (expiredNow && !hasPlayedRef.current) {
+      hasPlayedRef.current = true;
       try {
         const a = audioRef.current;
         if (a) {
           a.currentTime = 0;
-          // Use play() with promise handling for better browser compatibility
-          const playPromise = a.play();
-          if (playPromise !== undefined) {
-            playPromise.catch((err) => {
-              console.warn('Alarm play failed (may be blocked by browser):', err);
-            });
-          }
+          a.play().catch((err) => console.warn('Alarm play failed:', err));
         }
       } catch (err) {
         console.warn('Alarm play error:', err);
       }
-    } else {
-      setFlash(false);
-      // Stop alarm if running
-      if (audioRef.current) {
-        try {
-          audioRef.current.pause();
-          audioRef.current.currentTime = 0;
-        } catch (e) {}
-      }
     }
-    return () => { if (iv) clearInterval(iv); };
   }, [open, expiresAt, now]);
 
   if (!open) return null;
@@ -153,20 +141,15 @@ export default function TradeLockOverlay({
           </svg>
 
           <div className="text-2xl font-bold mb-2">Trade Timer Countdown</div>
-          <h2
-            className={`text-5xl font-extrabold mb-2 transition-all duration-300 ${expired ? 'text-red-600' : ''}`}
-            style={
-              expired
-                ? (flash 
-                    ? { 
-                        textShadow: '0 0 40px rgba(220,38,38,1), 0 0 20px rgba(220,38,38,0.8), 0 0 10px rgba(220,38,38,0.6)', 
-                        transform: 'scale(1.05)' 
-                      } 
-                    : { 
-                        textShadow: '0 0 20px rgba(220,38,38,0.7), 0 0 10px rgba(220,38,38,0.5)' 
-                      })
-                : undefined
+          <style>{`
+            @keyframes alarmPulse {
+              0%, 100% { text-shadow: 0 0 20px rgba(220,38,38,0.7), 0 0 10px rgba(220,38,38,0.5); }
+              50% { text-shadow: 0 0 40px rgba(220,38,38,1), 0 0 20px rgba(220,38,38,0.8), 0 0 10px rgba(220,38,38,0.6); }
             }
+          `}</style>
+          <h2
+            className={`text-5xl font-extrabold mb-2 ${expired ? 'text-red-600' : ''}`}
+            style={expired ? { animation: 'alarmPulse 0.4s ease-in-out infinite' } : undefined}
           >
             {formatRemaining(remainingMs ?? 0)}
           </h2>
