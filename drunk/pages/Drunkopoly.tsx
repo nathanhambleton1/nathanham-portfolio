@@ -122,6 +122,7 @@ const Drunkopoly = () => {
   const realtimeChannelRef = useRef<any>(null);
   const [bankruptModalOpen, setBankruptModalOpen] = useState(false);
   const [bankruptStatusOpen, setBankruptStatusOpen] = useState(false);
+  const [gameWon, setGameWon] = useState(false);
   const [blockedPaymentMessage, setBlockedPaymentMessage] = useState<string | null>(null);
   const [unreadMessageCount, setUnreadMessageCount] = useState<number>(0);
   const prevBalanceRef = useRef<number | null>(null);
@@ -1215,20 +1216,21 @@ const Drunkopoly = () => {
   };
 
   // Handle bankruptcy - send all money to another player and enter ghost mode
-  const handleBankrupt = async (recipientId: string): Promise<void> => {
+  const handleBankrupt = async (recipientId: string | null): Promise<void> => {
     if (!game || !player) return;
     try {
       const currentBalance = player.balance ?? 0;
-      
-      // Transfer all money to recipient if there is any
-      if (currentBalance > 0) {
-        await processPayments(game.code, player.id, [{ to: recipientId, amount: currentBalance }], { 
+      const toBank = recipientId === null;
+
+      // Transfer all money to recipient (or return to bank — no processPayments needed, balance just zeroed)
+      if (currentBalance > 0 && !toBank) {
+        await processPayments(game.code, player.id, [{ to: recipientId, amount: currentBalance }], {
           mode: 'players',
           description: `${player.name} declared bankruptcy`
         });
       }
 
-      // Transfer all properties (clear houses and transfer ownership) to recipient
+      // Transfer or clear properties
       try {
         const { data: ownedProps, error: ownedErr } = await supabase
           .from('property_ownership')
@@ -1241,10 +1243,15 @@ const Drunkopoly = () => {
         if (ownedProps && ownedProps.length) {
           for (const p of ownedProps) {
             try {
-              await supabase
-                .from('property_ownership')
-                .update({ player_id: recipientId, houses: 0, updated_at: new Date().toISOString() })
-                .eq('id', p.id);
+              if (toBank) {
+                // Return properties to bank — delete ownership record so they become unowned
+                await supabase.from('property_ownership').delete().eq('id', p.id);
+              } else {
+                await supabase
+                  .from('property_ownership')
+                  .update({ player_id: recipientId, houses: 0, updated_at: new Date().toISOString() })
+                  .eq('id', p.id);
+              }
             } catch (uErr) {
               console.warn('Failed to transfer property', p.id, uErr);
             }
@@ -1257,16 +1264,16 @@ const Drunkopoly = () => {
       // Mark player as bankrupt
       await supabase
         .from('players')
-        .update({ 
-          is_bankrupt: true, 
+        .update({
+          is_bankrupt: true,
           bankrupt_at: new Date().toISOString(),
-          balance: 0 
+          balance: 0
         })
         .eq('id', player.id);
 
       // Log bankruptcy event
       try {
-        const recipient = playersList.find((p: any) => p.id === recipientId);
+        const recipient = recipientId ? playersList.find((p: any) => p.id === recipientId) : null;
         await supabase.from('money_events').insert([{
           game_id: game.id,
           actor_player_id: player.id,
@@ -1274,7 +1281,9 @@ const Drunkopoly = () => {
           to_player_id: recipientId,
           amount: 0,
           type: 'bankruptcy',
-          description: `${player.name} declared bankruptcy and sent $${currentBalance.toLocaleString()} to ${recipient?.name ?? 'another player'}`,
+          description: toBank
+            ? `${player.name} declared bankruptcy and returned $${currentBalance.toLocaleString()} to the bank`
+            : `${player.name} declared bankruptcy and sent $${currentBalance.toLocaleString()} to ${recipient?.name ?? 'another player'}`,
         }]);
       } catch (logErr) {
         console.warn('Failed to log bankruptcy', logErr);
@@ -1299,31 +1308,6 @@ const Drunkopoly = () => {
       const updatedPlayer = players.find((p: any) => String(p.id) === String(player.id));
       if (updatedPlayer) setPlayer(updatedPlayer);
 
-      // Check if only one non-bankrupt player remains — they win
-      const remaining = players.filter((p: any) => !p.is_bankrupt);
-      if (remaining.length === 1 && remaining[0].user_id) {
-        try {
-          const winnerId = remaining[0].user_id;
-          const { data: winnerUser } = await supabase
-            .from('drunk_users')
-            .select('wins')
-            .eq('id', winnerId)
-            .single();
-          if (winnerUser) {
-            await supabase
-              .from('drunk_users')
-              .update({ wins: (winnerUser.wins ?? 0) + 1 })
-              .eq('id', winnerId);
-            // If the winner is the current user (edge case), refresh local state too
-            if (currentUser?.id === winnerId) {
-              persistAuthUser({ ...currentUser, wins: (winnerUser.wins ?? 0) + 1 });
-            }
-          }
-        } catch (winErr) {
-          console.warn('Failed to record win', winErr);
-        }
-      }
-
       try {
         toast({
           title: 'Bankruptcy Declared',
@@ -1345,6 +1329,41 @@ const Drunkopoly = () => {
       throw err;
     }
   };
+
+  // Detect when the current player is the last one standing and show win screen
+  useEffect(() => {
+    if (!player || player.is_bankrupt || !playersList || playersList.length < 2) return;
+    const nonBankrupt = playersList.filter((p: any) => !p.is_bankrupt);
+    const anyBankrupt = playersList.some((p: any) => p.is_bankrupt);
+    if (nonBankrupt.length === 1 && String(nonBankrupt[0].id) === String(player.id) && anyBankrupt) {
+      setGameWon(true);
+    }
+  }, [playersList, player?.id, player?.is_bankrupt]);
+
+  // Record win on the winner's own client when they are the last one standing
+  const winRecordedRef = useRef(false);
+  useEffect(() => {
+    if (!gameWon || !currentUser?.id || winRecordedRef.current) return;
+    winRecordedRef.current = true;
+    (async () => {
+      try {
+        const { data: userData } = await supabase
+          .from('drunk_users')
+          .select('wins')
+          .eq('id', currentUser.id)
+          .single();
+        if (userData) {
+          await supabase
+            .from('drunk_users')
+            .update({ wins: (userData.wins ?? 0) + 1 })
+            .eq('id', currentUser.id);
+          persistAuthUser({ ...currentUser, wins: (currentUser.wins ?? 0) + 1 });
+        }
+      } catch (winErr) {
+        console.warn('Failed to record win', winErr);
+      }
+    })();
+  }, [gameWon, currentUser?.id]);
 
   // Assign sips
   const assignSips = async (code: string, actor_player_id: string, to_player_id: string, sip_count: number) => {
@@ -3908,6 +3927,7 @@ const Drunkopoly = () => {
           expiresAt={game?.trade_timer_expires_at}
           startedByName={playersList?.find((p: any) => p.id === game?.trade_started_by)?.name ?? null}
           onDone={() => stopTradeTimer()}
+          soundEnabled={soundEnabled}
           currentBalance={player?.balance ?? 0}
           players={playersList}
           showBalances={game?.show_balances ?? true}
@@ -3993,6 +4013,31 @@ const Drunkopoly = () => {
           onOpenCollect={() => { setCollectModalOpen(true); setCollectMode('bank'); }}
           onCollect={handleCollect}
         />
+
+        {/* Win overlay — shown when this player is the last one standing */}
+        {gameWon && (
+          <div className="fixed inset-0 z-[100001] pointer-events-auto overflow-auto" style={{ backgroundColor: 'hsl(var(--background))' }}>
+            <div className="min-h-screen flex items-center justify-center px-6 py-12">
+              <div className="max-w-sm w-full text-center">
+                <div className="text-6xl mb-4">🏆</div>
+                <h1 className="text-4xl font-extrabold mb-2" style={{ color: 'hsl(var(--primary))' }}>You Won!</h1>
+                <p className="text-lg mb-1" style={{ color: 'hsl(var(--foreground))' }}>
+                  Everyone else has gone bankrupt.
+                </p>
+                <p className="text-muted-foreground mb-8">
+                  Final balance: <span className="font-semibold text-foreground">${(player?.balance ?? 0).toLocaleString()}</span>
+                </p>
+                <button
+                  className="w-full px-4 py-3 rounded text-lg font-semibold"
+                  style={{ background: 'hsl(var(--primary))', color: 'hsl(var(--primary-foreground))' }}
+                  onClick={() => setGameWon(false)}
+                >
+                  Continue
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
 
         <SipsLockOverlay
           open={sipsOverlayOpen}

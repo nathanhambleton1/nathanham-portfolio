@@ -334,11 +334,11 @@ export default function RoulettePopup({
   return (
     <Dialog open={open} onOpenChange={v => { if (phase === 'spinning') return; onOpenChange(v); }}>
       <DialogContent
-        className="p-0 border border-border overflow-hidden max-w-md w-full bg-background"
-        style={{ maxHeight: '92vh', display: 'flex', flexDirection: 'column' }}
+        className="p-0 border border-border overflow-y-auto max-w-md w-full bg-background"
+        style={{ maxHeight: '92dvh' }}
       >
-        {/* Header */}
-        <div className="px-4 pt-4 pb-3 flex-shrink-0 border-b border-border">
+        {/* Header — sticky so it stays visible while body scrolls */}
+        <div className="sticky top-0 z-10 px-4 pt-4 pb-3 border-b border-border bg-background">
           <div className="text-center">
             <div className="text-lg font-bold text-foreground">Roulette</div>
             <div className="text-sm text-muted-foreground">
@@ -354,7 +354,7 @@ export default function RoulettePopup({
         </div>
 
         {/* Scrollable body */}
-        <div className="overflow-y-auto flex-1 px-3 py-3 flex flex-col gap-3">
+        <div className="px-3 py-3 flex flex-col gap-3">
           {/* Wheel */}
           <div className="flex justify-center">
             <div className="relative" style={{ width: 180, height: 180 }}>
@@ -410,8 +410,8 @@ export default function RoulettePopup({
           )}
         </div>
 
-        {/* Footer */}
-        <div className="px-4 py-3 flex-shrink-0 border-t border-border">
+        {/* Footer — sticky so it stays visible while body scrolls */}
+        <div className="sticky bottom-0 z-10 px-4 py-3 border-t border-border bg-background">
           {phase === 'bet' && (
             <div className="flex gap-2">
               <Button

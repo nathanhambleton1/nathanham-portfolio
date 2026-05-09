@@ -271,6 +271,7 @@ export default function PayPopup({
               className={`bg-primary${insufficientFunds ? ' opacity-60 cursor-not-allowed' : ''}`}
               disabled={
                 (mode === 'players' && selectedIds.size === 0) ||
+                (mode === 'tax' && amountPer === 0) ||
                 insufficientFunds
               }
             >

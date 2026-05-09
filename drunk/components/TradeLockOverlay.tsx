@@ -28,6 +28,7 @@ export default function TradeLockOverlay({
   onPaySubmit,
   onOpenCollect,
   onCollect,
+  soundEnabled = true,
 }: {
   open: boolean;
   expiresAt?: string | null;
@@ -43,6 +44,7 @@ export default function TradeLockOverlay({
   onPaySubmit?: (payments: { to: string | null; amount: number }[], opts?: { freeParking?: boolean; description?: string | null; mode?: 'bank' | 'players' | 'tax' }) => Promise<void> | void;
   onOpenCollect?: () => void;
   onCollect?: (opts: any) => Promise<void> | void;
+  soundEnabled?: boolean;
 }) {
   const [now, setNow] = useState(() => Date.now());
   const audioRef = React.useRef<HTMLAudioElement | null>(null);
@@ -112,17 +114,19 @@ export default function TradeLockOverlay({
     const expiredNow = expires ? (expires - Date.now() <= 0) : false;
     if (expiredNow && !hasPlayedRef.current) {
       hasPlayedRef.current = true;
-      try {
-        const a = audioRef.current;
-        if (a) {
-          a.currentTime = 0;
-          a.play().catch((err) => console.warn('Alarm play failed:', err));
+      if (soundEnabled) {
+        try {
+          const a = audioRef.current;
+          if (a) {
+            a.currentTime = 0;
+            a.play().catch((err) => console.warn('Alarm play failed:', err));
+          }
+        } catch (err) {
+          console.warn('Alarm play error:', err);
         }
-      } catch (err) {
-        console.warn('Alarm play error:', err);
       }
     }
-  }, [open, expiresAt, now]);
+  }, [open, expiresAt, now, soundEnabled]);
 
   if (!open) return null;
 

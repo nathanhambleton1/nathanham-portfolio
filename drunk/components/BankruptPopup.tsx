@@ -42,7 +42,7 @@ export default function BankruptPopup({
   currentPlayer: Player | null;
   players?: Player[];
   showBalances?: boolean;
-  onSubmit: (recipientId: string) => void;
+  onSubmit: (recipientId: string | null) => void;
   gameId?: string | null;
 }) {
   const others = useMemo(() => {
@@ -84,6 +84,9 @@ export default function BankruptPopup({
   const currentBalance = currentPlayer?.balance ?? 0;
   const selectedPlayer = others.find((p) => p.id === selectedId);
 
+  const BANK_SENTINEL = '__bank__';
+  const isBank = selectedId === BANK_SENTINEL;
+
   const handleSubmit = () => {
     if (!selectedId) return;
     setConfirmOpen(true);
@@ -91,7 +94,7 @@ export default function BankruptPopup({
 
   const handleConfirm = () => {
     if (!selectedId) return;
-    onSubmit(selectedId);
+    onSubmit(isBank ? null : selectedId);
     setConfirmOpen(false);
     onOpenChange(false);
   };
@@ -105,58 +108,68 @@ export default function BankruptPopup({
             <DialogHeader>
               <DialogTitle>Declare Bankruptcy</DialogTitle>
               <DialogDescription>
-                You're about to declare bankruptcy and enter ghost mode. All of your money (${currentBalance.toLocaleString()}) will be transferred to another player. This action cannot be undone.
+                You're about to declare bankruptcy and enter ghost mode. All of your money (${currentBalance.toLocaleString()}) will be transferred to a player or the bank. This action cannot be undone.
               </DialogDescription>
             </DialogHeader>
 
             <div className="mt-6 space-y-3">
-              <div className="text-sm font-medium mb-2">Select a player to receive your money:</div>
-              
-              {others.length === 0 ? (
-                <div className="text-center py-8 text-muted-foreground">
-                  No other players available
+              <div className="text-sm font-medium mb-2">Select who receives your money:</div>
+
+              <div className="space-y-2 max-h-[400px] overflow-y-auto">
+                {/* Bank option — always available */}
+                <div
+                  onClick={() => setSelectedId(BANK_SENTINEL)}
+                  className={`p-3 rounded-lg border-2 transition-all cursor-pointer ${
+                    selectedId === BANK_SENTINEL
+                      ? "border-primary bg-primary/10"
+                      : "border-border hover:border-primary/50 hover:bg-muted/50"
+                  }`}
+                >
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <div className="font-medium">Bank</div>
+                      <div className="text-sm text-muted-foreground">Money is returned to the bank</div>
+                    </div>
+                    {selectedId === BANK_SENTINEL && (
+                      <div className="h-5 w-5 rounded-full bg-primary flex items-center justify-center">
+                        <svg className="h-3 w-3 text-primary-foreground" fill="none" strokeLinecap="round" strokeLinejoin="round" strokeWidth="3" viewBox="0 0 24 24" stroke="currentColor">
+                          <polyline points="20 6 9 17 4 12" />
+                        </svg>
+                      </div>
+                    )}
+                  </div>
                 </div>
-              ) : (
-                <div className="space-y-2 max-h-[400px] overflow-y-auto">
-                  {others.map((p) => (
-                    <div
-                      key={p.id}
-                      onClick={() => setSelectedId(p.id)}
-                      className={`p-3 rounded-lg border-2 transition-all cursor-pointer ${
-                        selectedId === p.id
-                          ? "border-primary bg-primary/10"
-                          : "border-border hover:border-primary/50 hover:bg-muted/50"
-                      }`}
-                    >
-                      <div className="flex items-center justify-between">
-                        <div>
-                          <div className="font-medium">{p.name}</div>
-                          {showBalances && (
-                            <div className="text-sm text-muted-foreground">
-                              Current: ${(p.balance ?? 0).toLocaleString()}
-                            </div>
-                          )}
-                        </div>
-                        {selectedId === p.id && (
-                          <div className="h-5 w-5 rounded-full bg-primary flex items-center justify-center">
-                            <svg
-                              className="h-3 w-3 text-primary-foreground"
-                              fill="none"
-                              strokeLinecap="round"
-                              strokeLinejoin="round"
-                              strokeWidth="3"
-                              viewBox="0 0 24 24"
-                              stroke="currentColor"
-                            >
-                              <polyline points="20 6 9 17 4 12" />
-                            </svg>
+
+                {others.map((p) => (
+                  <div
+                    key={p.id}
+                    onClick={() => setSelectedId(p.id)}
+                    className={`p-3 rounded-lg border-2 transition-all cursor-pointer ${
+                      selectedId === p.id
+                        ? "border-primary bg-primary/10"
+                        : "border-border hover:border-primary/50 hover:bg-muted/50"
+                    }`}
+                  >
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <div className="font-medium">{p.name}</div>
+                        {showBalances && (
+                          <div className="text-sm text-muted-foreground">
+                            Current: ${(p.balance ?? 0).toLocaleString()}
                           </div>
                         )}
                       </div>
+                      {selectedId === p.id && (
+                        <div className="h-5 w-5 rounded-full bg-primary flex items-center justify-center">
+                          <svg className="h-3 w-3 text-primary-foreground" fill="none" strokeLinecap="round" strokeLinejoin="round" strokeWidth="3" viewBox="0 0 24 24" stroke="currentColor">
+                            <polyline points="20 6 9 17 4 12" />
+                          </svg>
+                        </div>
+                      )}
                     </div>
-                  ))}
-                </div>
-              )}
+                  </div>
+                ))}
+              </div>
             </div>
             {/* Game stats moved to the BankruptStatus component (shown after declaring bankruptcy) */}
 
@@ -182,7 +195,7 @@ export default function BankruptPopup({
           <AlertDialogHeader>
             <AlertDialogTitle>Are you sure?</AlertDialogTitle>
             <AlertDialogDescription className="space-y-2">
-              <p>This will: Transfer all ${currentBalance.toLocaleString()} to {selectedPlayer?.name}, put you in ghost mode (spectator), and prevent you from participating in payments.</p>
+              <p>This will: {isBank ? `Return all $${currentBalance.toLocaleString()} to the bank` : `Transfer all $${currentBalance.toLocaleString()} to ${selectedPlayer?.name}`}, put you in ghost mode (spectator), and prevent you from participating in payments.</p>
                 <p className="font-semibold text-destructive mt-4 text-white">This action cannot be undone!</p>
 
               {/* Stats moved to main bankruptcy dialog */}
