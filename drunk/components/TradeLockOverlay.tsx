@@ -84,6 +84,16 @@ export default function TradeLockOverlay({
     if (open) setDropdownOpen(null);
   }, [open]);
 
+  // Stop audio immediately whenever the overlay closes (Done clicked, or another player cleared it)
+  useEffect(() => {
+    if (!open && audioRef.current) {
+      try {
+        audioRef.current.pause();
+        audioRef.current.currentTime = 0;
+      } catch (e) {}
+    }
+  }, [open]);
+
   // Ensure any internal popup state is reset when the overlay opens so it
   // doesn't auto-open stale dialogs from previous mounts.
   useEffect(() => {

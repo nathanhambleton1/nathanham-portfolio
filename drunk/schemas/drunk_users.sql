@@ -8,6 +8,7 @@ create table public.drunk_users (
   bio text null,
   wins integer null default 0,
   losses integer null default 0,
+  total_sips integer not null default 0,
   created_at timestamp with time zone null default now(),
   constraint drunk_users_pkey primary key (id),
   constraint drunk_users_username_key unique (username)

@@ -94,6 +94,9 @@ const Drunkopoly = () => {
   const [recentPlayers, setRecentPlayers] = useState<any[] | null>(null);
   const [playersList, setPlayersList] = useState<any[]>([]);
   const alertedMessengerRef = useRef<Map<string, string | null>>(new Map());
+  const soundEnabledRef = useRef<boolean>(
+    (() => { try { const s = typeof window !== 'undefined' ? localStorage.getItem('drunkopoly:soundEnabled') : null; return s !== null ? s === 'true' : true; } catch { return true; } })()
+  );
   const [removedNoticeOpen, setRemovedNoticeOpen] = useState(false);
   const [removedNoticeMsg, setRemovedNoticeMsg] = useState<string | null>(null);
   const [payModalOpen, setPayModalOpen] = useState(false);
@@ -227,6 +230,8 @@ const Drunkopoly = () => {
       return true;
     }
   });
+  // Keep ref in sync so polling closures always read the latest value
+  useEffect(() => { soundEnabledRef.current = soundEnabled; }, [soundEnabled]);
   // Show brief notification when the current player receives a money event.
   // Subscribe to the `game_events` view (same source ActivityLog uses) and show
   // a toast containing the sender name + optional note.
@@ -1331,8 +1336,10 @@ const Drunkopoly = () => {
   };
 
   // Detect when the current player is the last one standing and show win screen
+  const winDismissedRef = useRef(false);
   useEffect(() => {
     if (!player || player.is_bankrupt || !playersList || playersList.length < 2) return;
+    if (winDismissedRef.current) return;
     const nonBankrupt = playersList.filter((p: any) => !p.is_bankrupt);
     const anyBankrupt = playersList.some((p: any) => p.is_bankrupt);
     if (nonBankrupt.length === 1 && String(nonBankrupt[0].id) === String(player.id) && anyBankrupt) {
@@ -1513,6 +1520,20 @@ const Drunkopoly = () => {
         .update({ pending_sips: 0, total_sips: newTotalSips })
         .eq('id', actor_player_id);
 
+      // Increment user account total_sips if this player is linked to a user account
+      if (totalCompleted > 0 && playerRow.user_id) {
+        try {
+          const { data: uRow } = await supabase.from('drunk_users').select('total_sips').eq('id', playerRow.user_id).limit(1).single();
+          const newUserSips = (uRow?.total_sips ?? 0) + totalCompleted;
+          await supabase.from('drunk_users').update({ total_sips: newUserSips }).eq('id', playerRow.user_id);
+          if (currentUser?.id === playerRow.user_id) {
+            persistAuthUser({ ...currentUser, total_sips: newUserSips });
+          }
+        } catch (userSipErr) {
+          console.warn('Failed to update user total_sips', userSipErr);
+        }
+      }
+
       // Log completion to money_events so ActivityLog shows a separate "completed" entry
       try {
         if ((totalCompleted || 0) > 0) {
@@ -1574,7 +1595,7 @@ const Drunkopoly = () => {
       // Decrement pending_sips, increment total_sips
       const { data: pRows, error: pErr } = await supabase
         .from('players')
-        .select('pending_sips,total_sips,name')
+        .select('pending_sips,total_sips,name,user_id')
         .eq('id', actor_player_id)
         .eq('game_id', game.id)
         .limit(1);
@@ -1589,6 +1610,20 @@ const Drunkopoly = () => {
         .from('players')
         .update({ pending_sips: newPending, total_sips: newTotal })
         .eq('id', actor_player_id);
+
+      // Increment user account total_sips if this player is linked to a user account
+      if (playerRow.user_id) {
+        try {
+          const { data: uRow } = await supabase.from('drunk_users').select('total_sips').eq('id', playerRow.user_id).limit(1).single();
+          const newUserSips = (uRow?.total_sips ?? 0) + sipCount;
+          await supabase.from('drunk_users').update({ total_sips: newUserSips }).eq('id', playerRow.user_id);
+          if (currentUser?.id === playerRow.user_id) {
+            persistAuthUser({ ...currentUser, total_sips: newUserSips });
+          }
+        } catch (userSipErr) {
+          console.warn('Failed to update user total_sips', userSipErr);
+        }
+      }
 
       try {
         await supabase.from('money_events').insert([{
@@ -2079,7 +2114,7 @@ const Drunkopoly = () => {
                       const sender = m[1];
                       const msg = m[2] || 'You have a new message.';
                       toast({ title: `New message from ${sender}`, description: msg });
-                      if (soundEnabled) {
+                      if (soundEnabledRef.current) {
                         try {
                           const a = new Audio('/message.mp3');
                           const p = a.play();
@@ -2088,7 +2123,7 @@ const Drunkopoly = () => {
                       }
                     } else {
                       toast({ title: 'New message', description: md || 'You have a new message.' });
-                      if (soundEnabled) {
+                      if (soundEnabledRef.current) {
                         try {
                           const a = new Audio('/message.mp3');
                           const p = a.play();
@@ -2492,6 +2527,10 @@ const Drunkopoly = () => {
                     setProfileLastName(currentUser.last_name || '');
                     setProfileAvatarFile(null);
                     setProfileAvatarPreview(null);
+                    // Refresh user record so stats (total_sips, wins, losses) are current
+                    supabase.from('drunk_users').select('*').eq('id', currentUser.id).limit(1).single()
+                      .then(({ data }) => { if (data) persistAuthUser(data); })
+                      .catch(() => {});
                     setScreen('profile');
                   } else {
                     setStandaloneAuthMode('signin');
@@ -2770,24 +2809,31 @@ const Drunkopoly = () => {
               </div>
 
               {/* Stats */}
-              <div className="flex gap-4 p-4 rounded-lg bg-muted/40 border border-border mb-6">
-                <div className="flex-1 text-center">
-                  <div className="text-2xl font-bold text-primary">{currentUser.wins ?? 0}</div>
-                  <div className="text-xs text-muted-foreground mt-0.5">Wins</div>
-                </div>
-                <div className="w-px bg-border" />
-                <div className="flex-1 text-center">
-                  <div className="text-2xl font-bold">{currentUser.losses ?? 0}</div>
-                  <div className="text-xs text-muted-foreground mt-0.5">Losses</div>
-                </div>
-                <div className="w-px bg-border" />
-                <div className="flex-1 text-center">
-                  <div className="text-2xl font-bold">
-                    {(currentUser.wins ?? 0) + (currentUser.losses ?? 0) > 0
-                      ? Math.round(((currentUser.wins ?? 0) / ((currentUser.wins ?? 0) + (currentUser.losses ?? 0))) * 100)
-                      : 0}%
+              <div className="rounded-lg bg-muted/40 border border-border mb-6 overflow-hidden">
+                <div className="flex gap-4 p-4">
+                  <div className="flex-1 text-center">
+                    <div className="text-2xl font-bold text-primary">{currentUser.wins ?? 0}</div>
+                    <div className="text-xs text-muted-foreground mt-0.5">Wins</div>
                   </div>
-                  <div className="text-xs text-muted-foreground mt-0.5">Win rate</div>
+                  <div className="w-px bg-border" />
+                  <div className="flex-1 text-center">
+                    <div className="text-2xl font-bold">{currentUser.losses ?? 0}</div>
+                    <div className="text-xs text-muted-foreground mt-0.5">Losses</div>
+                  </div>
+                  <div className="w-px bg-border" />
+                  <div className="flex-1 text-center">
+                    <div className="text-2xl font-bold">
+                      {(currentUser.wins ?? 0) + (currentUser.losses ?? 0) > 0
+                        ? Math.round(((currentUser.wins ?? 0) / ((currentUser.wins ?? 0) + (currentUser.losses ?? 0))) * 100)
+                        : 0}%
+                    </div>
+                    <div className="text-xs text-muted-foreground mt-0.5">Win rate</div>
+                  </div>
+                </div>
+                <div className="h-px bg-border" />
+                <div className="flex items-center justify-center gap-2 py-3 px-4">
+                  <div className="text-2xl font-bold text-amber-500">{(currentUser.total_sips ?? 0).toLocaleString()}</div>
+                  <div className="text-xs text-muted-foreground">Total sips all time</div>
                 </div>
               </div>
 
@@ -4030,7 +4076,7 @@ const Drunkopoly = () => {
                 <button
                   className="w-full px-4 py-3 rounded text-lg font-semibold"
                   style={{ background: 'hsl(var(--primary))', color: 'hsl(var(--primary-foreground))' }}
-                  onClick={() => setGameWon(false)}
+                  onClick={() => { winDismissedRef.current = true; setGameWon(false); }}
                 >
                   Continue
                 </button>
