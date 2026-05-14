@@ -87,7 +87,7 @@ const Drunkopoly = () => {
   const [tempShowBalances, setTempShowBalances] = useState<boolean>(true);
   const [tempSipsEnabled, setTempSipsEnabled] = useState<boolean>(true);
   const [tempExpansionEnabled, setTempExpansionEnabled] = useState<boolean>(false);
-  const [tempGamblingEnabled, setTempGamblingEnabled] = useState<boolean>(false);
+  const [tempGamblingEnabled, setTempGamblingEnabled] = useState<boolean>(true);
   const [game, setGame] = useState<any | null>(null);
   const [player, setPlayer] = useState<any | null>(null);
   const [recentGames, setRecentGames] = useState<string[]>([]);
@@ -3296,22 +3296,22 @@ const Drunkopoly = () => {
                 </div>
                 <div className="flex items-center justify-between py-2 px-3 rounded-lg bg-muted/30 mt-2">
                   <div className="flex-1">
-                    <div className="font-medium text-sm">Expansion Pack</div>
-                    <div className="text-xs text-muted-foreground">When enabled, all payments to the bank go into Free Parking</div>
-                  </div>
-                  <Switch
-                    checked={tempExpansionEnabled}
-                    onCheckedChange={(checked) => setTempExpansionEnabled(checked)}
-                  />
-                </div>
-                <div className="flex items-center justify-between py-2 px-3 rounded-lg bg-muted/30 mt-2">
-                  <div className="flex-1">
                     <div className="font-medium text-sm">Gambling</div>
                     <div className="text-xs text-muted-foreground">Lets players gamble Pass Go or Free Parking on a roulette spin</div>
                   </div>
                   <Switch
                     checked={tempGamblingEnabled}
                     onCheckedChange={(checked) => setTempGamblingEnabled(checked)}
+                  />
+                </div>
+                <div className="flex items-center justify-between py-2 px-3 rounded-lg bg-muted/30 mt-2">
+                  <div className="flex-1">
+                    <div className="font-medium text-sm">Expansion Pack</div>
+                    <div className="text-xs text-muted-foreground">When enabled, all payments to the bank go into Free Parking</div>
+                  </div>
+                  <Switch
+                    checked={tempExpansionEnabled}
+                    onCheckedChange={(checked) => setTempExpansionEnabled(checked)}
                   />
                 </div>
               </div>
