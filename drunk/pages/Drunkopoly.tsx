@@ -365,6 +365,7 @@ const Drunkopoly = () => {
       // mark online and sync avatar
       const onlineUpdate: any = { is_online: true, last_seen_at: new Date().toISOString() };
       if (currentUser?.avatar_url) onlineUpdate.avatar_url = currentUser.avatar_url;
+      if (currentUser?.id) onlineUpdate.user_id = currentUser.id;
       await supabase.from('players').update(onlineUpdate).eq('id', p.id);
       if (currentUser?.avatar_url) p = { ...p, avatar_url: currentUser.avatar_url };
 
