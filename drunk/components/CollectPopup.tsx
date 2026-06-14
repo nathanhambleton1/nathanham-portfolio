@@ -140,12 +140,13 @@ export default function CollectPopup({
 
         <DialogFooter>
           <div className="flex gap-2 w-full justify-end">
-            <Button variant="secondary" onClick={() => onOpenChange(false)}>Cancel</Button>
+            <Button variant="secondary" onMouseDown={(e) => e.preventDefault()} onClick={() => onOpenChange(false)}>Cancel</Button>
             {gamblingEnabled && (mode === 'free_parking' || (mode === 'pass_go' && doubled)) && (
               <Button
                 variant="outline"
                 className="border-red-500 text-red-500 hover:bg-red-50 dark:hover:bg-red-950"
                 disabled={mode === 'free_parking' && (game?.free_parking_balance || 0) === 0}
+                onMouseDown={(e) => e.preventDefault()}
                 onClick={() => {
                   const gambleAmt =
                     mode === 'pass_go'
@@ -159,6 +160,7 @@ export default function CollectPopup({
               </Button>
             )}
             <Button
+              onMouseDown={(e) => e.preventDefault()}
               onClick={handleSubmit}
               className="bg-primary"
               disabled={

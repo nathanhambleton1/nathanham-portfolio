@@ -4821,12 +4821,12 @@ function GameCodePopover({ code, onLogout, players, currentPlayer, game, onRemov
       </DialogContent>
     </Dialog>
     <Dialog open={settingsOpen} onOpenChange={setSettingsOpen}>
-      <DialogContent className="max-w-lg max-h-[90vh] overflow-auto">
-        <DialogHeader>
+      <DialogContent className="max-w-lg flex flex-col" style={{ maxHeight: 'calc(100dvh - 160px)' }}>
+        <DialogHeader className="shrink-0">
           <DialogTitle>Settings</DialogTitle>
         </DialogHeader>
-        
-        <div className="space-y-4 mt-2">
+
+        <div className="space-y-4 mt-2 overflow-y-auto flex-1 pr-1">
           <div>
             <button
               type="button"
@@ -4888,22 +4888,22 @@ function GameCodePopover({ code, onLogout, players, currentPlayer, game, onRemov
                       </div>
                       <div className="flex items-center justify-between py-2 px-3 rounded-lg bg-muted/10">
                         <div className="flex-1">
-                          <div className="font-medium text-sm">Expansion Pack</div>
-                          <div className="text-xs text-muted-foreground">Route payments to the bank into Free Parking</div>
-                        </div>
-                        <Switch
-                          checked={!!(game?.expansion_enabled ?? false)}
-                          onCheckedChange={(checked) => { if (onToggleExpansion) onToggleExpansion(checked); }}
-                        />
-                      </div>
-                      <div className="flex items-center justify-between py-2 px-3 rounded-lg bg-muted/10">
-                        <div className="flex-1">
                           <div className="font-medium text-sm">Gambling</div>
                           <div className="text-xs text-muted-foreground">Lets players gamble Pass Go or Free Parking on a roulette spin</div>
                         </div>
                         <Switch
                           checked={!!(game?.gambling_enabled ?? false)}
                           onCheckedChange={(checked) => { if (onToggleGambling) onToggleGambling(checked); }}
+                        />
+                      </div>
+                      <div className="flex items-center justify-between py-2 px-3 rounded-lg bg-muted/10">
+                        <div className="flex-1">
+                          <div className="font-medium text-sm">Expansion Pack</div>
+                          <div className="text-xs text-muted-foreground">Route payments to the bank into Free Parking</div>
+                        </div>
+                        <Switch
+                          checked={!!(game?.expansion_enabled ?? false)}
+                          onCheckedChange={(checked) => { if (onToggleExpansion) onToggleExpansion(checked); }}
                         />
                       </div>
                     </>
@@ -4985,8 +4985,8 @@ function GameCodePopover({ code, onLogout, players, currentPlayer, game, onRemov
             )}
           </div>
         </div>
-        
-        <DialogFooter>
+
+        <DialogFooter className="shrink-0">
           <Button onClick={() => setSettingsOpen(false)}>Close</Button>
         </DialogFooter>
       </DialogContent>

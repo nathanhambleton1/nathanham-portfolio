@@ -222,8 +222,9 @@ export default function PayPopup({
 
         <DialogFooter>
           <div className="flex gap-2 w-full justify-end">
-            <Button variant="secondary" onClick={() => onOpenChange(false)}>Cancel</Button>
+            <Button variant="secondary" onMouseDown={(e) => e.preventDefault()} onClick={() => onOpenChange(false)}>Cancel</Button>
             <Button
+              onMouseDown={(e) => e.preventDefault()}
               onClick={handleSubmit}
               className={`bg-primary${insufficientFunds ? ' opacity-60 cursor-not-allowed' : ''}`}
               disabled={

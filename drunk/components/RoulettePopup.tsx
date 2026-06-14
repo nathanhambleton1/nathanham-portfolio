@@ -167,6 +167,13 @@ function BettingTable({
   resultNum?: number | null;
   disabled?: boolean;
 }) {
+  const [showNumberAlert, setShowNumberAlert] = useState(false);
+
+  const handleValidBetSelect = (b: Bet) => {
+    setShowNumberAlert(false);
+    onSelect?.(b);
+  };
+
   const isSel = (b: Bet) => {
     if (!selected) return false;
     if (b.kind !== selected.kind) return false;
@@ -180,18 +187,25 @@ function BettingTable({
 
   return (
     <div className="w-full rounded-lg border border-border overflow-hidden bg-card">
-      {/* 0 and 00 */}
+      {/* Number-bets-not-allowed banner */}
+      <div
+        className={`overflow-hidden transition-all duration-300 ${showNumberAlert ? 'max-h-10 opacity-100' : 'max-h-0 opacity-0'}`}
+      >
+        <div className="bg-amber-500/15 border-b border-amber-500/30 text-amber-700 dark:text-amber-400 text-xs text-center py-1.5 px-2 font-medium">
+          Number bets aren't allowed — keeps the game fair!
+        </div>
+      </div>
+
+      {/* 0 and 00 — display only, not bettable */}
       <div className="flex gap-px p-px">
         {[0, 37].map(n => {
-          const sel = isSel({ kind: 'number', value: n }) ? 'ring-2 ring-primary scale-105' : '';
           const res = isResult(n) ? 'ring-4 ring-primary animate-pulse' : '';
           return (
             <button
               key={n}
               type="button"
-              disabled={disabled}
-              className={`${cellBase} flex-1 bg-muted hover:bg-accent text-foreground py-1.5 ${sel} ${res} ${!disabled ? 'cursor-pointer' : 'cursor-default'}`}
-              onClick={() => !disabled && onSelect?.({ kind: 'number', value: n })}
+              className={`${cellBase} flex-1 bg-muted/50 text-muted-foreground/60 py-1.5 cursor-not-allowed opacity-60 ${res}`}
+              onClick={() => !disabled && setShowNumberAlert(true)}
             >
               {numLabel(n)}
             </button>
@@ -199,50 +213,28 @@ function BettingTable({
         })}
       </div>
 
-      {/* Number grid */}
+      {/* Number grid — display only, not bettable */}
       <div className="grid p-px gap-px" style={{ gridTemplateColumns: 'repeat(12, 1fr)' }}>
         {ROWS.map((row, ri) =>
           row.map(n => {
             const color = numColor(n);
             const bg = color === 'red'
-              ? 'bg-red-700 hover:bg-red-600 text-white'
-              : 'bg-neutral-800 hover:bg-neutral-700 text-white';
-            const sel = isSel({ kind: 'number', value: n }) ? 'ring-2 ring-primary scale-105 z-10' : '';
+              ? 'bg-red-700/40 text-white/50'
+              : 'bg-neutral-800/40 text-white/50';
             const res = isResult(n) ? 'ring-4 ring-primary animate-pulse' : '';
             return (
               <button
                 key={`${ri}-${n}`}
                 type="button"
-                disabled={disabled}
-                className={`${cellBase} ${bg} ${sel} ${res} w-full ${!disabled ? 'cursor-pointer' : 'cursor-default'}`}
+                className={`${cellBase} ${bg} ${res} w-full cursor-not-allowed`}
                 style={{ aspectRatio: '1 / 1.4' }}
-                onClick={() => !disabled && onSelect?.({ kind: 'number', value: n })}
+                onClick={() => !disabled && setShowNumberAlert(true)}
               >
                 {n}
               </button>
             );
           })
         )}
-      </div>
-
-      {/* Dozen row */}
-      <div className="grid grid-cols-3 gap-px p-px">
-        {([1, 2, 3] as const).map(d => {
-          const bet: Bet = { kind: 'dozen', value: d };
-          const sel = isSel(bet) ? 'ring-2 ring-primary scale-105' : '';
-          const lbl = d === 1 ? '1st 12' : d === 2 ? '2nd 12' : '3rd 12';
-          return (
-            <button
-              key={d}
-              type="button"
-              disabled={disabled}
-              className={`${cellBase} py-1.5 text-center text-xs bg-muted hover:bg-accent text-foreground ${sel} ${!disabled ? 'cursor-pointer' : 'cursor-default'}`}
-              onClick={() => !disabled && onSelect?.(bet)}
-            >
-              {lbl}
-            </button>
-          );
-        })}
       </div>
 
       {/* Even-money row */}
@@ -267,7 +259,7 @@ function BettingTable({
               type="button"
               disabled={disabled}
               className={`${cellBase} py-1.5 text-center text-xs ${bg} ${sel} ${!disabled ? 'cursor-pointer' : 'cursor-default'}`}
-              onClick={() => !disabled && onSelect?.(bet)}
+              onClick={() => !disabled && handleValidBetSelect(bet)}
             >
               {lbl}
             </button>
@@ -399,13 +391,13 @@ export default function RoulettePopup({
             )}
           </div>
 
-          {/* Betting Table */}
-          {phase !== 'spinning' && (
+          {/* Betting Table — only shown while placing a bet */}
+          {phase === 'bet' && (
             <BettingTable
               selected={selected}
-              onSelect={phase === 'bet' ? setSelected : undefined}
-              resultNum={resultNum}
-              disabled={phase === 'result'}
+              onSelect={setSelected}
+              resultNum={null}
+              disabled={false}
             />
           )}
         </div>
