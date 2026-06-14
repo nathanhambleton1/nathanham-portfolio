@@ -1,4 +1,4 @@
-import React, { useMemo, useState, useEffect } from "react";
+import React, { useMemo, useState, useEffect, useRef } from "react";
 import { setDropdownOpen } from "./ui/dropdown-menu";
 import useLockBodyScroll from "../hooks/use-lock-body-scroll";
 import PlayerAvatar from "./PlayerAvatar";
@@ -34,37 +34,30 @@ export default function PayPopup({
   showBalances?: boolean;
   onSubmit: (payments: { to: string | null; amount: number }[], opts?: { freeParking?: boolean; description?: string | null }) => void;
 }) {
-  // Free parking is always used for tax mode
   const others = useMemo(() => {
     if (!players) return [];
-    // Exclude current player and bankrupt players, sort others alphabetically
-    const otherPlayers = players
+    return players
       .filter((p) => p.id !== currentPlayer?.id && !(p as any).is_bankrupt)
-      .sort((a, b) => {
-        if (a.name && b.name) {
-          return a.name.localeCompare(b.name);
-        }
-        return 0;
-      });
-    return otherPlayers;
+      .sort((a, b) => a.name && b.name ? a.name.localeCompare(b.name) : 0);
   }, [players, currentPlayer]);
 
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
-  // For tax mode, start with no amount selected; for others, default to 5
-  const [amountPer, setAmountPer] = useState<number>(mode === 'tax' ? 0 : 5);
-  // keep the typed input separate from the slider value; start blank so users can type immediately
+  const [amountPer, setAmountPer] = useState<number>(0);
   const [rawAmount, setRawAmount] = useState<string>("");
   const [message, setMessage] = useState<string>("");
+  const inputRef = useRef<HTMLInputElement>(null);
 
-  // Initialize popup state only when the dialog actually opens (avoid resets during polling updates)
   const prevOpenRef = React.useRef<boolean>(false);
   useEffect(() => {
     const prev = prevOpenRef.current;
     if (!prev && open) {
-      setSelectedIds(new Set()); // Always start with no selection
-      setAmountPer(mode === 'tax' ? 0 : 5);
+      setSelectedIds(new Set());
+      setAmountPer(0);
       setRawAmount("");
       setMessage("");
+      if (mode !== 'tax') {
+        setTimeout(() => inputRef.current?.focus(), 80);
+      }
     }
     prevOpenRef.current = open;
   }, [open]);
@@ -77,14 +70,10 @@ export default function PayPopup({
 
   if (!mode) return null;
 
-  // For tax, always 1 payment (to bank or free parking), not per player
-  // Round up to the nearest $5 (always upward), never below 0
   const roundToFive = (v: number) => Math.max(0, Math.ceil(v / 5) * 5);
   const count = selectedIds.size || (mode === "bank" ? 1 : 0);
-  // If the user has typed an amount, use that (rounded). Otherwise fall back to slider `amountPer`.
   const rawAmountNum = rawAmount.trim() !== "" ? Number(rawAmount) || 0 : NaN;
   const roundedLive = !Number.isNaN(rawAmountNum) ? roundToFive(rawAmountNum) : amountPer;
-  // For tax mode, if nothing is selected, total should be $0
   const total = mode === "tax"
     ? (amountPer === 0 ? 0 : roundedLive)
     : (mode === "bank" ? roundedLive : roundedLive * count);
@@ -98,9 +87,7 @@ export default function PayPopup({
 
   const handleSubmit = () => {
     if (!currentPlayer) return;
-    // Use typed value if present, otherwise fall back to slider
     const rounded = rawAmount.trim() !== "" ? roundToFive(Number(rawAmount)) : amountPer;
-    setAmountPer(Math.min(rounded, visibleSliderMax));
     setRawAmount(String(rounded));
     let payments: { to: string | null; amount: number }[] = [];
     if (mode === "bank") {
@@ -108,23 +95,13 @@ export default function PayPopup({
     } else if (mode === "tax") {
       payments = [{ to: null, amount: rounded }];
     } else {
-      const ids = Array.from(selectedIds);
-      payments = ids.map((id) => ({ to: id, amount: rounded }));
+      payments = Array.from(selectedIds).map((id) => ({ to: id, amount: rounded }));
     }
     onSubmit(payments, { freeParking: mode === "tax", description: message || null });
     onOpenChange(false);
   };
 
-  // Compute player's numeric balance and determine slider max.
   const balance = Math.max(0, Number(currentPlayer?.balance ?? 0));
-  // Slider should be either 100 or the player's balance if it is lower than 100.
-  // For player-mode with recipients selected, cap per-player slider to floor(balance / count)
-  let visibleSliderMax = Math.min(100, balance);
-  if (mode === 'players' && count > 0) {
-    visibleSliderMax = Math.min(100, Math.max(0, Math.floor(balance / count)));
-  }
-
-  // Determine if the player has insufficient funds for the total payment
   const insufficientFunds = total > balance;
 
   return (
@@ -142,7 +119,6 @@ export default function PayPopup({
         </DialogHeader>
 
         <div className="space-y-4">
-          {/* Only show recipients for players mode */}
           {mode === "players" && (
             <div className="space-y-2">
               <div className="text-sm font-medium">Choose recipients</div>
@@ -165,90 +141,71 @@ export default function PayPopup({
               </div>
             </div>
           )}
-          <div className="space-y-1">
-            <div className="flex items-center justify-between">
-              <div className="text-sm font-medium">Amount</div>
-              <div className="text-sm text-muted-foreground">Total: ${total.toLocaleString()}</div>
-            </div>
-            {mode === 'tax' ? (
-              <div className="space-y-2">
-                <div className="text-sm font-medium">Tax Type</div>
-                <div className="flex gap-2">
-                  <button
-                    type="button"
-                    onClick={() => { setAmountPer(100); setRawAmount('100'); }}
-                    className={`px-4 py-3 rounded-lg border text-sm font-medium shadow-sm flex-1 transition-colors
-                      ${amountPer === 100
-                        ? 'bg-white text-black border-black'
-                        : 'bg-muted text-foreground border border-input hover:bg-accent hover:text-accent-foreground'}`}
-                  >
-                    Luxury Tax — $100
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => { setAmountPer(200); setRawAmount('200'); }}
-                    className={`px-4 py-3 rounded-lg border text-sm font-medium shadow-sm flex-1 transition-colors
-                      ${amountPer === 200
-                        ? 'bg-white text-black border-black'
-                        : 'bg-muted text-foreground border border-input hover:bg-accent hover:text-accent-foreground'}`}
-                  >
-                    Income Tax — $200
-                  </button>
-                </div>
+
+          {mode === 'tax' ? (
+            <div className="space-y-2">
+              <div className="text-sm font-medium">Tax Type</div>
+              <div className="flex gap-2">
+                <button
+                  type="button"
+                  onClick={() => { setAmountPer(100); setRawAmount('100'); }}
+                  className={`px-4 py-3 rounded-lg border text-sm font-medium shadow-sm flex-1 transition-colors
+                    ${amountPer === 100
+                      ? 'bg-white text-black border-black'
+                      : 'bg-muted text-foreground border border-input hover:bg-accent hover:text-accent-foreground'}`}
+                >
+                  Luxury Tax — $100
+                </button>
+                <button
+                  type="button"
+                  onClick={() => { setAmountPer(200); setRawAmount('200'); }}
+                  className={`px-4 py-3 rounded-lg border text-sm font-medium shadow-sm flex-1 transition-colors
+                    ${amountPer === 200
+                      ? 'bg-white text-black border-black'
+                      : 'bg-muted text-foreground border border-input hover:bg-accent hover:text-accent-foreground'}`}
+                >
+                  Income Tax — $200
+                </button>
               </div>
-            ) : (
-              <>
-                <input
-                  type="range"
-                  min={0}
-                  max={visibleSliderMax}
-                  step={5}
-                  value={amountPer}
-                  onChange={(e) => {
-                    const v = Number(e.target.value);
-                    // If the user moves the slider after typing a manual amount,
-                    // clear the manual input so the slider regains control.
-                    if (rawAmount.trim() !== "") setRawAmount("");
-                    setAmountPer(Math.max(0, Math.round(v / 5) * 5));
-                  }}
-                  aria-label="Payment amount"
-                  className="w-full touch-range"
-                />
-                <div className="flex items-center gap-2">
-                  <Input
-                    value={rawAmount}
-                    onChange={(e) => {
-                      const v = e.target.value;
-                      setRawAmount(v);
-                      const num = v.trim() !== '' ? Number(v) : NaN;
-                      if (!Number.isNaN(num)) {
-                        const rounded = roundToFive(num);
-                        setAmountPer(Math.min(rounded, visibleSliderMax));
-                      }
-                    }}
-                    onBlur={() => {
-                      // On blur, if user entered something, round and sync slider (slider capped at visible max)
-                      if (rawAmount.trim() !== "") {
-                        const rounded = roundToFive(Number(rawAmount));
-                        setAmountPer(Math.min(rounded, visibleSliderMax));
-                        setRawAmount(String(rounded));
-                      }
-                    }}
-                    className="w-32"
-                    type="tel"
-                    inputMode="numeric"
-                    pattern="[0-9]*"
-                    placeholder="e.g. 50"
-                    min={0}
-                  />
-                  <div className="text-sm text-muted-foreground">Rounds up to $5</div>
+            </div>
+          ) : (
+            <div className="space-y-1">
+              <div className="flex items-center justify-between">
+                <div className="text-sm font-medium">
+                  Amount{mode === 'players' && count > 1 ? ' per player' : ''}
                 </div>
-              </>
-            )}
-          </div>
+                {mode === 'players' && count > 1 && (
+                  <div className="text-sm text-muted-foreground">Total: ${total.toLocaleString()}</div>
+                )}
+              </div>
+              <div className="relative">
+                <span className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground font-medium select-none">$</span>
+                <Input
+                  ref={inputRef}
+                  value={rawAmount}
+                  onChange={(e) => {
+                    setRawAmount(e.target.value.replace(/[^0-9]/g, ''));
+                  }}
+                  onBlur={() => {
+                    if (rawAmount.trim() !== "") {
+                      setRawAmount(String(roundToFive(Number(rawAmount))));
+                    }
+                  }}
+                  className="pl-7 text-lg h-12"
+                  type="tel"
+                  inputMode="numeric"
+                  pattern="[0-9]*"
+                  placeholder="0"
+                  min={0}
+                />
+              </div>
+              <div className="text-xs text-muted-foreground">
+                Rounds up to nearest $5 · Balance: ${balance.toLocaleString()}
+              </div>
+            </div>
+          )}
         </div>
 
-        {/* Optional message for recipients — only show when paying players */}
         {mode === 'players' && (
           <div className="mt-4">
             <div className="text-sm font-medium">Leave a message (optional)</div>
@@ -272,6 +229,7 @@ export default function PayPopup({
               disabled={
                 (mode === 'players' && selectedIds.size === 0) ||
                 (mode === 'tax' && amountPer === 0) ||
+                ((mode === 'bank' || mode === 'players') && rawAmount.trim() === '') ||
                 insufficientFunds
               }
             >

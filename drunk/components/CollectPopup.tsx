@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useRef } from 'react';
 import { setDropdownOpen } from './ui/dropdown-menu';
 import useLockBodyScroll from "../hooks/use-lock-body-scroll";
 import {
@@ -31,55 +31,39 @@ export default function CollectPopup({
   gamblingEnabled?: boolean;
   onGamble?: (amount: number, doubled: boolean) => void;
 }) {
-  // typed input starts blank so users can click and type immediately
   const [rawAmount, setRawAmount] = useState<string>("");
-  const [amount, setAmount] = useState<number>(0);
   const [doubled, setDoubled] = useState(false);
-  // Round up to the nearest $5 (always upward), never below 0
   const roundToFive = (v: number) => Math.max(0, Math.ceil(v / 5) * 5);
-  const visibleSliderMax = 100;
+  const inputRef = useRef<HTMLInputElement>(null);
 
-  // Initialize popup state only when the dialog actually opens (avoid resets during polling updates)
   const prevOpenRef = React.useRef<boolean>(false);
   useEffect(() => {
     const prev = prevOpenRef.current;
     if (!prev && open) {
       setRawAmount("");
-      setAmount(0);
       setDoubled(false);
-      if (mode === 'pass_go' && game) {
-        setRawAmount("");
-        setAmount(Math.min(visibleSliderMax, game.pass_go_amount || 200));
-      }
-      if (mode === 'free_parking' && game) {
-        setRawAmount("");
-        setAmount(Math.min(visibleSliderMax, game.free_parking_balance || 0));
+      if (mode === 'bank') {
+        setTimeout(() => inputRef.current?.focus(), 80);
       }
     }
     prevOpenRef.current = open;
-  }, [open, mode, game]);
+  }, [open, mode]);
 
   useEffect(() => {
     if (open) setDropdownOpen(null);
   }, [open]);
 
-
   useLockBodyScroll(!!open);
 
   if (!mode) return null;
 
-  const rawAmountNum = rawAmount.trim() !== "" ? Number(rawAmount) || 0 : NaN;
-  // Do not clamp typed input to $200 — only the slider is limited.
-  const roundedLive = !Number.isNaN(rawAmountNum) ? roundToFive(rawAmountNum) : amount;
+  const roundedLive = rawAmount.trim() !== "" ? roundToFive(Number(rawAmount) || 0) : 0;
 
   const handleSubmit = () => {
     if (!currentPlayer) return;
     if (mode === 'bank') {
-      // Use typed value if present, otherwise fall back to slider
-      const rounded = rawAmount.trim() !== "" ? roundToFive(Number(rawAmount)) : amount;
+      const rounded = roundToFive(Number(rawAmount) || 0);
       if (rounded <= 0) return alert('Enter a valid amount');
-      // Sync slider display but do not clamp the actual collected amount
-      setAmount(Math.min(rounded, visibleSliderMax));
       setRawAmount(String(rounded));
       onCollect({ type: 'bank', amount: rounded });
     } else if (mode === 'pass_go') {
@@ -104,55 +88,35 @@ export default function CollectPopup({
 
         <div className="space-y-4">
           {mode === 'bank' && (
-            <div className="space-y-2">
+            <div className="space-y-1">
               <div className="flex items-center justify-between">
                 <div className="text-sm font-medium">Amount</div>
-                <div className="text-sm text-muted-foreground">Total: ${roundedLive.toLocaleString()}</div>
+                {roundedLive > 0 && (
+                  <div className="text-sm text-muted-foreground">${roundedLive.toLocaleString()}</div>
+                )}
               </div>
-              <input
-                type="range"
-                min={0}
-                max={visibleSliderMax}
-                step={5}
-                value={amount}
-                onChange={(e) => {
-                  const v = Number(e.target.value);
-                  // If the user moves the slider after typing a manual amount,
-                  // clear the manual input so the slider regains control.
-                  if (rawAmount.trim() !== "") setRawAmount("");
-                  setAmount(Math.max(0, Math.round(v / 5) * 5));
-                }}
-                aria-label="Collect amount"
-                className="w-full touch-range"
-              />
-              <div className="flex items-center gap-2">
+              <div className="relative">
+                <span className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground font-medium select-none">$</span>
                 <Input
+                  ref={inputRef}
                   value={rawAmount}
                   onChange={(e) => {
-                    const v = e.target.value;
-                    setRawAmount(v);
-                    const num = v.trim() !== '' ? Number(v) : NaN;
-                    if (!Number.isNaN(num)) {
-                      const rounded = roundToFive(num);
-                      setAmount(Math.min(rounded, visibleSliderMax));
-                    }
+                    setRawAmount(e.target.value.replace(/[^0-9]/g, ''));
                   }}
                   onBlur={() => {
                     if (rawAmount.trim() !== "") {
-                      const rounded = roundToFive(Number(rawAmount));
-                      setAmount(Math.min(rounded, visibleSliderMax));
-                      setRawAmount(String(rounded));
+                      setRawAmount(String(roundToFive(Number(rawAmount))));
                     }
                   }}
-                  className="w-32"
+                  className="pl-7 text-lg h-12"
                   type="tel"
                   inputMode="numeric"
                   pattern="[0-9]*"
-                  placeholder="e.g. 50"
+                  placeholder="0"
                   min={0}
                 />
-                <div className="text-sm text-muted-foreground">Rounds up to $5</div>
               </div>
+              <div className="text-xs text-muted-foreground">Rounds up to nearest $5</div>
             </div>
           )}
 
@@ -160,9 +124,9 @@ export default function CollectPopup({
             <div className="space-y-2">
               <label className="flex items-center gap-2">
                 <input type="checkbox" checked={doubled} onChange={(e) => setDoubled(e.target.checked)} />
-                <div className="text-sm">Double for landing (collect {(game?.pass_go_amount || 200) * 2})</div>
+                <div className="text-sm">Double for landing (collect ${((game?.pass_go_amount || 200) * 2).toLocaleString()})</div>
               </label>
-              <div className="text-sm text-muted-foreground">Base: ${game?.pass_go_amount || 200}</div>
+              <div className="text-sm text-muted-foreground">Base: ${(game?.pass_go_amount || 200).toLocaleString()}</div>
             </div>
           )}
 
@@ -197,7 +161,10 @@ export default function CollectPopup({
             <Button
               onClick={handleSubmit}
               className="bg-primary"
-              disabled={mode === 'free_parking' && (game?.free_parking_balance || 0) === 0}
+              disabled={
+                (mode === 'bank' && rawAmount.trim() === '') ||
+                (mode === 'free_parking' && (game?.free_parking_balance || 0) === 0)
+              }
             >
               Collect
             </Button>
