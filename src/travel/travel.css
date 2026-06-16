@@ -22,6 +22,9 @@
 
 .travel-page {
   min-height: 100vh;
+  /* Guard against horizontal overflow (e.g. the photo carousel's peeking
+     cards) so mobile browsers don't zoom out to fit stray width. */
+  overflow-x: clip;
   background-color: var(--tv-paper);
   background-image:
     radial-gradient(circle at 20% 20%, rgba(217, 121, 79, 0.06), transparent 45%),

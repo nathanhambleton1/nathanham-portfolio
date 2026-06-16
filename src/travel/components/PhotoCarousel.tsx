@@ -65,7 +65,9 @@ export default function PhotoCarousel({ slides, alt, index, onIndexChange }: Pro
   if (n === 0) return null;
 
   return (
-    <div className="relative w-full select-none">
+    // overflow-x-clip stops the peeking / rotated side cards from widening the
+    // document — otherwise mobile browsers zoom out to fit the overflow.
+    <div className="relative w-full select-none overflow-x-clip">
       {/* Stage — overflow visible so the side polaroids peek out. */}
       <div
         ref={stageRef}
