@@ -61,7 +61,27 @@ const pinIcon = L.divIcon({
   iconAnchor: [19, 38],
 });
 
-type NominatimResult = { lat: string; lon: string; display_name: string };
+type NominatimResult = {
+  lat: string;
+  lon: string;
+  display_name: string;
+  address?: Record<string, string>;
+};
+
+// Turn Nominatim's verbose label ("Roma, Roma Capitale, Lazio, Italia") into a
+// tidy "City, Country" string for the Place field — still editable afterwards.
+function shortPlace(r: NominatimResult): string {
+  const a = r.address;
+  if (a) {
+    const locality =
+      a.city ?? a.town ?? a.village ?? a.hamlet ?? a.municipality ?? a.county ?? a.state;
+    const out = [locality, a.country].filter(Boolean).join(", ");
+    if (out) return out;
+  }
+  // Fallback: first + last segment of the display name ("Rome, Italy").
+  const parts = r.display_name.split(",").map((s) => s.trim());
+  return parts.length <= 2 ? r.display_name : `${parts[0]}, ${parts[parts.length - 1]}`;
+}
 
 function FlyTo({ target }: { target: [number, number] | null }) {
   const map = useMap();
@@ -87,10 +107,12 @@ function MapPicker({
   lat,
   lng,
   onPick,
+  onPlace,
 }: {
   lat: number | null;
   lng: number | null;
   onPick: (lat: number, lng: number) => void;
+  onPlace?: (place: string) => void;
 }) {
   const [query, setQuery] = useState("");
   const [results, setResults] = useState<NominatimResult[]>([]);
@@ -104,7 +126,7 @@ function MapPicker({
       setSearching(true);
       try {
         const res = await fetch(
-          `https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(query)}&format=json&limit=5`
+          `https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(query)}&format=json&addressdetails=1&limit=5`
         );
         setResults(await res.json());
       } catch {
@@ -130,6 +152,7 @@ function MapPicker({
     const la = parseFloat(r.lat);
     const ln = parseFloat(r.lon);
     onPick(la, ln);
+    onPlace?.(shortPlace(r));
     setFlyTarget([la, ln]);
     setQuery("");
     setResults([]);
@@ -348,23 +371,13 @@ export default function GlassEditor({
             )}
           </div>
 
-          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-            <div>
-              <Label className="text-sm font-semibold">Place</Label>
-              <Input
-                {...register("place_detail")}
-                placeholder="Rome, Italy"
-                className="bg-white"
-              />
-            </div>
-            <div>
-              <Label className="text-sm font-semibold">Date</Label>
-              <Input
-                type="date"
-                {...register("collected_at")}
-                className="bg-white"
-              />
-            </div>
+          <div>
+            <Label className="text-sm font-semibold">Date</Label>
+            <Input
+              type="date"
+              {...register("collected_at")}
+              className="bg-white"
+            />
           </div>
 
           <div>
@@ -393,6 +406,51 @@ export default function GlassEditor({
               {...register("story")}
               placeholder="What made this place special…"
               rows={3}
+              className="bg-white"
+            />
+          </div>
+
+          {/* Map picker */}
+          <div>
+            <Label className="text-sm font-semibold">
+              Location on map{" "}
+              <span className="font-normal text-[var(--tv-ink-soft)]">
+                (search or tap to place a pin)
+              </span>
+            </Label>
+            <div className="mt-1">
+              <MapPicker
+                lat={lat}
+                lng={lng}
+                onPick={(la, ln) => {
+                  setLat(la);
+                  setLng(ln);
+                }}
+                onPlace={(p) =>
+                  setValue("place_detail", p, { shouldDirty: true })
+                }
+              />
+            </div>
+            {lat !== null && lng !== null && (
+              <button
+                type="button"
+                onClick={() => {
+                  setLat(null);
+                  setLng(null);
+                }}
+                className="mt-1 text-xs text-[var(--tv-ink-soft)] underline"
+              >
+                Clear pin ({lat.toFixed(3)}, {lng.toFixed(3)})
+              </button>
+            )}
+          </div>
+
+          {/* Place — autofilled from the map, but editable. */}
+          <div>
+            <Label className="text-sm font-semibold">Place</Label>
+            <Input
+              {...register("place_detail")}
+              placeholder="Rome, Italy"
               className="bg-white"
             />
           </div>
@@ -433,38 +491,6 @@ export default function GlassEditor({
                 </label>
               )}
             </div>
-          </div>
-
-          {/* Map picker */}
-          <div>
-            <Label className="text-sm font-semibold">
-              Location on map{" "}
-              <span className="font-normal text-[var(--tv-ink-soft)]">
-                (search or tap to place a pin)
-              </span>
-            </Label>
-            <div className="mt-1">
-              <MapPicker
-                lat={lat}
-                lng={lng}
-                onPick={(la, ln) => {
-                  setLat(la);
-                  setLng(ln);
-                }}
-              />
-            </div>
-            {lat !== null && lng !== null && (
-              <button
-                type="button"
-                onClick={() => {
-                  setLat(null);
-                  setLng(null);
-                }}
-                className="mt-1 text-xs text-[var(--tv-ink-soft)] underline"
-              >
-                Clear pin ({lat.toFixed(3)}, {lng.toFixed(3)})
-              </button>
-            )}
           </div>
 
           {/* Photo album */}
