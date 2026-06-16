@@ -44,8 +44,7 @@ import PhotoUploader from "./PhotoUploader";
 import type { GlassWithDetails, Trip } from "../lib/types";
 
 const schema = z.object({
-  location_name: z.string().min(1, "Give this place a name"),
-  place_detail: z.string().optional(),
+  location_name: z.string().min(1, "Pick or name this place"),
   collected_at: z.string().optional(),
   trip_id: z.string().optional(),
   story: z.string().optional(),
@@ -166,8 +165,9 @@ function MapPicker({
   const hasPoint = typeof lat === "number" && typeof lng === "number";
   return (
     <div>
-      {/* Geocoder search */}
-      <div ref={dropdownRef} className="relative mb-2">
+      {/* Geocoder search — lifted above the map so the results dropdown
+          never hides behind Leaflet's panes (notably on mobile). */}
+      <div ref={dropdownRef} className="relative z-[1100] mb-2">
         <div className="relative">
           <Search
             size={14}
@@ -204,21 +204,25 @@ function MapPicker({
         )}
       </div>
 
-      <MapContainer
-        center={hasPoint ? [lat as number, lng as number] : [30, 10]}
-        zoom={hasPoint ? 6 : 2}
-        style={{ height: 180, width: "100%", borderRadius: 12 }}
-      >
-        <TileLayer
-          attribution="&copy; OpenStreetMap"
-          url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
-        />
-        <ClickCatcher />
-        <FlyTo target={flyTarget} />
-        {hasPoint && (
-          <Marker position={[lat as number, lng as number]} icon={pinIcon} />
-        )}
-      </MapContainer>
+      {/* isolate keeps Leaflet's internal pane z-indexes from competing with
+          the search dropdown above. */}
+      <div className="relative z-0 isolate">
+        <MapContainer
+          center={hasPoint ? [lat as number, lng as number] : [30, 10]}
+          zoom={hasPoint ? 6 : 2}
+          style={{ height: 180, width: "100%", borderRadius: 12 }}
+        >
+          <TileLayer
+            attribution="&copy; OpenStreetMap"
+            url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
+          />
+          <ClickCatcher />
+          <FlyTo target={flyTarget} />
+          {hasPoint && (
+            <Marker position={[lat as number, lng as number]} icon={pinIcon} />
+          )}
+        </MapContainer>
+      </div>
     </div>
   );
 }
@@ -267,7 +271,6 @@ export default function GlassEditor({
     if (!open) return;
     reset({
       location_name: glass?.location_name ?? "",
-      place_detail: glass?.place_detail ?? "",
       collected_at: isoToDateInput(glass?.collected_at ?? null),
       trip_id: glass?.trip_id ?? defaultTripId ?? NO_TRIP,
       story: glass?.story ?? "",
@@ -305,7 +308,7 @@ export default function GlassEditor({
   const onSubmit = async (values: FormValues) => {
     const payload = {
       location_name: values.location_name.trim(),
-      place_detail: values.place_detail?.trim() || null,
+      place_detail: null,
       collected_at: values.collected_at
         ? new Date(values.collected_at).toISOString()
         : null,
@@ -359,11 +362,50 @@ export default function GlassEditor({
         </DialogHeader>
 
         <form onSubmit={handleSubmit(onSubmit)} className="flex flex-col gap-3">
+          {/* Map picker — pick the place first; it fills the Place field. */}
           <div>
-            <Label className="text-sm font-semibold">Location name</Label>
+            <Label className="text-sm font-semibold">
+              Location on map{" "}
+              <span className="font-normal text-[var(--tv-ink-soft)]">
+                (search or tap to place a pin)
+              </span>
+            </Label>
+            <div className="mt-1">
+              <MapPicker
+                lat={lat}
+                lng={lng}
+                onPick={(la, ln) => {
+                  setLat(la);
+                  setLng(ln);
+                }}
+                onPlace={(p) =>
+                  setValue("location_name", p, {
+                    shouldDirty: true,
+                    shouldValidate: true,
+                  })
+                }
+              />
+            </div>
+            {lat !== null && lng !== null && (
+              <button
+                type="button"
+                onClick={() => {
+                  setLat(null);
+                  setLng(null);
+                }}
+                className="mt-1 text-xs text-[var(--tv-ink-soft)] underline"
+              >
+                Clear pin ({lat.toFixed(3)}, {lng.toFixed(3)})
+              </button>
+            )}
+          </div>
+
+          {/* Place — autofilled from the map above, but editable. */}
+          <div>
+            <Label className="text-sm font-semibold">Place</Label>
             <Input
               {...register("location_name")}
-              placeholder="Trevi Fountain"
+              placeholder="Rome, Italy"
               className="bg-white"
             />
             {errors.location_name && (
@@ -406,51 +448,6 @@ export default function GlassEditor({
               {...register("story")}
               placeholder="What made this place special…"
               rows={3}
-              className="bg-white"
-            />
-          </div>
-
-          {/* Map picker */}
-          <div>
-            <Label className="text-sm font-semibold">
-              Location on map{" "}
-              <span className="font-normal text-[var(--tv-ink-soft)]">
-                (search or tap to place a pin)
-              </span>
-            </Label>
-            <div className="mt-1">
-              <MapPicker
-                lat={lat}
-                lng={lng}
-                onPick={(la, ln) => {
-                  setLat(la);
-                  setLng(ln);
-                }}
-                onPlace={(p) =>
-                  setValue("place_detail", p, { shouldDirty: true })
-                }
-              />
-            </div>
-            {lat !== null && lng !== null && (
-              <button
-                type="button"
-                onClick={() => {
-                  setLat(null);
-                  setLng(null);
-                }}
-                className="mt-1 text-xs text-[var(--tv-ink-soft)] underline"
-              >
-                Clear pin ({lat.toFixed(3)}, {lng.toFixed(3)})
-              </button>
-            )}
-          </div>
-
-          {/* Place — autofilled from the map, but editable. */}
-          <div>
-            <Label className="text-sm font-semibold">Place</Label>
-            <Input
-              {...register("place_detail")}
-              placeholder="Rome, Italy"
               className="bg-white"
             />
           </div>
