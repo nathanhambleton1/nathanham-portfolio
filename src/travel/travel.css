@@ -1,0 +1,178 @@
+/* =========================================================================
+   Travel / Shot Glass Journey — playful scrapbook styling.
+   Everything is scoped under .travel-root so it never leaks into the rest
+   of the portfolio (which uses a dark/mono global theme).
+   Fonts (Caveat, Shadows Into Light, Quicksand) are injected at runtime in
+   TravelApp.tsx.
+   ========================================================================= */
+
+.travel-root {
+  --tv-paper: #f5ece0;
+  --tv-paper-2: #efe3d2;
+  --tv-ink: #3a2f28;
+  --tv-ink-soft: #6f6055;
+  --tv-accent: #d9794f; /* warm terracotta */
+  --tv-accent-2: #e9a23b; /* honey */
+  --tv-tape: rgba(228, 214, 180, 0.75);
+  --tv-card: #fffdf8;
+
+  color: var(--tv-ink);
+  font-family: "Quicksand", ui-sans-serif, system-ui, sans-serif;
+}
+
+.travel-page {
+  min-height: 100vh;
+  background-color: var(--tv-paper);
+  background-image:
+    radial-gradient(circle at 20% 20%, rgba(217, 121, 79, 0.06), transparent 45%),
+    radial-gradient(circle at 80% 0%, rgba(233, 162, 59, 0.08), transparent 40%),
+    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='120' height='120'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='0.035'/%3E%3C/svg%3E");
+}
+
+.travel-root .tv-handwritten {
+  font-family: "Caveat", "Shadows Into Light", cursive;
+}
+
+.travel-root .tv-display {
+  font-family: "Caveat", cursive;
+  letter-spacing: 0.5px;
+}
+
+/* ---- Polaroid card --------------------------------------------------- */
+.travel-root .tv-polaroid {
+  background: var(--tv-card);
+  padding: 12px 12px 0;
+  border-radius: 3px;
+  box-shadow: 0 8px 22px rgba(58, 47, 40, 0.18), 0 1px 0 rgba(0, 0, 0, 0.04);
+  position: relative;
+  transition: transform 0.25s cubic-bezier(0.34, 1.56, 0.64, 1),
+    box-shadow 0.25s ease;
+  will-change: transform;
+}
+.travel-root .tv-polaroid:hover {
+  transform: translateY(-6px) rotate(0deg) scale(1.02);
+  box-shadow: 0 18px 36px rgba(58, 47, 40, 0.26);
+  z-index: 5;
+}
+.travel-root .tv-polaroid__img {
+  width: 100%;
+  aspect-ratio: 1 / 1;
+  object-fit: cover;
+  display: block;
+  border-radius: 2px;
+  background: var(--tv-paper-2);
+}
+.travel-root .tv-polaroid__caption {
+  padding: 10px 4px 14px;
+  text-align: center;
+  line-height: 1.1;
+}
+
+/* ---- Tape ------------------------------------------------------------ */
+.travel-root .tv-tape {
+  position: absolute;
+  width: 86px;
+  height: 26px;
+  background: var(--tv-tape);
+  top: -12px;
+  left: 50%;
+  transform: translateX(-50%) rotate(-3deg);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08);
+  border-left: 1px dashed rgba(0, 0, 0, 0.05);
+  border-right: 1px dashed rgba(0, 0, 0, 0.05);
+}
+.travel-root .tv-tape--tl {
+  top: -10px;
+  left: -14px;
+  transform: rotate(-38deg);
+}
+.travel-root .tv-tape--br {
+  top: auto;
+  left: auto;
+  bottom: 14px;
+  right: -14px;
+  transform: rotate(-38deg);
+}
+
+/* ---- Buttons / chips ------------------------------------------------- */
+.travel-root .tv-btn {
+  font-family: "Quicksand", sans-serif;
+  font-weight: 600;
+  border-radius: 999px;
+  transition: transform 0.15s ease, background 0.2s ease, color 0.2s ease;
+}
+.travel-root .tv-btn:active {
+  transform: scale(0.96);
+}
+.travel-root .tv-chip {
+  border-radius: 999px;
+  border: 1.5px solid rgba(58, 47, 40, 0.18);
+  background: transparent;
+  color: var(--tv-ink-soft);
+  font-weight: 600;
+  transition: all 0.18s ease;
+}
+.travel-root .tv-chip[data-active="true"] {
+  background: var(--tv-ink);
+  border-color: var(--tv-ink);
+  color: var(--tv-paper);
+}
+
+/* ---- Floating action button ----------------------------------------- */
+.travel-root .tv-fab {
+  position: fixed;
+  right: 20px;
+  bottom: 20px;
+  z-index: 50;
+}
+
+/* ---- Leaflet polish -------------------------------------------------- */
+.travel-root .leaflet-container {
+  border-radius: 14px;
+  font-family: "Quicksand", sans-serif;
+}
+.tv-pin {
+  display: grid;
+  place-items: center;
+  width: 38px;
+  height: 38px;
+  font-size: 22px;
+  background: var(--tv-card, #fffdf8);
+  border: 2px solid #d9794f;
+  border-radius: 50% 50% 50% 0;
+  transform: rotate(-45deg);
+  box-shadow: 0 4px 10px rgba(0, 0, 0, 0.3);
+}
+.tv-pin > span {
+  transform: rotate(45deg);
+}
+
+/* ---- Timeline -------------------------------------------------------- */
+.travel-root .tv-timeline-rail {
+  position: absolute;
+  left: 22px;
+  top: 0;
+  bottom: 0;
+  width: 3px;
+  background: repeating-linear-gradient(
+    to bottom,
+    var(--tv-accent) 0 10px,
+    transparent 10px 18px
+  );
+}
+@media (min-width: 768px) {
+  .travel-root .tv-timeline-rail {
+    left: 50%;
+    transform: translateX(-50%);
+  }
+}
+
+/* ---- Misc ------------------------------------------------------------ */
+.travel-root .tv-stitch {
+  border: 2px dashed rgba(58, 47, 40, 0.25);
+  border-radius: 14px;
+}
+.travel-root ::selection {
+  background: var(--tv-accent-2);
+  color: #fff;
+}
