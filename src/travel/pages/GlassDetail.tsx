@@ -1,20 +1,14 @@
 // Single location: photo album, story, date, trip link, mini-map.
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { ArrowLeft, CalendarDays, MapPin, Pencil } from "lucide-react";
-import {
-  Carousel,
-  CarouselContent,
-  CarouselItem,
-  CarouselNext,
-  CarouselPrevious,
-} from "@/components/ui/carousel";
 import { useGlasses, useTrips } from "../lib/queries";
 import { useEditMode } from "../context/EditMode";
 import { formatDateTime } from "../lib/format";
 import MapView from "../components/MapView";
 import GlassEditor from "../components/GlassEditor";
+import PhotoCarousel from "../components/PhotoCarousel";
 
 export default function GlassDetail() {
   const { id } = useParams();
@@ -23,8 +17,14 @@ export default function GlassDetail() {
   const { data: trips = [] } = useTrips();
   const { unlocked } = useEditMode();
   const [editing, setEditing] = useState(false);
+  const [photoIndex, setPhotoIndex] = useState(0);
 
   const glass = glasses.find((g) => g.id === id);
+
+  // Reset to the first photo whenever we land on a different glass.
+  useEffect(() => {
+    setPhotoIndex(0);
+  }, [id]);
 
   if (isLoading)
     return <p className="py-20 text-center text-[var(--tv-ink-soft)]">Loading…</p>;
@@ -43,11 +43,10 @@ export default function GlassDetail() {
     );
 
   const allPhotos = [
-    ...glass.photos,
-    ...(glass.glass_url &&
-    !glass.photos.some((p) => p.url === glass.glass_url)
+    ...(glass.glass_url && !glass.photos.some((p) => p.url === glass.glass_url)
       ? [{ id: "glass", url: glass.glass_url, caption: "The shot glass" }]
       : []),
+    ...glass.photos,
   ];
 
   return (
@@ -98,32 +97,12 @@ export default function GlassDetail() {
       {/* Album */}
       {allPhotos.length > 0 && (
         <div className="mt-6">
-          <Carousel className="mx-auto w-full max-w-2xl">
-            <CarouselContent>
-              {allPhotos.map((p) => (
-                <CarouselItem key={p.id} className="flex justify-center">
-                  <div className="tv-polaroid" style={{ rotate: "0deg" }}>
-                    <img
-                      src={p.url}
-                      alt={p.caption ?? glass.location_name}
-                      className="max-h-[60vh] w-full rounded object-contain"
-                    />
-                    {p.caption && (
-                      <div className="tv-handwritten py-2 text-center text-xl">
-                        {p.caption}
-                      </div>
-                    )}
-                  </div>
-                </CarouselItem>
-              ))}
-            </CarouselContent>
-            {allPhotos.length > 1 && (
-              <>
-                <CarouselPrevious className="text-[var(--tv-ink)]" />
-                <CarouselNext className="text-[var(--tv-ink)]" />
-              </>
-            )}
-          </Carousel>
+          <PhotoCarousel
+            slides={allPhotos}
+            alt={glass.location_name}
+            index={Math.min(photoIndex, allPhotos.length - 1)}
+            onIndexChange={setPhotoIndex}
+          />
         </div>
       )}
 
@@ -138,7 +117,7 @@ export default function GlassDetail() {
 
       {/* Mini-map */}
       {typeof glass.latitude === "number" && typeof glass.longitude === "number" && (
-        <div className="mx-auto mt-8 max-w-2xl">
+        <div className="isolate mx-auto mt-8 max-w-2xl">
           <MapView glasses={[glass]} onSelect={() => {}} />
         </div>
       )}

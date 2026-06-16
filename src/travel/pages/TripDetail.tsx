@@ -2,10 +2,11 @@
 
 import { useMemo, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
-import { ArrowLeft, Pencil, Plus } from "lucide-react";
+import { ArrowLeft, FolderInput, Pencil, Plus } from "lucide-react";
 import { useGlasses, useTrips } from "../lib/queries";
 import { useEditMode } from "../context/EditMode";
 import { formatDateRange } from "../lib/format";
+import AssignGlassesDialog from "../components/AssignGlassesDialog";
 import GalleryView from "../components/GalleryView";
 import GlassEditor from "../components/GlassEditor";
 import TripEditor from "../components/TripEditor";
@@ -17,6 +18,7 @@ export default function TripDetail() {
   const { data: trips = [] } = useTrips();
   const { unlocked } = useEditMode();
   const [addingGlass, setAddingGlass] = useState(false);
+  const [assigningGlasses, setAssigningGlasses] = useState(false);
   const [editingTrip, setEditingTrip] = useState(false);
 
   const trip = trips.find((t) => t.id === id);
@@ -76,7 +78,7 @@ export default function TripDetail() {
           )}
         </div>
         {unlocked && (
-          <div className="flex gap-2">
+          <div className="flex flex-wrap gap-2">
             <button
               onClick={() => setEditingTrip(true)}
               className="tv-btn inline-flex items-center gap-1 border-2 border-[rgba(58,47,40,0.18)] px-3 py-1.5 text-sm"
@@ -84,10 +86,16 @@ export default function TripDetail() {
               <Pencil size={14} /> Edit trip
             </button>
             <button
+              onClick={() => setAssigningGlasses(true)}
+              className="tv-btn inline-flex items-center gap-1 border-2 border-[rgba(58,47,40,0.18)] px-3 py-1.5 text-sm"
+            >
+              <FolderInput size={15} /> Add existing
+            </button>
+            <button
               onClick={() => setAddingGlass(true)}
               className="tv-btn inline-flex items-center gap-1 bg-[var(--tv-accent)] px-3 py-1.5 text-sm text-white"
             >
-              <Plus size={15} /> Add glass
+              <Plus size={15} /> New glass
             </button>
           </div>
         )}
@@ -105,6 +113,13 @@ export default function TripDetail() {
         onOpenChange={setAddingGlass}
         trips={trips}
         defaultTripId={trip.id}
+      />
+      <AssignGlassesDialog
+        open={assigningGlasses}
+        onOpenChange={setAssigningGlasses}
+        tripId={trip.id}
+        tripName={trip.name}
+        allGlasses={glasses}
       />
       <TripEditor open={editingTrip} onOpenChange={setEditingTrip} trip={trip} />
     </div>

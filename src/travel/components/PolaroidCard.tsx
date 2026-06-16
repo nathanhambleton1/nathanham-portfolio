@@ -21,7 +21,7 @@ function tiltFor(id: string): number {
 }
 
 export default function PolaroidCard({ glass, onClick, index = 0 }: Props) {
-  const cover = glass.photos[0]?.url ?? glass.glass_url ?? null;
+  const cover = glass.glass_url ?? glass.photos[0]?.url ?? null;
   const tilt = tiltFor(glass.id);
 
   return (

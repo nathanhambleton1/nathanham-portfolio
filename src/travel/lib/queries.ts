@@ -111,3 +111,12 @@ export function useDeletePhoto() {
     onSuccess: invalidate,
   });
 }
+
+export function useReorderPhotos() {
+  const invalidate = useInvalidateAll();
+  return useMutation({
+    mutationFn: (updates: { id: string; sortOrder: number }[]) =>
+      Promise.all(updates.map(({ id, sortOrder }) => api.updatePhoto(id, { sort_order: sortOrder }))),
+    onSuccess: invalidate,
+  });
+}

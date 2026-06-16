@@ -1,7 +1,7 @@
 // Add / edit a glass (location). Includes a single "shot glass" photo,
 // a click-to-place map picker, and (when editing) the photo album.
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
@@ -9,11 +9,12 @@ import {
   MapContainer,
   Marker,
   TileLayer,
+  useMap,
   useMapEvents,
 } from "react-leaflet";
 import L from "leaflet";
 import "leaflet/dist/leaflet.css";
-import { ImagePlus, Loader2, Trash2 } from "lucide-react";
+import { ImagePlus, Loader2, Search, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 import {
   Dialog,
@@ -33,7 +34,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { uploadImage } from "../lib/api";
+import { addPhoto, uploadImage } from "../lib/api";
 import {
   useCreateGlass,
   useDeleteGlass,
@@ -60,15 +61,26 @@ const pinIcon = L.divIcon({
   iconAnchor: [19, 38],
 });
 
-// ISO <-> <input type="datetime-local"> helpers.
-function isoToLocalInput(iso: string | null): string {
+type NominatimResult = { lat: string; lon: string; display_name: string };
+
+function FlyTo({ target }: { target: [number, number] | null }) {
+  const map = useMap();
+  const prev = useRef<[number, number] | null>(null);
+  useEffect(() => {
+    if (!target) return;
+    if (prev.current?.[0] === target[0] && prev.current?.[1] === target[1]) return;
+    prev.current = target;
+    map.flyTo(target, 12, { duration: 1.2 });
+  }, [target, map]);
+  return null;
+}
+
+function isoToDateInput(iso: string | null): string {
   if (!iso) return "";
   const d = new Date(iso);
   if (Number.isNaN(d.getTime())) return "";
   const pad = (n: number) => String(n).padStart(2, "0");
-  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(
-    d.getHours()
-  )}:${pad(d.getMinutes())}`;
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
 }
 
 function MapPicker({
@@ -80,30 +92,111 @@ function MapPicker({
   lng: number | null;
   onPick: (lat: number, lng: number) => void;
 }) {
+  const [query, setQuery] = useState("");
+  const [results, setResults] = useState<NominatimResult[]>([]);
+  const [searching, setSearching] = useState(false);
+  const [flyTarget, setFlyTarget] = useState<[number, number] | null>(null);
+  const dropdownRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (query.length < 3) { setResults([]); return; }
+    const t = setTimeout(async () => {
+      setSearching(true);
+      try {
+        const res = await fetch(
+          `https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(query)}&format=json&limit=5`
+        );
+        setResults(await res.json());
+      } catch {
+        setResults([]);
+      } finally {
+        setSearching(false);
+      }
+    }, 400);
+    return () => clearTimeout(t);
+  }, [query]);
+
+  useEffect(() => {
+    if (!results.length) return;
+    const handler = (e: MouseEvent) => {
+      if (dropdownRef.current && !dropdownRef.current.contains(e.target as Node))
+        setResults([]);
+    };
+    document.addEventListener("mousedown", handler);
+    return () => document.removeEventListener("mousedown", handler);
+  }, [results.length]);
+
+  const pickResult = (r: NominatimResult) => {
+    const la = parseFloat(r.lat);
+    const ln = parseFloat(r.lon);
+    onPick(la, ln);
+    setFlyTarget([la, ln]);
+    setQuery("");
+    setResults([]);
+  };
+
   function ClickCatcher() {
-    useMapEvents({
-      click(e) {
-        onPick(e.latlng.lat, e.latlng.lng);
-      },
-    });
+    useMapEvents({ click(e) { onPick(e.latlng.lat, e.latlng.lng); } });
     return null;
   }
+
   const hasPoint = typeof lat === "number" && typeof lng === "number";
   return (
-    <MapContainer
-      center={hasPoint ? [lat as number, lng as number] : [30, 10]}
-      zoom={hasPoint ? 6 : 2}
-      style={{ height: 180, width: "100%", borderRadius: 12 }}
-    >
-      <TileLayer
-        attribution="&copy; OpenStreetMap"
-        url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
-      />
-      <ClickCatcher />
-      {hasPoint && (
-        <Marker position={[lat as number, lng as number]} icon={pinIcon} />
-      )}
-    </MapContainer>
+    <div>
+      {/* Geocoder search */}
+      <div ref={dropdownRef} className="relative mb-2">
+        <div className="relative">
+          <Search
+            size={14}
+            className="pointer-events-none absolute left-2.5 top-1/2 -translate-y-1/2 text-[var(--tv-ink-soft)]"
+          />
+          <input
+            type="text"
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+            placeholder="Search a place…"
+            className="w-full rounded-md border border-[rgba(58,47,40,0.2)] bg-white py-1.5 pl-8 pr-8 text-sm text-[var(--tv-ink)] placeholder:text-[var(--tv-ink-soft)] focus:outline-none focus:ring-1 focus:ring-[var(--tv-accent)]"
+          />
+          {searching && (
+            <Loader2
+              size={13}
+              className="absolute right-2.5 top-1/2 -translate-y-1/2 animate-spin text-[var(--tv-ink-soft)]"
+            />
+          )}
+        </div>
+        {results.length > 0 && (
+          <ul className="absolute z-[2000] mt-0.5 w-full overflow-hidden rounded-lg border border-[rgba(58,47,40,0.14)] bg-white shadow-lg">
+            {results.map((r, i) => (
+              <li key={i} className="border-b border-[rgba(58,47,40,0.07)] last:border-0">
+                <button
+                  type="button"
+                  onClick={() => pickResult(r)}
+                  className="w-full px-3 py-2 text-left text-sm leading-tight text-[var(--tv-ink)] hover:bg-[var(--tv-paper-2)]"
+                >
+                  {r.display_name}
+                </button>
+              </li>
+            ))}
+          </ul>
+        )}
+      </div>
+
+      <MapContainer
+        center={hasPoint ? [lat as number, lng as number] : [30, 10]}
+        zoom={hasPoint ? 6 : 2}
+        style={{ height: 180, width: "100%", borderRadius: 12 }}
+      >
+        <TileLayer
+          attribution="&copy; OpenStreetMap"
+          url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
+        />
+        <ClickCatcher />
+        <FlyTo target={flyTarget} />
+        {hasPoint && (
+          <Marker position={[lat as number, lng as number]} icon={pinIcon} />
+        )}
+      </MapContainer>
+    </div>
   );
 }
 
@@ -133,6 +226,9 @@ export default function GlassEditor({
   const [lng, setLng] = useState<number | null>(null);
   const [glassUrl, setGlassUrl] = useState<string | null>(null);
   const [uploadingGlass, setUploadingGlass] = useState(false);
+  const [pendingPhotos, setPendingPhotos] = useState<{ file: File; preview: string }[]>([]);
+  const pendingDragIdx = useRef<number | null>(null);
+  const [pendingDragOver, setPendingDragOver] = useState<number | null>(null);
 
   const {
     register,
@@ -149,7 +245,7 @@ export default function GlassEditor({
     reset({
       location_name: glass?.location_name ?? "",
       place_detail: glass?.place_detail ?? "",
-      collected_at: isoToLocalInput(glass?.collected_at ?? null),
+      collected_at: isoToDateInput(glass?.collected_at ?? null),
       trip_id: glass?.trip_id ?? defaultTripId ?? NO_TRIP,
       story: glass?.story ?? "",
     });
@@ -157,6 +253,15 @@ export default function GlassEditor({
     setLng(glass?.longitude ?? null);
     setGlassUrl(glass?.glass_url ?? null);
   }, [open, glass, defaultTripId, reset]);
+
+  // Revoke staged photo object URLs when the dialog closes.
+  useEffect(() => {
+    if (open) return;
+    setPendingPhotos((prev) => {
+      prev.forEach((p) => URL.revokeObjectURL(p.preview));
+      return [];
+    });
+  }, [open]);
 
   const tripId = watch("trip_id");
 
@@ -192,7 +297,13 @@ export default function GlassEditor({
         await updateGlass.mutateAsync({ id: glass.id, patch: payload });
         toast.success("Memory updated 💖");
       } else {
-        await createGlass.mutateAsync(payload);
+        const newGlass = await createGlass.mutateAsync(payload);
+        if (pendingPhotos.length > 0) {
+          for (let i = 0; i < pendingPhotos.length; i++) {
+            const url = await uploadImage(pendingPhotos[i].file, `glasses/${newGlass.id}`);
+            await addPhoto(newGlass.id, url, null, i);
+          }
+        }
         toast.success("Memory saved 💖");
       }
       onOpenChange(false);
@@ -247,9 +358,9 @@ export default function GlassEditor({
               />
             </div>
             <div>
-              <Label className="text-sm font-semibold">Date &amp; time</Label>
+              <Label className="text-sm font-semibold">Date</Label>
               <Input
-                type="datetime-local"
+                type="date"
                 {...register("collected_at")}
                 className="bg-white"
               />
@@ -329,7 +440,7 @@ export default function GlassEditor({
             <Label className="text-sm font-semibold">
               Location on map{" "}
               <span className="font-normal text-[var(--tv-ink-soft)]">
-                (tap to place a pin)
+                (search or tap to place a pin)
               </span>
             </Label>
             <div className="mt-1">
@@ -356,15 +467,84 @@ export default function GlassEditor({
             )}
           </div>
 
-          {/* Album (only for existing glass) */}
-          {isEdit && glass && (
-            <div>
-              <Label className="text-sm font-semibold">Photo album</Label>
-              <div className="mt-1">
+          {/* Photo album */}
+          <div>
+            <Label className="text-sm font-semibold">Photo album</Label>
+            <div className="mt-1">
+              {isEdit && glass ? (
                 <PhotoUploader glassId={glass.id} photos={glass.photos} />
-              </div>
+              ) : (
+                <div>
+                  <div className="flex flex-wrap gap-2">
+                    {pendingPhotos.map((p, i) => (
+                      <div
+                        key={i}
+                        draggable
+                        onDragStart={() => { pendingDragIdx.current = i; }}
+                        onDragOver={(e) => { e.preventDefault(); setPendingDragOver(i); }}
+                        onDragLeave={() => setPendingDragOver(null)}
+                        onDrop={(e) => {
+                          e.preventDefault();
+                          const from = pendingDragIdx.current;
+                          if (from === null || from === i) { setPendingDragOver(null); return; }
+                          setPendingPhotos((prev) => {
+                            const next = [...prev];
+                            const [moved] = next.splice(from, 1);
+                            next.splice(i, 0, moved);
+                            return next;
+                          });
+                          pendingDragIdx.current = null;
+                          setPendingDragOver(null);
+                        }}
+                        onDragEnd={() => { pendingDragIdx.current = null; setPendingDragOver(null); }}
+                        className={`group relative cursor-grab active:cursor-grabbing rounded-md transition-all ${
+                          pendingDragOver === i ? "ring-2 ring-[var(--tv-accent)] scale-105" : ""
+                        }`}
+                      >
+                        <img
+                          src={p.preview}
+                          alt=""
+                          className="h-20 w-20 rounded-md object-cover pointer-events-none"
+                        />
+                        <button
+                          type="button"
+                          onClick={() =>
+                            setPendingPhotos((prev) => {
+                              URL.revokeObjectURL(prev[i].preview);
+                              return prev.filter((_, j) => j !== i);
+                            })
+                          }
+                          className="absolute right-1 top-1 grid h-6 w-6 place-items-center rounded-full bg-black/60 text-white opacity-0 transition group-hover:opacity-100"
+                        >
+                          <Trash2 size={12} />
+                        </button>
+                      </div>
+                    ))}
+                    <label className="grid h-20 w-20 cursor-pointer place-items-center rounded-md border-2 border-dashed border-[rgba(58,47,40,0.3)] text-[var(--tv-ink-soft)] hover:border-[var(--tv-accent)] hover:text-[var(--tv-accent)]">
+                      <ImagePlus size={20} />
+                      <input
+                        type="file"
+                        accept="image/*"
+                        multiple
+                        className="hidden"
+                        onChange={(e) => {
+                          const files = Array.from(e.target.files ?? []);
+                          setPendingPhotos((prev) => [
+                            ...prev,
+                            ...files.map((f) => ({ file: f, preview: URL.createObjectURL(f) })),
+                          ]);
+                          e.target.value = "";
+                        }}
+                      />
+                    </label>
+                  </div>
+                  <p className="mt-1 text-xs text-[var(--tv-ink-soft)]">
+                    Drag photos to reorder · Add one or more from this place.
+                  </p>
+                </div>
+              )}
             </div>
-          )}
+          </div>
 
           <DialogFooter className="mt-2 gap-2 sm:justify-between">
             {isEdit ? (
