@@ -96,7 +96,7 @@ export default function CollectPopup({
                 )}
               </div>
               <div className="relative">
-                <span className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground font-medium select-none">$</span>
+                <span className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground font-medium text-lg select-none pointer-events-none">$</span>
                 <Input
                   ref={inputRef}
                   value={rawAmount}
@@ -108,7 +108,7 @@ export default function CollectPopup({
                       setRawAmount(String(roundToFive(Number(rawAmount))));
                     }
                   }}
-                  className="pl-7 text-lg h-12"
+                  className="pl-9 text-lg h-12"
                   type="tel"
                   inputMode="numeric"
                   pattern="[0-9]*"

@@ -97,7 +97,8 @@ export default function PayPopup({
     } else {
       payments = Array.from(selectedIds).map((id) => ({ to: id, amount: rounded }));
     }
-    onSubmit(payments, { freeParking: mode === "tax", description: message || null });
+    const taxLabel = mode === 'tax' ? (amountPer === 200 ? 'Income Tax' : 'Luxury Tax') : null;
+    onSubmit(payments, { freeParking: mode === "tax", description: taxLabel ?? (message || null) });
     onOpenChange(false);
   };
 
@@ -179,7 +180,7 @@ export default function PayPopup({
                 )}
               </div>
               <div className="relative">
-                <span className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground font-medium select-none">$</span>
+                <span className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground font-medium text-lg select-none pointer-events-none">$</span>
                 <Input
                   ref={inputRef}
                   value={rawAmount}
@@ -191,7 +192,7 @@ export default function PayPopup({
                       setRawAmount(String(roundToFive(Number(rawAmount))));
                     }
                   }}
-                  className="pl-7 text-lg h-12"
+                  className="pl-9 text-lg h-12"
                   type="tel"
                   inputMode="numeric"
                   pattern="[0-9]*"

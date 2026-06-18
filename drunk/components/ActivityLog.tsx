@@ -190,13 +190,19 @@ export default function ActivityLog({
         return `${actor} paid $${(e.amount || 0).toLocaleString()} to get out of jail`;
       }
 
+      // Tax payments (go to free parking)
+      if (e.type === 'tax') {
+        const taxLabel = (e.description === 'Income Tax' || e.description === 'Luxury Tax') ? e.description : 'Tax';
+        return `${from} paid ${taxLabel} — $${(e.amount || 0).toLocaleString()}`;
+      }
+
       // Generic money transfers
       if (!e.from_player_id && e.to_player_id)
         return `${to} received $${(e.amount || 0).toLocaleString()}`;
       if (e.from_player_id && e.to_player_id)
         return `${from} paid ${to} $${(e.amount || 0).toLocaleString()}`;
       if (e.from_player_id && !e.to_player_id)
-        return `${from} paid $${(e.amount || 0).toLocaleString()}`;
+        return `${from} paid the Bank $${(e.amount || 0).toLocaleString()}`;
 
       // Fallback: concise default
       return `${actor} ${e.type} $${(e.amount || 0).toLocaleString()}`;
@@ -273,6 +279,18 @@ export default function ActivityLog({
   // the initial batch (initializedRef guards that).
   const prevEventIdsRef = useRef<Set<string>>(new Set());
   const initializedRef = useRef(false);
+  // When `expanded` changes, the fetch re-runs and returns a larger batch of
+  // historical events. Flag those as "already seen" so they don't trigger sound.
+  const needReseedRef = useRef(false);
+  const expandedInitRef = useRef(false);
+  useEffect(() => {
+    if (!expandedInitRef.current) {
+      expandedInitRef.current = true;
+      return;
+    }
+    needReseedRef.current = true;
+  }, [expanded]);
+
   useEffect(() => {
     try {
       // On first pass, wait until we have a real batch of events so we can
@@ -283,6 +301,14 @@ export default function ActivityLog({
         if (events.length === 0) return;
         prevEventIdsRef.current = new Set(events.map((e) => e.id));
         initializedRef.current = true;
+        return;
+      }
+
+      // If the expanded fetch just returned a bigger historical batch, re-seed
+      // without playing sound so old events don't spaz the alert.
+      if (needReseedRef.current) {
+        prevEventIdsRef.current = new Set(events.map((e) => e.id));
+        needReseedRef.current = false;
         return;
       }
 
