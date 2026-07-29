@@ -1,26 +1,16 @@
-import { useLocation } from "react-router-dom";
-import { useEffect } from "react";
-
 const NotFound = () => {
-  const location = useLocation();
-
-  useEffect(() => {
-    console.error(
-      "404 Error: User attempted to access non-existent route:",
-      location.pathname
-    );
-  }, [location.pathname]);
-
   return (
-    <div className="min-h-screen bg-black text-foreground flex items-center justify-center px-4">
-      <div className="bg-card/60 border border-minimal-border rounded-2xl shadow-xl p-10 max-w-md w-full text-center">
-        <h1 className="text-6xl md:text-7xl font-extrabold text-minimal-accent mb-4 drop-shadow-lg">404</h1>
-        <p className="text-xl md:text-2xl text-muted-foreground mb-6 font-light">Oops! The page you’re looking for doesn’t exist.</p>
+    <div className="flex min-h-screen items-center justify-center bg-background px-4 text-foreground">
+      <div className="w-full max-w-md rounded-md border border-minimal-border bg-card p-10 text-center shadow-minimal">
+        <h1 className="mb-4 text-5xl font-semibold">404</h1>
+        <p className="mb-6 text-base leading-7 text-foreground/68">
+          This page is not part of the public portfolio.
+        </p>
         <a
           href="/"
-          className="inline-block px-6 py-3 bg-minimal-accent text-black font-semibold rounded-lg shadow hover:bg-minimal-accent/80 transition-colors duration-200"
+          className="inline-flex items-center justify-center rounded-md bg-foreground px-5 py-3 text-sm font-semibold text-background hover:bg-foreground/88"
         >
-          Return to Home
+          Return Home
         </a>
       </div>
     </div>
