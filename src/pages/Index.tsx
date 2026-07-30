@@ -1,367 +1,568 @@
-import { useEffect } from "react";
-import {
-  ArrowUpRight,
-  BriefcaseBusiness,
-  Cpu,
-  Download,
-  Github,
-  GraduationCap,
-  Linkedin,
-  Mail,
-  ShieldCheck,
-  Wrench,
-  Zap,
-} from "lucide-react";
+import { useEffect, useState } from 'react';
+import React, { Suspense } from 'react';
+import Header from '../components/Header';
+import SkillDetailModal from '../components/SkillDetailModal';
+import LiquorBotDetailModal from '../components/LiquorBotDetailModal';
+import skillsData from '../lib/skills';
+import { Github, Linkedin, Heart, Palette } from 'lucide-react';
+import WheelNavigation from '../components/WheelNavigation';
+import { useTheme, ThemeName } from '@/contexts/ThemeContext';
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { Button } from "@/components/ui/button";
 
-const experience = [
-  {
-    role: "Aftermarket Vehicle Personalization Intern",
-    org: "Ford Motor Company",
-    period: "Summer 2024",
-    image: "/Ford-Symbol.png",
-    points: [
-      "Built an automated notifier as parts moved through SIPOC stages, reducing gaps between planning, marketing, and supply chain teams.",
-      "Supported vehicle wrap customization work, coordinating with legal and safety partners to keep the customer experience compliant.",
-      "Developed an influencer pricing model to standardize compensation across platforms and creator tiers.",
-    ],
-  },
-  {
-    role: "High Voltage Systems Lead",
-    org: "SolarPack at NC State",
-    period: "2025 - Present",
-    image: "/sun.png",
-    points: [
-      "Led high-voltage battery pack reconfiguration from 20 kWh to 15 kWh for updated race regulations.",
-      "Maintained BMS, motor controller, charging, and isolation strategy for safe solar vehicle operation.",
-      "Coordinated a 10-student electrical subteam through design, fabrication, testing, and race preparation.",
-    ],
-  },
+import Timeline from '../components/Timeline';
+import { useRef } from 'react';
+import ProjectCard from '../components/ProjectCard';
+import BrandCarousel from '../components/BrandCarousel';
+import LiquorBotModelCanvas from '../components/LiquorBotModel';
+import { IoPhonePortraitOutline, IoConstructOutline, IoCodeSlashOutline } from 'react-icons/io5';
+import FordExperience from '../components/FordExperience';
+
+const themeOptions: { value: ThemeName; label: string; color: string }[] = [
+  { value: 'dark', label: 'Dark', color: 'hsl(250, 24%, 9%)' },
+  { value: 'light', label: 'Light', color: 'hsl(0, 0%, 100%)' },
+  { value: 'red', label: 'Red', color: 'hsl(0, 84%, 60%)' },
+  { value: 'blue', label: 'Blue', color: 'hsl(210, 100%, 60%)' },
+  { value: 'green', label: 'Green', color: 'hsl(142, 76%, 45%)' },
 ];
-
-const projects = [
-  {
-    title: "Drink Machine",
-    summary:
-      "Automated beverage dispensing system with custom PCBs, ESP32 firmware, calibrated pumps, and a React Native control app.",
-    tags: ["PCB Design", "ESP32", "React Native", "IoT"],
-    image: "/liquorbot_overlay.png",
-  },
-  {
-    title: "Solar Car Telemetry",
-    summary:
-      "Vehicle telemetry and control tooling for SolarPack, spanning CAN data, mobile dashboards, remote monitoring, and race operations.",
-    tags: ["CAN Bus", "Telemetry", "Mobile App", "Systems"],
-    image: "/apppreview_blank.png",
-  },
-  {
-    title: "Electric Skateboard",
-    summary:
-      "Dual-motor electric skateboard build using FOC motor controllers, custom lithium-ion battery work, BMS setup, and PWM throttle control.",
-    tags: ["FOC", "Battery Pack", "BMS", "Controls"],
-    image: "/bcu.png",
-  },
-  {
-    title: "FPV Racing Drone",
-    summary:
-      "Custom FPV quad builds with soldered ESC/flight-controller stacks, radio setup, analog video, tuning, and repair workflows.",
-    tags: ["Soldering", "ESC/FC", "Radio", "Fabrication"],
-    image: "/fcu.png",
-  },
-];
-
-const skills = [
-  "Embedded systems",
-  "Circuit design",
-  "Power electronics",
-  "Battery systems",
-  "CAN bus",
-  "React",
-  "React Native",
-  "Product development",
-  "Technical communication",
-  "Content operations",
-];
-
-const education = [
-  "B.S. Electrical and Electronics Engineering, NC State University, 2022-2026",
-  "Focus areas: embedded systems, circuit design, power electronics, signal processing, robotics, and controls.",
-  "Dean's List: Fall 2022, Spring 2023, Spring 2024, Fall 2024.",
-];
-
-const SectionHeading = ({
-  eyebrow,
-  title,
-}: {
-  eyebrow: string;
-  title: string;
-}) => (
-  <div className="mb-8">
-    <p className="mb-2 text-xs font-semibold uppercase tracking-[0.2em] text-foreground/50">
-      {eyebrow}
-    </p>
-    <h2 className="text-3xl font-semibold text-foreground md:text-4xl">{title}</h2>
-  </div>
-);
 
 const Index = () => {
-  useEffect(() => {
-    document.title = "Nathan Hambleton | Electrical Engineer";
+  const { theme, setTheme } = useTheme();
+  // Drink Machine Detail Modal State
+  const [drinkMachineModalOpen, setDrinkMachineModalOpen] = useState(false);
+  const [drinkMachineDetailType, setDrinkMachineDetailType] = useState<'mobile' | 'hardware' | 'firmware' | null>(null);
+  const [visibleSections, setVisibleSections] = useState<Set<string>>(new Set());
+  const [drinkMachineInView, setDrinkMachineInView] = useState(false);
+  const [sunScale, setSunScale] = useState(1);
+  const sunRef = useRef<HTMLImageElement>(null);
 
-    const description =
-      "Electrical engineering portfolio for Nathan Hambleton, focused on embedded systems, power electronics, product development, and technical leadership.";
-    const metaDescription = document.querySelector("meta[name='description']");
-    metaDescription?.setAttribute("content", description);
+  useEffect(() => {
+    let frameId: number | null = null;
+    const handleMouseMove = (e: MouseEvent) => {
+      if (frameId) return;
+      frameId = requestAnimationFrame(() => {
+        const sun = sunRef.current;
+        if (!sun) return;
+        const rect = sun.getBoundingClientRect();
+        const sunX = rect.left + rect.width / 2;
+        const sunY = rect.top + rect.height / 2;
+        const dx = e.clientX - sunX;
+        const dy = e.clientY - sunY;
+        const distance = Math.sqrt(dx * dx + dy * dy);
+        // Clamp scale between 0.7 and 1.5 based on distance (closer = bigger)
+        const minScale = 0.25;
+        const maxScale = 1.5;
+        const maxDistance = 1500;
+        const scale = Math.max(minScale, maxScale - (distance / maxDistance) * (maxScale - minScale));
+        setSunScale(scale);
+        frameId = null;
+      });
+    };
+    window.addEventListener('mousemove', handleMouseMove);
+    return () => {
+      window.removeEventListener('mousemove', handleMouseMove);
+      if (frameId) cancelAnimationFrame(frameId);
+    };
+  }, []);
+
+  useEffect(() => {
+    const observer = new IntersectionObserver(
+      (entries) => {
+        entries.forEach((entry) => {
+          if (entry.isIntersecting) {
+            const sectionId = entry.target.id;
+            setVisibleSections(prev => new Set([...prev, sectionId]));
+            if (sectionId === 'drink-machine') setDrinkMachineInView(true);
+          }
+        });
+      },
+      { threshold: 0.2 }
+    );
+
+    const sections = document.querySelectorAll('section[id]');
+    sections.forEach((section) => observer.observe(section));
+
+    return () => observer.disconnect();
+  }, []);
+
+  // Solar Car Timeline Data
+  const solarCarTimeline = [
+    {
+      id: 'hv-lead',
+      title: 'High Voltage Systems Lead',
+      description: 'Led the reconfiguration and maintenance of the high-voltage system powering Fenrir, focusing on battery pack compliance, BMS optimization, and safe operation.',
+      period: '2025 - Present',
+      details: [
+        'Led a team of 10 undergraduate electical engineering students',
+        'Reconfigured custom lithium-ion battery pack from 20kWh to 15kWh to meet new race regulations (100S9P), including spot welding new nickel/copper strips and cell rearrangement',
+        'Refined battery management system (BMS) parameters for accurate state-of-charge, thermal, and current protection',
+        'Managed motor controller and charging infrastructure for safe, reliable operation',
+        'Coordinated system-level architecture, isolation, and fault protection strategies',
+        'Implemented charge/discharge logic via high-voltage control board',
+        'Integrated solar charging system to enable battery charging from solar array',
+      ]
+    },
+    {
+      id: 'electronics',
+      title: 'Electronics Integration',
+      description: 'Developed full-stack telemetry and control systems, including mobile app, backend server, and CAN bus integration.',
+      period: '2024 - 2025',
+      details: [
+        'Built mobile app for live telemetry, control, and dashboard gauges (Bluetooth & cellular)',
+        'Implemented backend server to store and serve car data, supporting remote access',
+        'Designed frontend dashboard for real-time stats, motor/BMS/charging/low voltage monitoring, and testing',
+        'Integrated CAN bus communication for all vehicle modules',
+        'Added map/lap tracking, backup camera, and notification system for alerts',
+        'Enabled Spotify/music integration and remote server connectivity for multiple devices'
+      ],
+      links: [
+        { label: 'SolarPack iOS App', url: 'https://apps.apple.com/us/app/solarpack/id6748289347' },
+        { label: 'SolarPack Server', url: 'https://solarpack-app-server-alyv.onrender.com/#' }
+      ]
+    },
+    {
+      id: 'dynamics',
+      title: 'Vehicle Dynamics Engineer',
+      description: 'Focused on suspension, drivetrain, steering, and chassis fabrication for optimal performance and reliability.',
+      period: '2022 - 2024',
+      details: [
+        'Designed and implemented double wishbone suspension with steering rack and power braking',
+        'Engineered chain drive system and motor mounts',
+        'Fabricated mounts for brake pedal, steering shaft, and normal pedal',
+        'Selected and sourced tires for various track conditions',
+        'Chassis fabrication including welding, grinding, and steel work',
+        'Collaborated on drivetrain and steering system integration'
+      ]
+    }
+  ];
+
+  // Projects Data
+  const otherProjects = [
+    {
+      title: 'Portfolio Website',
+      description: 'This very website: built from scratch with React + Vite, hosted on GitHub Pages, and served via my custom domain with proper licensing and SSL. Features interactive UI components and acts as my digital portfolio and resume.',
+      tags: ['Frontend', 'React', 'Vite', 'Web Development', 'GitHub Pages'],
+      featured: true
+    },
+    {
+      title: 'Electric Skateboard',
+      description: 'Multiple iterations culminating in a dual-motor drive using FOC motor drivers. Hand-built lithium-ion battery pack with integrated BMS (configured via vendor UI—learned and set key parameters). PWM remote control integration for throttle/brake, with reliable, smooth control.',
+      tags: ['FOC', 'Dual Motor', 'Battery Pack', 'BMS', 'PWM'],
+      featured: false
+    },
+    {
+      title: 'FPV Racing Drone',
+  description: 'Custom built FPV quads from parts, soldered motors and ESCs to the flight controller, and set up analog video feed. Configured radio link/remote control, assembled and tuned the stack, and navigated basic drone regs while planning parts lists and builds.',
+  tags: ['FPV', 'Soldering', 'Analog Video', 'ESC/FC', 'Racing'],
+      featured: false
+    },
+    {
+      title: 'Custom PC Build',
+      description: 'Workstation-class PC built for video editing, VFX, encoding, and 3D modeling. Learned PC assembly and component selection (CPU/GPU/RAM/SSD), planned a parts list around budget/performance, and integrated liquid cooling for sustained workloads.',
+      tags: ['PC Building', 'Liquid Cooling', 'GPU/CPU', 'Workstation'],
+      featured: false
+    }
+  ];
+
+  const [selectedSkill, setSelectedSkill] = useState(null);
+  // Prevent background scroll when modal is open
+  useEffect(() => {
+    if (selectedSkill) {
+      document.body.style.overflow = 'hidden';
+    } else {
+      document.body.style.overflow = '';
+    }
+    return () => {
+      document.body.style.overflow = '';
+    };
+  }, [selectedSkill]);
+
+  useEffect(() => {
+    document.title = "Nathan Hambleton – Portfolio";
+    const favicon = document.querySelector("link[rel='icon']");
+    if (favicon) {
+      favicon.setAttribute("href", "/logo.png");
+    }
   }, []);
 
   return (
-    <main className="min-h-screen bg-background text-foreground">
-      <header className="sticky top-0 z-40 border-b border-minimal-border bg-background/92 backdrop-blur">
-        <nav className="mx-auto flex max-w-6xl items-center justify-between px-4 py-3 md:px-6">
-          <a href="/" className="flex items-center gap-3" aria-label="Nathan Hambleton home">
+    <div className="min-h-screen bg-black text-foreground">
+      <WheelNavigation />
+
+      {/* Floating Theme Selector */}
+      <div className="fixed top-6 right-6 z-50">
+        <Popover>
+          <PopoverTrigger asChild>
+            <Button 
+              variant="outline" 
+              size="icon" 
+              className="bg-card/80 backdrop-blur-sm border-minimal-border hover:border-minimal-accent shadow-lg"
+            >
+              <Palette className="h-5 w-5" />
+            </Button>
+          </PopoverTrigger>
+          <PopoverContent align="end" className="w-56">
+            <div className="space-y-2">
+              <p className="text-sm font-medium">Choose Theme</p>
+              <div className="flex gap-2 flex-wrap">
+                {themeOptions.map((option) => (
+                  <button
+                    key={option.value}
+                    onClick={() => setTheme(option.value)}
+                    className={`
+                      flex items-center gap-2 px-3 py-2 rounded-md text-sm flex-1 min-w-[45%] transition-all
+                      ${theme === option.value 
+                        ? 'bg-primary text-primary-foreground' 
+                        : 'bg-muted hover:bg-muted/80'
+                      }
+                    `}
+                    title={option.label}
+                  >
+                    <div 
+                      className="w-4 h-4 rounded-full border border-border"
+                      style={{ backgroundColor: option.color }}
+                    />
+                    {option.label}
+                  </button>
+                ))}
+              </div>
+            </div>
+          </PopoverContent>
+        </Popover>
+      </div>
+
+      {/* About Section */}
+      <section
+        id="about"
+        className={`min-h-screen flex items-center justify-center px-4 lg:px-8 pt-16 lg:pt-0 section-enter ${visibleSections.has('about') ? 'visible' : ''}`}
+      >
+        <div
+          className="w-full max-w-4xl mx-auto flex flex-col items-center text-center"
+          style={{ padding: '1.5rem 0' }}
+        >
+          <div className="flex justify-center mb-8 w-full">
             <img
-              src="/logo.png"
-              alt=""
-              className="h-9 w-9 rounded-md border border-minimal-border bg-card object-contain"
+              src="/Headshot%20small.png"
+              alt="Nathan Hambleton headshot"
+              className="w-32 h-32 md:w-40 md:h-40 rounded-full border-4 border-white shadow-lg object-cover mx-auto"
+              style={{ background: '#fff' }}
+              loading="lazy"
             />
-            <span className="text-sm font-semibold">Nathan Hambleton</span>
-          </a>
-          <div className="hidden items-center gap-5 text-sm text-foreground/70 md:flex">
-            <a href="#experience" className="hover:text-foreground">Experience</a>
-            <a href="#projects" className="hover:text-foreground">Projects</a>
-            <a href="#resume" className="hover:text-foreground">Resume</a>
-            <a href="#contact" className="hover:text-foreground">Contact</a>
           </div>
-          <a
-            href="mailto:nhambleton@ncsu.edu"
-            className="inline-flex h-10 w-10 items-center justify-center rounded-md border border-minimal-border hover:border-foreground/40"
-            aria-label="Email Nathan Hambleton"
-          >
-            <Mail className="h-4 w-4" />
-          </a>
-        </nav>
-      </header>
 
-      <section className="mx-auto grid min-h-[calc(100vh-65px)] max-w-6xl items-center gap-10 px-4 py-12 md:grid-cols-[1fr_340px] md:px-6">
-        <div>
-          <p className="mb-4 inline-flex items-center gap-2 rounded-md border border-minimal-border px-3 py-2 text-xs uppercase tracking-[0.18em] text-foreground/60">
-            <ShieldCheck className="h-4 w-4" />
-            Electrical Engineer
-          </p>
-          <h1 className="max-w-3xl text-4xl font-semibold leading-tight text-foreground md:text-6xl">
-            Embedded systems, power electronics, and product work built with practical engineering judgment.
+          <h1 className="text-3xl sm:text-4xl md:text-6xl lg:text-7xl font-bold mb-4 md:mb-6 text-foreground w-full text-center">
+            Nathan Hambleton
           </h1>
-          <p className="mt-6 max-w-2xl text-base leading-8 text-foreground/72 md:text-lg">
-            I am Nathan Hambleton, an electrical engineering student at NC State
-            with hands-on experience across solar vehicle systems, custom electronics,
-            mobile apps, automation, and technical content.
-          </p>
-          <div className="mt-8 flex flex-col gap-3 sm:flex-row">
-            <a
-              href="#projects"
-              className="inline-flex items-center justify-center gap-2 rounded-md bg-foreground px-5 py-3 text-sm font-semibold text-background hover:bg-foreground/88"
-            >
-              View Projects
-              <ArrowUpRight className="h-4 w-4" />
-            </a>
-            <a
-              href="/Nathan-Hambleton-Resume.html"
-              className="inline-flex items-center justify-center gap-2 rounded-md border border-minimal-border px-5 py-3 text-sm font-semibold text-foreground hover:border-foreground/40"
-            >
-              Resume
-              <Download className="h-4 w-4" />
-            </a>
-          </div>
-        </div>
 
-        <aside className="mx-auto w-full max-w-[340px]">
-          <img
-            src="/Headshot%20small.png"
-            alt="Nathan Hambleton"
-            className="aspect-square w-full rounded-md border border-minimal-border object-cover shadow-minimal"
-            loading="eager"
-          />
-          <div className="mt-4 grid grid-cols-2 gap-3 text-sm">
+          <p className="text-lg sm:text-xl md:text-2xl text-muted-foreground mb-6 md:mb-8 font-light leading-relaxed w-full text-center">
+            Electrical Engineer | Product Development | Video Creator
+          </p>
+
+          <p className="text-base sm:text-lg text-foreground/80 max-w-2xl mx-auto mb-8 md:mb-12 leading-relaxed w-full text-center">
+            Electrical engineer specializing in embedded systems, hardware, software, and creative technologies. Experienced in delivering end-to-end solutions—from solar vehicles and IoT robotics to mobile applications and visual effects.
+          </p>
+
+          {/* Social Links - stack vertically on mobile, horizontal on desktop */}
+          <div className="flex flex-col sm:flex-row items-center justify-center gap-4 sm:gap-6 w-full max-w-xs mx-auto">
             <a
               href="https://www.linkedin.com/in/nathanhambleton/"
-              target="_blank"
-              rel="noopener noreferrer"
-              className="inline-flex items-center justify-center gap-2 rounded-md border border-minimal-border px-3 py-3 hover:border-foreground/40"
+              className="flex items-center gap-2 px-6 py-3 w-full sm:w-auto bg-card/50 backdrop-blur-sm border border-minimal-border rounded-lg hover:border-minimal-accent transition-all duration-300 minimal-hover group justify-center"
+              target="_blank" rel="noopener noreferrer"
             >
-              <Linkedin className="h-4 w-4" />
+              <Linkedin className="w-5 h-5 group-hover:text-minimal-accent transition-colors" />
+              <span>LinkedIn</span>
+            </a>
+            <a
+              href="https://github.com/nathanhambleton1"
+              className="flex items-center gap-2 px-6 py-3 w-full sm:w-auto bg-card/50 backdrop-blur-sm border border-minimal-border rounded-lg hover:border-minimal-accent transition-all duration-300 minimal-hover group justify-center"
+              target="_blank" rel="noopener noreferrer"
+            >
+              <Github className="w-5 h-5 group-hover:text-minimal-accent transition-colors" />
+              <span>GitHub</span>
+            </a>
+            <a
+              href="https://www.tiktok.com/@nathan_ham"
+              className="flex items-center gap-2 px-6 py-3 w-full sm:w-auto bg-card/50 backdrop-blur-sm border border-minimal-border rounded-lg hover:border-minimal-accent transition-all duration-300 minimal-hover group justify-center"
+              target="_blank" rel="noopener noreferrer"
+            >
+              <Heart className="w-5 h-5 group-hover:text-minimal-accent transition-colors" />
+              <span>TikTok</span>
+            </a>
+          </div>
+        </div>
+      </section>
+
+      
+
+      {/* Experience Section */}
+      <section id="experience" className={`py-20 px-4 lg:px-8 section-enter ${visibleSections.has('experience') ? 'visible' : ''}`}>
+        <div className="max-w-6xl mx-auto">
+          <div className="text-center mb-12">
+            <h2 className="text-4xl md:text-5xl font-bold mb-4 text-foreground">Experience</h2>
+            <p className="text-base md:text-lg text-muted-foreground">Aftermarket Vehicle Personalization • Ford Motor Company</p>
+          </div>
+
+          <FordExperience />
+
+          {/* Detailed bullets */}
+          <div className="mt-8 grid grid-cols-1 md:grid-cols-2 gap-4 text-sm text-muted-foreground">
+            <ul className="list-disc pl-5 space-y-2">
+              <li>Built an automated notifier as parts moved through SIPOC stages to reduce communication gaps between planning, marketing, and supply chain teams.</li>
+              <li>Contributed to a vehicle wrap customization platform; coordinated with legal and safety to ensure compliance.</li>
+              <li>Helped concept and launch a new aftermarket package program with agencies on naming and customer experience.</li>
+            </ul>
+            <ul className="list-disc pl-5 space-y-2">
+              <li>Developed an influencer pricing model to standardize compensation rates across platforms and creator tiers.</li>
+              <li>Strengthened cross‑functional communication and internal workflows in a fast‑paced corporate environment.</li>
+              <li>Marketing and sales operations support for Ford Performance aftermarket products.</li>
+            </ul>
+          </div>
+        </div>
+      </section>
+
+      {/* Solar Car Project */}
+      <section id="solar-car" className={`py-20 px-4 lg:px-8 section-enter ${visibleSections.has('solar-car') ? 'visible' : ''}`}>
+        <div className="max-w-6xl mx-auto">
+          <div className="text-center mb-16">
+            <div style={{ position: 'relative', display: 'inline-block', width: '100%' }}>
+              <h2 className="text-4xl md:text-5xl font-bold mb-6 text-foreground" style={{ position: 'relative', zIndex: 1 }}>Solar Car Project</h2>
+              <img
+                src="/sun.png"
+                alt="Sun"
+                ref={sunRef}
+                style={{
+                  position: 'absolute',
+                  top: '-100px',
+                  right: '200px',
+                  width: '200px',
+                  height: '200px',
+                  zIndex: 2,
+                  pointerEvents: 'none',
+                  transform: `scale(${sunScale})`,
+                  transformOrigin: 'center',
+                  transition: 'transform 0.1s',
+
+                }}
+                className="hidden sm:block"
+                loading="lazy"
+              />
+            </div>
+            <p className="text-xl text-muted-foreground max-w-3xl mx-auto leading-relaxed">
+              NC States Solar Car Team, SolarPack - Designing and building Fenrir, a solar-powered vehicle for the American Solar Challenge
+            </p>
+          </div>
+          
+          <Timeline items={solarCarTimeline} />
+
+        </div>
+      </section>
+
+      {/* Drink Machine Project */}
+      <section id="drink-machine" className={`py-20 px-4 lg:px-8 section-enter ${visibleSections.has('drink-machine') ? 'visible' : ''}`}> 
+        <div className="max-w-6xl mx-auto">
+          <div className="text-center mb-16">
+            <h2 className="text-4xl md:text-5xl font-bold mb-6 text-foreground">Drink Machine</h2>
+            <p className="text-xl text-muted-foreground max-w-3xl mx-auto leading-relaxed">
+              Automated drink machine with mobile app integration and precision dispensing & mixing system
+            </p>
+          </div>
+          <ProjectCard
+            title="Drink Machine - Automated Beverage System"
+            description={
+              <div className="space-y-3">
+                <p>
+                  A fully automated drink machine, personally designed, built, and coded from the ground up. Targeted for caterers, restaurants, and events.
+                </p>
+                <ul className="list-disc pl-5 space-y-1 text-sm">
+                  <li>
+                    <strong>Mobile App (React Native):</strong> fully self-developed library and customization, strength/size sliders, queueing, BLE/Wi‑Fi control, live progress + ETA, cleaning/flush routines.
+                  </li>
+                  <li>
+                    <strong>Hardware & Electronics:</strong> personally designed and fabricated custom PCBs, diaphragm pumps with check valves, per‑line calibration, food‑safe tubing and reservoirs.
+                  </li>
+                  <li>
+                    <strong>Firmware (ESP32, Arduino framework):</strong> precise pump/solenoid orchestration, per‑ingredient flow profiles, calibration storage, OTA updates, IoT Core/MQTT connectivity, app integration.
+                  </li>
+                </ul>
+              </div>
+            }
+            tags={["Robotics", "Mobile App", "PCB Design", "Microcontroller", "IoT"]}
+            featured={true}
+            layout="horizontal"
+            media={drinkMachineInView ? <Suspense fallback={<div className="w-full h-full bg-gray-900 animate-pulse" />}>{<LiquorBotModelCanvas className="w-full h-full" />}</Suspense> : <div className="w-full h-full bg-gray-900 animate-pulse" />}
+            className="min-h-[420px] md:min-h-[460px]"
+            mediaNoFrame
+            mediaContainerClassName="md:min-w-[460px] md:w-[520px] h-[360px] md:h-full"
+          />
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mt-12">
+            <div
+              className="project-card text-center cursor-pointer hover:bg-minimal-accent/10 transition-colors"
+              onClick={() => { setDrinkMachineModalOpen(true); setDrinkMachineDetailType('mobile'); }}
+              role="button"
+              tabIndex={0}
+            >
+              <IoPhonePortraitOutline className="text-4xl mb-4 text-foreground/90 block mx-auto" />
+              <h3 className="text-lg font-semibold mb-2">Mobile App</h3>
+              <p className="text-sm text-muted-foreground">React Native app for recipe selection and customization</p>
+            </div>
+            <div
+              className="project-card text-center cursor-pointer hover:bg-minimal-accent/10 transition-colors"
+              onClick={() => { setDrinkMachineModalOpen(true); setDrinkMachineDetailType('hardware'); }}
+              role="button"
+              tabIndex={0}
+            >
+              <IoConstructOutline className="text-4xl mb-4 text-foreground/90 block mx-auto" />
+              <h3 className="text-lg font-semibold mb-2">Hardware</h3>
+              <p className="text-sm text-muted-foreground">Custom PCBs with diaphragm pump control systems</p>
+            </div>
+            <div
+              className="project-card text-center cursor-pointer hover:bg-minimal-accent/10 transition-colors"
+              onClick={() => { setDrinkMachineModalOpen(true); setDrinkMachineDetailType('firmware'); }}
+              role="button"
+              tabIndex={0}
+            >
+              <IoCodeSlashOutline className="text-4xl mb-4 text-foreground/90 block mx-auto" />
+              <h3 className="text-lg font-semibold mb-2">Firmware</h3>
+              <p className="text-sm text-muted-foreground">ESP32 firmware for solenoid control, IoT Core connectivity, and app integration</p>
+            </div>
+          </div>
+        </div>
+        {drinkMachineModalOpen && (
+          <LiquorBotDetailModal
+            onClose={() => { setDrinkMachineModalOpen(false); setDrinkMachineDetailType(null); }}
+            detailType={drinkMachineDetailType}
+          />
+        )}
+      </section>
+
+      {/* TikTok & Marketing */}
+      <section id="marketing" className={`py-20 px-4 lg:px-8 section-enter ${visibleSections.has('marketing') ? 'visible' : ''}`}>
+        <div className="max-w-6xl mx-auto">
+          <div className="text-center mb-16">
+            <h2 className="text-4xl md:text-5xl font-bold mb-6 text-foreground">Content & Partnerships</h2>
+            <p className="text-xl text-muted-foreground">Building tech community through engaging content</p>
+          </div>
+          
+          <BrandCarousel />
+        </div>
+      </section>
+
+      {/* Skills Section (moved to just above Projects) */}
+      <section id="skills" className={`py-20 px-4 lg:px-8 section-enter ${visibleSections.has('skills') ? 'visible' : ''}`}>
+        <div className="max-w-6xl mx-auto">
+          <div className="text-center mb-16">
+            <h2 className="text-4xl md:text-5xl font-bold mb-6 text-foreground">Skills</h2>
+            <p className="text-xl text-muted-foreground">Embedded Systems • Mobile App Development • Power Electronics • Mechatronics • Product Development</p>
+          </div>
+          <div className="flex flex-wrap justify-center gap-4">
+            {skillsData.map((skill, idx) => (
+              <button
+                key={idx}
+                className="px-4 py-2 bg-card/50 border border-minimal-border rounded-lg text-foreground text-sm font-mono hover:bg-minimal-accent/20 transition-colors focus:outline-none"
+                onClick={() => setSelectedSkill(skill)}
+                type="button"
+              >
+                {skill.name}
+              </button>
+            ))}
+          </div>
+        </div>
+      </section>
+
+      {/* Projects Section */}
+      <section id="projects" className={`py-20 px-4 lg:px-8 section-enter ${visibleSections.has('projects') ? 'visible' : ''}`}>
+  <div className="max-w-6xl mx-auto">
+          <div className="text-center mb-12">
+            <h2 className="text-5xl font-extrabold mb-4 text-white drop-shadow-lg">Projects</h2>
+            <p className="text-lg text-muted-foreground mb-2">Personal engineering projects and creative builds</p>
+          </div>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-10">
+            {otherProjects.slice(0, 4).map((project, index) => (
+              <ProjectCard key={index} {...project} />
+            ))}
+          </div>
+        </div>
+      </section>
+
+      {/* Education Section (moved to bottom beneath Projects) */}
+      <section id="college" className={`py-20 px-4 lg:px-8 section-enter ${visibleSections.has('college') ? 'visible' : ''}`}>
+        <div className="max-w-6xl mx-auto">
+          <div className="text-center mb-16">
+            <h2 className="text-4xl md:text-5xl font-bold mb-6 text-foreground">
+              <a href="https://www.ncsu.edu/" target="_blank" rel="noopener noreferrer" className="hover:text-minimal-accent transition-colors">
+                North Carolina State University
+              </a>
+            </h2>
+            <p className="text-xl text-muted-foreground">B.S. Electrical and Electronics Engineering (2022–2026)</p>
+            <p className="text-lg text-muted-foreground mt-2">Focus: Embedded Systems, Circuit Design, Power Electronics</p>
+          </div>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+            <div className="project-card">
+              <h3 className="text-2xl font-semibold mb-4 text-foreground">Coursework & Activities</h3>
+              <div className="space-y-3">
+                {[
+                  'Embedded Systems Programming',
+                  'Analog & Digital Circuit Design',
+                  'Amplifier Design',
+                  'Power Electronics',
+                  'Signal Processing',
+                  'Robotics & Control Systems',
+                  'PCB Design & Fabrication',
+                ].map((course, index) => (
+                  <div key={index} className="flex items-center gap-3">
+                    <div className="w-2 h-2 bg-minimal-accent rounded-full" />
+                    <span className="font-mono text-sm">{course}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+            <div className="project-card">
+              <h3 className="text-2xl font-semibold mb-4 text-foreground">Achievements</h3>
+              <div className="space-y-4">
+                <div>
+                  <div className="text-lg font-medium">Senior Design Project</div>
+                  <div className="text-sm text-muted-foreground">Entrepreneurial capstone: Developed a new product from idea to prototype, including business planning, sponsor outreach, and hands-on fabrication.</div>
+                </div>
+                <div>
+                  <div className="text-lg font-medium">Dean's List</div>
+                  <div className="text-sm text-muted-foreground">Fall 2022, Spring 2023, Spring 2024, Fall 2024</div>
+                </div>
+                <div>
+                  <div className="text-lg font-medium">Solar Car Team Leadership</div>
+                  <div className="text-sm text-muted-foreground">High Voltage Team Lead</div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      {/* Footer */}
+      <footer className="py-12 px-4 lg:px-8 border-t border-minimal-border bg-gradient-to-r from-black via-minimal-accent/10 to-black">
+        <div className="max-w-6xl mx-auto text-center flex flex-col items-center gap-4">
+          <div className="flex gap-4 justify-center mt-2">
+            <a href="https://github.com/nathanhambleton1" target="_blank" rel="noopener noreferrer" className="hover:text-minimal-accent transition-colors">
+              GitHub
+            </a>
+            <a href="https://www.linkedin.com/in/nathanhambleton/" target="_blank" rel="noopener noreferrer" className="hover:text-minimal-accent transition-colors">
               LinkedIn
             </a>
-            <a
-              href="https://github.com/nathanhambleton1"
-              target="_blank"
-              rel="noopener noreferrer"
-              className="inline-flex items-center justify-center gap-2 rounded-md border border-minimal-border px-3 py-3 hover:border-foreground/40"
-            >
-              <Github className="h-4 w-4" />
-              GitHub
+            <a href="https://www.tiktok.com/@nathan_ham" target="_blank" rel="noopener noreferrer" className="hover:text-minimal-accent transition-colors">
+              TikTok
             </a>
           </div>
-        </aside>
-      </section>
-
-      <section id="experience" className="border-t border-minimal-border px-4 py-16 md:px-6">
-        <div className="mx-auto max-w-6xl">
-          <SectionHeading eyebrow="Experience" title="Work That Translates Across Teams" />
-          <div className="grid gap-5 md:grid-cols-2">
-            {experience.map((item) => (
-              <article key={item.role} className="rounded-md border border-minimal-border bg-card p-6">
-                <div className="mb-5 flex items-start gap-4">
-                  <img
-                    src={item.image}
-                    alt=""
-                    className="h-12 w-12 rounded-md border border-minimal-border bg-background object-contain p-1"
-                    loading="lazy"
-                  />
-                  <div>
-                    <h3 className="text-xl font-semibold">{item.role}</h3>
-                    <p className="mt-1 text-sm text-foreground/60">
-                      {item.org} | {item.period}
-                    </p>
-                  </div>
-                </div>
-                <ul className="space-y-3 text-sm leading-7 text-foreground/74">
-                  {item.points.map((point) => (
-                    <li key={point} className="flex gap-3">
-                      <span className="mt-2 h-1.5 w-1.5 flex-none rounded-full bg-foreground/70" />
-                      <span>{point}</span>
-                    </li>
-                  ))}
-                </ul>
-              </article>
-            ))}
-          </div>
-        </div>
-      </section>
-
-      <section id="projects" className="border-t border-minimal-border px-4 py-16 md:px-6">
-        <div className="mx-auto max-w-6xl">
-          <SectionHeading eyebrow="Projects" title="Selected Engineering Builds" />
-          <div className="grid gap-5 md:grid-cols-2">
-            {projects.map((project) => (
-              <article key={project.title} className="overflow-hidden rounded-md border border-minimal-border bg-card">
-                <img
-                  src={project.image}
-                  alt=""
-                  className="h-48 w-full border-b border-minimal-border bg-background object-contain p-5"
-                  loading="lazy"
-                />
-                <div className="p-6">
-                  <h3 className="text-xl font-semibold">{project.title}</h3>
-                  <p className="mt-3 text-sm leading-7 text-foreground/74">{project.summary}</p>
-                  <div className="mt-5 flex flex-wrap gap-2">
-                    {project.tags.map((tag) => (
-                      <span
-                        key={tag}
-                        className="rounded-md border border-minimal-border px-2.5 py-1 text-xs text-foreground/68"
-                      >
-                        {tag}
-                      </span>
-                    ))}
-                  </div>
-                </div>
-              </article>
-            ))}
-          </div>
-        </div>
-      </section>
-
-      <section id="resume" className="border-t border-minimal-border px-4 py-16 md:px-6">
-        <div className="mx-auto grid max-w-6xl gap-8 md:grid-cols-[0.8fr_1.2fr]">
-          <SectionHeading eyebrow="Resume" title="Professional Snapshot" />
-          <div className="grid gap-5">
-            <article className="rounded-md border border-minimal-border bg-card p-6">
-              <div className="mb-4 flex items-center gap-3">
-                <GraduationCap className="h-5 w-5" />
-                <h3 className="text-lg font-semibold">Education</h3>
-              </div>
-              <ul className="space-y-3 text-sm leading-7 text-foreground/74">
-                {education.map((item) => (
-                  <li key={item}>{item}</li>
-                ))}
-              </ul>
-            </article>
-            <article className="rounded-md border border-minimal-border bg-card p-6">
-              <div className="mb-4 flex items-center gap-3">
-                <Cpu className="h-5 w-5" />
-                <h3 className="text-lg font-semibold">Skills</h3>
-              </div>
-              <div className="flex flex-wrap gap-2">
-                {skills.map((skill) => (
-                  <span
-                    key={skill}
-                    className="rounded-md border border-minimal-border px-3 py-1.5 text-xs text-foreground/72"
-                  >
-                    {skill}
-                  </span>
-                ))}
-              </div>
-            </article>
-            <article className="rounded-md border border-minimal-border bg-card p-6">
-              <div className="mb-4 flex items-center gap-3">
-                <BriefcaseBusiness className="h-5 w-5" />
-                <h3 className="text-lg font-semibold">Strengths</h3>
-              </div>
-              <p className="text-sm leading-7 text-foreground/74">
-                I work comfortably between hardware, software, and people: turning
-                ambiguous product needs into working systems, test plans, documentation,
-                and cross-functional execution.
-              </p>
-            </article>
-          </div>
-        </div>
-      </section>
-
-      <section id="contact" className="border-t border-minimal-border px-4 py-16 md:px-6">
-        <div className="mx-auto grid max-w-6xl gap-8 md:grid-cols-[1fr_auto] md:items-center">
-          <div>
-            <p className="mb-2 text-xs font-semibold uppercase tracking-[0.2em] text-foreground/50">
-              Contact
-            </p>
-            <h2 className="text-3xl font-semibold md:text-4xl">Available for engineering internships and product-focused technical roles.</h2>
-            <p className="mt-4 max-w-2xl text-sm leading-7 text-foreground/70">
-              The site is intentionally static and lightweight so hiring teams can
-              access it from stricter enterprise networks.
-            </p>
-          </div>
-          <div className="flex flex-col gap-3 sm:flex-row">
-            <a
-              href="mailto:nhambleton@ncsu.edu"
-              className="inline-flex items-center justify-center gap-2 rounded-md bg-foreground px-5 py-3 text-sm font-semibold text-background hover:bg-foreground/88"
-            >
-              <Mail className="h-4 w-4" />
-              Email
-            </a>
-            <a
-              href="https://github.com/nathanhambleton1"
-              target="_blank"
-              rel="noopener noreferrer"
-              className="inline-flex items-center justify-center gap-2 rounded-md border border-minimal-border px-5 py-3 text-sm font-semibold hover:border-foreground/40"
-            >
-              <Github className="h-4 w-4" />
-              GitHub
-            </a>
-          </div>
-        </div>
-      </section>
-
-      <footer className="border-t border-minimal-border px-4 py-8 text-center text-xs text-foreground/50 md:px-6">
-        <div className="mx-auto flex max-w-6xl flex-col items-center justify-between gap-3 md:flex-row">
-          <span>Copyright {new Date().getFullYear()} Nathan Hambleton</span>
-          <span className="inline-flex items-center gap-2">
-            <Wrench className="h-3.5 w-3.5" />
-            Static React portfolio on GitHub Pages
-          </span>
-          <span className="inline-flex items-center gap-2">
-            <Zap className="h-3.5 w-3.5" />
-            nathanham.tech
-          </span>
+          <p className="text-xs text-muted-foreground mt-4 font-mono">© {new Date().getFullYear()} Nathan Hambleton. All rights reserved.</p>
         </div>
       </footer>
-    </main>
+    {selectedSkill && (
+      <div className="fixed inset-0 z-50 flex items-center justify-center">
+  <div className="absolute inset-0 bg-black/0 backdrop-blur-sm" />
+        <div className="relative flex items-center justify-center w-full h-full">
+          <SkillDetailModal skill={selectedSkill} onClose={() => setSelectedSkill(null)} />
+        </div>
+      </div>
+    )}
+    </div>
   );
 };
 

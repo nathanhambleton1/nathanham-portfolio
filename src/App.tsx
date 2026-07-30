@@ -1,14 +1,40 @@
+import { Toaster } from "@/components/ui/toaster";
+import { Toaster as Sonner } from "@/components/ui/sonner";
+import { TooltipProvider } from "@/components/ui/tooltip";
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { BrowserRouter, Routes, Route } from "react-router-dom";
+import { ThemeProvider } from "@/contexts/ThemeContext";
 import Index from "./pages/Index";
+import Dev from "./pages/Dev";
 import NotFound from "./pages/NotFound";
+import Drunk from "./pages/Drunk";
+import Athena from "./pages/Athena";
+import TireInspection from "./pages/TireInspection";
+import Travel from "./pages/Travel";
+
+const queryClient = new QueryClient();
 
 const App = () => (
-  <BrowserRouter basename="/">
-    <Routes>
-      <Route path="/" element={<Index />} />
-      <Route path="*" element={<NotFound />} />
-    </Routes>
-  </BrowserRouter>
+  <QueryClientProvider client={queryClient}>
+    <ThemeProvider>
+      <TooltipProvider>
+        <Toaster />
+        <Sonner />
+        <BrowserRouter basename="/">
+          <Routes>
+            <Route path="/" element={<Index />} />
+            <Route path="drunk/*" element={<Drunk />} />
+            <Route path="dev" element={<Dev />} />
+            <Route path="athena" element={<Athena />} />
+            <Route path="tires" element={<TireInspection />} />
+            <Route path="travel/*" element={<Travel />} />
+            {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
+            <Route path="*" element={<NotFound />} />
+          </Routes>
+        </BrowserRouter>
+      </TooltipProvider>
+    </ThemeProvider>
+  </QueryClientProvider>
 );
 
 export default App;

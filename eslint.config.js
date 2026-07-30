@@ -5,23 +5,7 @@ import reactRefresh from "eslint-plugin-react-refresh";
 import tseslint from "typescript-eslint";
 
 export default tseslint.config(
-  {
-    ignores: [
-      "dist",
-      "docs",
-      "lab-public",
-      "drunk",
-      "src/components",
-      "src/contexts",
-      "src/travel",
-      "src/pages/Athena.tsx",
-      "src/pages/Dev.tsx",
-      "src/pages/TireInspection.tsx",
-      "src/components/LiquorBotDetailModal.tsx",
-      "src/lib/deviceCommands.ts",
-      "src/lib/supabase.ts",
-    ],
-  },
+  { ignores: ["dist"] },
   {
     extends: [js.configs.recommended, ...tseslint.configs.recommended],
     files: ["**/*.{ts,tsx}"],

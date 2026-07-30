@@ -1,19 +1,20 @@
-const fs = require("fs");
-const path = require("path");
+const fs = require('fs');
+const path = require('path');
 
-const distDir = path.resolve(__dirname, "..", "dist");
-const indexFile = path.join(distDir, "index.html");
-const notFoundFile = path.join(distDir, "404.html");
+const docsDir = path.resolve(__dirname, '..', 'docs');
+const indexFile = path.join(docsDir, 'index.html');
+const notFoundFile = path.join(docsDir, '404.html');
 
 try {
   if (!fs.existsSync(indexFile)) {
-    console.error("Error: dist/index.html not found. Run the build first.");
+    console.error('Error: docs/index.html not found. Make sure to run the build first.');
     process.exit(1);
   }
 
-  fs.copyFileSync(indexFile, notFoundFile);
-  console.log("Wrote dist/404.html for GitHub Pages SPA fallback.");
+  const html = fs.readFileSync(indexFile, 'utf8');
+  fs.writeFileSync(notFoundFile, html, 'utf8');
+  console.log('Wrote docs/404.html -> created SPA fallback for GitHub Pages.');
 } catch (err) {
-  console.error("Failed to create 404.html:", err);
+  console.error('Failed to create 404.html:', err);
   process.exit(1);
 }
