@@ -1,0 +1,40 @@
+name: Supabase heartbeat
+
+# GitHub Pages is static, so this workflow keeps the Supabase project active
+# even when nobody is visiting the website.
+on:
+  schedule:
+    # Three requests per day; avoid the top of the hour, when GitHub schedules
+    # are more likely to be delayed.
+    - cron: "17 */8 * * *"
+  workflow_dispatch:
+
+# This workflow only calls Supabase and does not need repository write access.
+permissions:
+  contents: read
+
+jobs:
+  heartbeat:
+    name: Query Supabase
+    runs-on: ubuntu-latest
+    timeout-minutes: 2
+    env:
+      SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+      SUPABASE_ANON_KEY: ${{ secrets.SUPABASE_ANON_KEY }}
+    steps:
+      - name: Verify configuration
+        shell: bash
+        run: |
+          test -n "$SUPABASE_URL"
+          test -n "$SUPABASE_ANON_KEY"
+
+      - name: Make a read-only database request
+        shell: bash
+        run: |
+          curl --fail --silent --show-error --retry 3 --retry-all-errors \
+            --connect-timeout 10 --max-time 30 \
+            "$SUPABASE_URL/rest/v1/travel_trips?select=id&limit=1" \
+            -H "apikey: $SUPABASE_ANON_KEY" \
+            -H "Authorization: Bearer $SUPABASE_ANON_KEY" \
+            -H "Accept: application/json" \
+            -o /dev/null
