@@ -1,64 +1,33 @@
-// Cosmetic password gate for the Travel editor.
-// See supabase/travel_setup.sql for the security note — this protects the UI,
-// not the database.
+// Real auth-backed edit mode for the Travel editor, via Supabase Auth.
+// Unlike the old "cosmetic" password, this is actually enforced server-side:
+// see supabase/travel_setup.sql — writes require an `authenticated` session.
+// Shares its sign-in plumbing with the other password-gated sub-apps — see
+// src/lib/ownerAuth.ts.
 
-import {
-  createContext,
-  useCallback,
-  useContext,
-  useMemo,
-  useState,
-} from "react";
+import { createContext, useContext, useMemo } from "react";
 import type { ReactNode } from "react";
-
-const STORAGE_KEY = "travel-edit-unlocked";
-const PASSWORD =
-  (import.meta.env.VITE_TRAVEL_PASSWORD as string | undefined) ?? "";
+import { signInAsOwner, signOutOwner, useOwnerSession } from "@/lib/ownerAuth";
 
 interface EditModeValue {
   unlocked: boolean;
-  unlock: (attempt: string) => boolean;
-  lock: () => void;
-  // True when a password has been configured at build time.
-  configured: boolean;
+  loading: boolean;
+  signIn: (password: string) => Promise<{ ok: boolean; error?: string }>;
+  lock: () => Promise<void>;
 }
 
 const EditModeContext = createContext<EditModeValue | null>(null);
 
 export function EditModeProvider({ children }: { children: ReactNode }) {
-  const [unlocked, setUnlocked] = useState<boolean>(() => {
-    try {
-      return sessionStorage.getItem(STORAGE_KEY) === "1";
-    } catch {
-      return false;
-    }
-  });
-
-  const unlock = (attempt: string): boolean => {
-    if (PASSWORD && attempt === PASSWORD) {
-      setUnlocked(true);
-      try {
-        sessionStorage.setItem(STORAGE_KEY, "1");
-      } catch {
-        /* ignore */
-      }
-      return true;
-    }
-    return false;
-  };
-
-  const lock = () => {
-    setUnlocked(false);
-    try {
-      sessionStorage.removeItem(STORAGE_KEY);
-    } catch {
-      /* ignore */
-    }
-  };
+  const { session, loading } = useOwnerSession();
 
   const value = useMemo<EditModeValue>(
-    () => ({ unlocked, unlock, lock, configured: Boolean(PASSWORD) }),
-    [unlocked]
+    () => ({
+      unlocked: Boolean(session),
+      loading,
+      signIn: signInAsOwner,
+      lock: signOutOwner,
+    }),
+    [session, loading]
   );
 
   return (

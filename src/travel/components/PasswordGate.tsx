@@ -1,5 +1,6 @@
-// A small lock/unlock control. Locked: opens a dialog to enter the editor
-// password. Unlocked: shows an "editing" pill that can re-lock.
+// A small lock/unlock control. Locked: opens a dialog to sign in with the
+// editor password. Unlocked: shows an "editing" pill that can re-lock
+// (signs out of the Supabase session).
 
 import { useState } from "react";
 import { Lock, LockOpen } from "lucide-react";
@@ -16,17 +17,17 @@ import { Button } from "@/components/ui/button";
 import { useEditMode } from "../context/EditMode";
 
 export default function PasswordGate() {
-  const { unlocked, unlock, lock, configured } = useEditMode();
+  const { unlocked, signIn, lock } = useEditMode();
   const [open, setOpen] = useState(false);
   const [value, setValue] = useState("");
+  const [submitting, setSubmitting] = useState(false);
 
-  const submit = (e: React.FormEvent) => {
+  const submit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!configured) {
-      toast.error("No editor password is configured (set VITE_TRAVEL_PASSWORD).");
-      return;
-    }
-    if (unlock(value)) {
+    setSubmitting(true);
+    const result = await signIn(value);
+    setSubmitting(false);
+    if (result.ok) {
       toast.success("Editing unlocked 💌");
       setOpen(false);
       setValue("");
@@ -40,7 +41,7 @@ export default function PasswordGate() {
     return (
       <button
         type="button"
-        onClick={lock}
+        onClick={() => void lock()}
         className="tv-btn inline-flex items-center gap-1.5 bg-[var(--tv-ink)] px-3 py-1.5 text-sm text-[var(--tv-paper)]"
         title="Lock editing"
       >
@@ -87,9 +88,10 @@ export default function PasswordGate() {
             />
             <Button
               type="submit"
+              disabled={submitting}
               className="tv-btn h-9 bg-[var(--tv-accent)] text-sm text-white hover:bg-[var(--tv-accent)]/90"
             >
-              Unlock ✨
+              {submitting ? "Unlocking…" : "Unlock"}
             </Button>
           </form>
         </DialogContent>

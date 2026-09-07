@@ -11,6 +11,7 @@ import Drunk from "./pages/Drunk";
 import Athena from "./pages/Athena";
 import TireInspection from "./pages/TireInspection";
 import Travel from "./pages/Travel";
+import Finance from "./pages/Finance";
 
 const queryClient = new QueryClient();
 
@@ -28,6 +29,7 @@ const App = () => (
             <Route path="athena" element={<Athena />} />
             <Route path="tires" element={<TireInspection />} />
             <Route path="travel/*" element={<Travel />} />
+            <Route path="finance/*" element={<Finance />} />
             {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
             <Route path="*" element={<NotFound />} />
           </Routes>

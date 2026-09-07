@@ -1,7 +1,7 @@
 // Main travel page: header, view switcher, filters, and the add FAB.
 
 import { useEffect, useMemo, useRef, useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useParams } from "react-router-dom";
 import { AnimatePresence, motion } from "framer-motion";
 import { Plus, Images, Map as MapIcon, Clock, Luggage } from "lucide-react";
 import { useGlasses, useTrips } from "../lib/queries";
@@ -28,17 +28,25 @@ const VIEWS: { key: ViewKey; label: string; icon: typeof Images }[] = [
 
 export default function Explore() {
   const navigate = useNavigate();
+  const { view: viewParam } = useParams<{ view: string }>();
   const { data: glasses = [], isLoading } = useGlasses();
   const { data: trips = [] } = useTrips();
   const { unlocked } = useEditMode();
 
-  const [view, setView] = useState<ViewKey>("gallery");
+  const isValidView = VIEWS.some((v) => v.key === viewParam);
+  const view = (isValidView ? viewParam : "gallery") as ViewKey;
+  const setView = (key: ViewKey) => navigate(`/travel/${key}`);
   const [filters, setFilters] = useState<FilterState>(DEFAULT_FILTERS);
   const [addingGlass, setAddingGlass] = useState(false);
   const [addingTrip, setAddingTrip] = useState(false);
   const [editingTrip, setEditingTrip] = useState<Trip | undefined>(undefined);
   const [fabOpen, setFabOpen] = useState(false);
   const fabRef = useRef<HTMLDivElement>(null);
+
+  // Redirect stray/invalid view segments to the gallery.
+  useEffect(() => {
+    if (!isValidView) navigate("/travel/gallery", { replace: true });
+  }, [isValidView, navigate]);
 
   // Close FAB menu when clicking outside.
   useEffect(() => {

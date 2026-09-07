@@ -1,7 +1,7 @@
 // Travel section shell: scrapbook background, fonts, providers, nested routes.
 
 import { useEffect } from "react";
-import { Route, Routes } from "react-router-dom";
+import { Navigate, Route, Routes } from "react-router-dom";
 import { EditModeProvider } from "./context/EditMode";
 import Explore from "./pages/Explore";
 import GlassDetail from "./pages/GlassDetail";
@@ -26,10 +26,11 @@ export default function TravelApp() {
     <EditModeProvider>
       <div className="travel-root travel-page">
         <Routes>
-          <Route index element={<Explore />} />
+          <Route index element={<Navigate to="gallery" replace />} />
+          <Route path=":view" element={<Explore />} />
           <Route path="glass/:id" element={<GlassDetail />} />
           <Route path="trip/:id" element={<TripDetail />} />
-          <Route path="*" element={<Explore />} />
+          <Route path="*" element={<Navigate to="gallery" replace />} />
         </Routes>
       </div>
     </EditModeProvider>
