@@ -52,7 +52,8 @@ jobs:
       - name: Upload artifact
         uses: actions/upload-pages-artifact@v4
         with:
-          path: ./dist
+          # Vite is configured to build the Pages site into docs/.
+          path: ./docs
 
       - name: Deploy to GitHub Pages
         id: deployment
