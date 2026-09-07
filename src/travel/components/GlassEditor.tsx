@@ -167,7 +167,7 @@ function MapPicker({
     <div>
       {/* Geocoder search — lifted above the map so the results dropdown
           never hides behind Leaflet's panes (notably on mobile). */}
-      <div ref={dropdownRef} className="relative z-[1100] mb-2">
+      <div ref={dropdownRef} className="relative z-10 mb-2 isolate">
         <div className="relative">
           <Search
             size={14}
@@ -188,7 +188,12 @@ function MapPicker({
           )}
         </div>
         {results.length > 0 && (
-          <ul className="absolute z-[2000] mt-0.5 w-full overflow-hidden rounded-lg border border-[rgba(58,47,40,0.14)] bg-white shadow-lg">
+          <ul
+            className="absolute mt-0.5 w-full overflow-hidden rounded-lg border border-[rgba(58,47,40,0.14)] bg-white shadow-lg"
+            // Leaflet assigns high z-indexes to its panes. An explicit inline
+            // value keeps search results above them in the mobile dialog too.
+            style={{ zIndex: 1200 }}
+          >
             {results.map((r, i) => (
               <li key={i} className="border-b border-[rgba(58,47,40,0.07)] last:border-0">
                 <button
@@ -210,7 +215,9 @@ function MapPicker({
         <MapContainer
           center={hasPoint ? [lat as number, lng as number] : [30, 10]}
           zoom={hasPoint ? 6 : 2}
-          style={{ height: 180, width: "100%", borderRadius: 12 }}
+          // Establish a local stacking context so none of Leaflet's panes can
+          // escape over the location search results.
+          style={{ height: 180, width: "100%", borderRadius: 12, position: "relative", zIndex: 0 }}
         >
           <TileLayer
             attribution="&copy; OpenStreetMap"

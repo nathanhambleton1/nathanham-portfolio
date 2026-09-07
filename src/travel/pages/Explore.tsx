@@ -19,6 +19,16 @@ import type { GlassWithDetails, Trip } from "../lib/types";
 
 type ViewKey = "gallery" | "map" | "timeline" | "trips";
 
+// A gallery memory belongs in the chronology of its trip. Standalone memories
+// fall back to the date the glass was collected.
+function journeyDate(glass: GlassWithDetails): number | null {
+  const date = glass.trip?.start_date ?? glass.collected_at;
+  if (!date) return null;
+
+  const timestamp = Date.parse(date);
+  return Number.isNaN(timestamp) ? null : timestamp;
+}
+
 const VIEWS: { key: ViewKey; label: string; icon: typeof Images }[] = [
   { key: "gallery", label: "Gallery", icon: Images },
   { key: "map", label: "Map", icon: MapIcon },
@@ -73,7 +83,8 @@ export default function Explore() {
   const years = useMemo(() => {
     const set = new Set<string>();
     glasses.forEach((g) => {
-      const y = getYear(g.collected_at);
+      const date = g.trip?.start_date ?? g.collected_at;
+      const y = getYear(date);
       if (y) set.add(y);
     });
     return Array.from(set).sort((a, b) => b.localeCompare(a));
@@ -86,7 +97,8 @@ export default function Explore() {
       if (filters.tripId && g.trip_id !== filters.tripId) return false;
       if (filters.country && countryFromPlace(g.place_detail) !== filters.country)
         return false;
-      if (filters.year && getYear(g.collected_at) !== filters.year) return false;
+      const date = g.trip?.start_date ?? g.collected_at;
+      if (filters.year && getYear(date) !== filters.year) return false;
       if (q) {
         const hay = `${g.location_name} ${g.place_detail ?? ""} ${
           g.story ?? ""
@@ -98,9 +110,24 @@ export default function Explore() {
     out = [...out].sort((a, b) => {
       if (filters.sort === "name")
         return a.location_name.localeCompare(b.location_name);
-      const ta = a.collected_at ? Date.parse(a.collected_at) : 0;
-      const tb = b.collected_at ? Date.parse(b.collected_at) : 0;
-      return filters.sort === "date-asc" ? ta - tb : tb - ta;
+      const ta = journeyDate(a);
+      const tb = journeyDate(b);
+      // Keep undated entries at the end in either chronological direction.
+      if (ta === null || tb === null) {
+        if (ta === tb) return a.location_name.localeCompare(b.location_name);
+        return ta === null ? 1 : -1;
+      }
+
+      const chronological = ta - tb;
+      if (chronological !== 0)
+        return filters.sort === "date-asc" ? chronological : -chronological;
+
+      // For multiple glasses from one trip, retain their collection order.
+      const collectedA = a.collected_at ? Date.parse(a.collected_at) : 0;
+      const collectedB = b.collected_at ? Date.parse(b.collected_at) : 0;
+      return filters.sort === "date-asc"
+        ? collectedA - collectedB
+        : collectedB - collectedA;
     });
     return out;
   }, [glasses, filters]);

@@ -1,4 +1,5 @@
-// Masonry-ish gallery of polaroid cards.
+// A row-ordered grid of polaroid cards. CSS columns would fill vertically,
+// which makes chronological data appear out of order when read across a row.
 
 import PolaroidCard from "./PolaroidCard";
 import type { GlassWithDetails } from "../lib/types";
@@ -12,9 +13,9 @@ export default function GalleryView({ glasses, onSelect }: Props) {
   if (glasses.length === 0) return <EmptyState />;
 
   return (
-    <div className="[column-fill:_balance] columns-1 gap-5 sm:columns-2 lg:columns-3 xl:columns-4">
+    <div className="grid grid-cols-1 items-start gap-5 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
       {glasses.map((g, i) => (
-        <div key={g.id} className="mb-7 break-inside-avoid">
+        <div key={g.id}>
           <PolaroidCard glass={g} index={i} onClick={() => onSelect(g)} />
         </div>
       ))}
