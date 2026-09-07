@@ -308,6 +308,17 @@ export default function Setup() {
                     <option value="monthly">Monthly</option>
                   </select>
                 </Field>
+                <Field
+                  label="First paycheck date"
+                  hint="The app auto-logs a paycheck every 14 days from this date whenever you open Finance."
+                >
+                  <input
+                    type="date"
+                    value={get("paycheck_schedule_start")}
+                    onChange={(event) => set("paycheck_schedule_start", event.target.value)}
+                    required
+                  />
+                </Field>
                 <Field label="Pay periods per year">
                   <input
                     type="number"
@@ -1128,11 +1139,16 @@ async function persistStep(
     if (!Number.isFinite(periods) || periods < 1 || periods > 366) {
       throw new Error("Enter a valid number of pay periods per year.");
     }
+    const scheduleStart = get("paycheck_schedule_start");
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(scheduleStart)) {
+      throw new Error("Enter the date of your first paycheck.");
+    }
     const fields: Record<string, unknown> = {
       employer_name: get("employer_name"),
       job_title: get("job_title"),
       work_location: get("work_location"),
       pay_frequency: get("pay_frequency", "biweekly"),
+      paycheck_schedule_start: scheduleStart,
       pay_periods_per_year: periods,
       regular_hours_per_period: get("regular_hours_per_period", "80"),
       gross_pay_per_period: gross.toFixed(2),
@@ -1144,7 +1160,15 @@ async function persistStep(
       prior_virginia_withholding: money(get("prior_virginia_withholding", "0")).toFixed(2),
     };
     for (const [key, value] of Object.entries(fields)) {
-      await saveSetting(live, key, value, { category: "employment" });
+      if (key === "paycheck_schedule_start") {
+        await saveSetting(live, key, value, {
+          category: "employment",
+          valueType: "date",
+          label: "First paycheck date",
+        });
+      } else {
+        await saveSetting(live, key, value, { category: "employment" });
+      }
     }
     return;
   }
