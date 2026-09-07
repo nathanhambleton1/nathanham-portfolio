@@ -44,7 +44,15 @@ jobs:
         run: npm ci
 
       - name: Build
-        run: npm run build
+        env:
+          # These values are compiled into the browser bundle. The Supabase
+          # anon key is designed to be public; access remains governed by RLS.
+          VITE_SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          VITE_SUPABASE_ANON_KEY: ${{ secrets.SUPABASE_ANON_KEY }}
+        run: |
+          test -n "$VITE_SUPABASE_URL"
+          test -n "$VITE_SUPABASE_ANON_KEY"
+          npm run build
 
       - name: Setup Pages
         uses: actions/configure-pages@v5
