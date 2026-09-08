@@ -43,9 +43,11 @@ Run the generated file in the SQL editor **after** step 2. It resolves your user
 id by email, inserts every row with its original id (the foreign keys depend on
 that), and resyncs the identity sequences at the end.
 
-The already-generated file covers the current local database: 98 rows — 7
-accounts, 22 categories, 9 transactions, 33 settings, 5 goals, 7 recurring
-expenses, 1 sinking fund, 6 monthly snapshots, 1 retirement contribution.
+The already-generated file covers the current local database: 89 rows — 7
+accounts, 22 categories, 33 settings, 5 goals, 7 recurring expenses, 1 sinking
+fund, 6 monthly snapshots, 1 retirement contribution. The source database's 9
+transactions were all filler entered while first setting up NexaFi (source =
+'demo') and were intentionally left out.
 
 ### 4. Build with Supabase credentials
 
@@ -71,27 +73,75 @@ comparison — you cannot skip it from devtools.
 
 ---
 
+## The pages
+
+The app was reworked down from 22 pages to 9. What survived maps to the four
+things it is actually used for.
+
+| Page | What it is for |
+|---|---|
+| **Money Flow** (`/finance`) | Decide a month. Bills come off the top automatically; the leftover is split by hand across savings buckets, with suggested amounts pre-filled |
+| **Bills** | Every fixed cost — recurring expenses and subscriptions as one list |
+| **Savings & Goals** | The buckets, and what each account's balance is actually made of |
+| **Paychecks** | Pay history and corrections |
+| **Accounts** | Balances, the ledger, and the category split (was three pages) |
+| **Import** | Staged document imports |
+| **Taxes** | Withholding and the refund estimate |
+| **Reports** | Monthly snapshots, exports, and restore |
+| **Settings** | The assumptions the math reads |
+
+Removed: Setup, Dashboard, Transactions, Spending, Goals, Sinking Funds,
+Investments, Retirement, Financial Health, AI Insights, Needs Review, and
+Data & Backup. **No table was dropped** — every row is still loaded, still
+exported by the full JSON backup, and still restorable. Only the pages went.
+
+## How a month works now
+
+The original earmarked everything automatically the moment a paycheck landed:
+bills, card statements, sinking funds and goals all in one priority-ordered
+waterfall. That is right for the bills and wrong for the rest — in a tight month
+"all of it into the emergency fund, none into travel" is a judgement, not a
+calculation.
+
+So a month has two halves:
+
+```
+net pay
+  − bills, reserved in checking      ← automatic, priority order, stops when the money stops
+  = available
+      − savings buckets              ← you decide, every month, in the editor
+  = left to spend                    ← imported transactions draw this down
+```
+
+`allocation.ts` owns the first half (`billObligations`, `allocatePaycheck`) and
+suggests the second (`bucketTargets`). `monthplan.ts` owns the decision:
+`monthPlanView` builds the editor, `saveMonthPlan` records it.
+
+Saving **rewrites** the month rather than patching it. Every allocation row for
+the month is reverted — envelope credits backed out, transfers deleted, balances
+restored — and written again from the amounts on screen. That is what makes
+opening a month you skipped three months ago safe: there is no incremental state
+to get wrong, only the final answer.
+
+A month is edited as a whole, anchored on its last paycheck (the allocations
+table requires one). Every other paycheck in the month gets an empty marker row,
+without which the next auto-sync would see them as unplanned and reserve the
+bills a second time.
+
 ## What is identical to the Python
 
-All 22 pages, the same URLs under `/finance`, the same stylesheet (scoped to
-`.finance-root`), and the same deterministic engine:
+The same deterministic engine underneath:
 
 - `planning.ts` — progressive federal/Virginia brackets, FICA with the wage-base
-  cap and additional-Medicare threshold, retirement projection, goal forecasting,
-  the surplus waterfall, house glide path
-- `allocation.ts` — the money-flow engine: obligations, per-paycheck earmarking,
-  real transfers, month close/reopen/replan
+  cap and additional-Medicare threshold, retirement projection, goal forecasting
+- `allocation.ts` — obligations, per-paycheck earmarking, real transfers, month
+  close/reopen (the bucket half now defers to `monthplan.ts`)
 - `imports.ts` / `importSchema.ts` — staged imports, duplicate and transfer
   detection, merchant rules, recurring-change suggestions
-- `investments.ts`, `finance.ts`, `paychecks.ts`, `ai.ts`, `exports.ts`, `setup.ts`
+- `finance.ts`, `paychecks.ts`, `exports.ts`
 
 Money uses `decimal.js` with ROUND_HALF_UP rather than JS floats, because the
 original's promise of deterministic figures depends on exact decimal arithmetic.
-
-**Verified**: 194 computed values across 21 function groups were compared
-against the Python originals running on identical inputs. Every value matched.
-
----
 
 ## What deliberately changed
 
@@ -100,7 +150,7 @@ Four things could not port as-is. Each is called out in the relevant file.
 | Was | Now | Why |
 |---|---|---|
 | SQLite file on one laptop | Supabase Postgres | Nothing to serve from a static site; this also syncs across devices |
-| Local `.db` backups, portable `.zip`, "Open Data Folder", backup schedule | Full JSON export + JSON restore (Data & Backup) | No local file, no filesystem access, no background process. Supabase keeps managed backups; the JSON export is the copy you hold |
+| Local `.db` backups, portable `.zip`, "Open Data Folder", backup schedule | Full JSON export + JSON restore (Reports) | No local file, no filesystem access, no background process. Supabase keeps managed backups; the JSON export is the copy you hold |
 | One-click AI commentary / extraction via a server-held API key | Copy-prompt / paste-JSON, validated against the same schema | A key in a public bundle is readable *and billable* by anyone. The original already treated manual mode as fully supported |
 | Plotly charts | Recharts | Already a dependency here. Same palette; see below |
 
@@ -122,9 +172,9 @@ against the card, so visible labels were required regardless.
 Safe to delete `nexafi/` once you have:
 
 - [ ] Run `finance_setup.sql` and `finance_migrate_data.sql`
-- [ ] Signed in at `/finance` and confirmed your accounts, balances, goals and
+- [ ] Signed in at `/finance` and confirmed your accounts, balances, buckets and
       settings look right
-- [ ] Downloaded a full JSON backup from **Data & Backup** and stored it
-      somewhere other than this machine
+- [ ] Downloaded a full JSON backup from **Reports** and stored it somewhere
+      other than this machine
 - [ ] Kept a copy of `~/Library/Application Support/NexaFi/data/nexafi.db`
       somewhere safe — it is the only copy of the pre-migration state

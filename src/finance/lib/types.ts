@@ -201,14 +201,13 @@ export interface SinkingFund {
   updated_at: Timestamp;
 }
 
-export const GOAL_TYPES = ["emergency", "travel", "retirement", "house", "taxable", "other"] as const;
+export const GOAL_TYPES = ["emergency", "travel", "retirement", "taxable", "other"] as const;
 export type GoalType = (typeof GOAL_TYPES)[number];
 
 export const GOAL_TYPE_LABELS: Record<GoalType, string> = {
   emergency: "Emergency fund",
   travel: "Travel",
   retirement: "Retirement",
-  house: "House",
   taxable: "Taxable investing",
   other: "Other",
 };

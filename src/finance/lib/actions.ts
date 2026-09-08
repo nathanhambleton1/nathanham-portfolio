@@ -15,6 +15,7 @@ import {
   recordRetirementContribution,
   updateRetirementContribution,
 } from "./paychecks";
+import { backfillRecurringExpenses } from "./recurringBills";
 
 /** What a page gets back for driving a form: a runner plus its state. */
 export interface ActionRunner {
@@ -103,6 +104,9 @@ export function useAutoSync(): { syncing: boolean; syncError: string | null } {
           changed = true;
         }
 
+        const bills = await backfillRecurringExpenses(data);
+        if (bills.changed) changed = true;
+
         const allocations = await syncAllocations(data, settings);
         if (allocations.changed) changed = true;
 
@@ -110,6 +114,7 @@ export function useAutoSync(): { syncing: boolean; syncError: string | null } {
           await client.invalidateQueries({ queryKey: FINANCE_QUERY_KEY });
         }
       } catch (caught) {
+        console.error("Finance auto-sync failed:", caught);
         if (!cancelled) {
           setSyncError(caught instanceof Error ? caught.message : String(caught));
         }

@@ -58,17 +58,9 @@ begin
     (owner_id, 6, 6, '2026-08-23', 6240.1, 'demo', '2026-08-23 20:52:57.472051', '2026-08-23 20:52:57.472052'),
     (owner_id, 7, 7, '2026-08-23', 3860.8, 'demo', '2026-08-23 20:52:57.472053', '2026-08-23 20:52:57.472054');
 
-  -- transactions -> fin_transactions (9 rows)
-  insert into public.fin_transactions (owner, "id", "transaction_date", "account_id", "description", "amount", "transaction_type", "category_id", "subcategory_id", "notes", "is_transfer", "is_recurring", "source", "fingerprint", "created_at", "updated_at", "posting_date", "merchant", "raw_description", "source_transaction_id", "confidence", "review_required", "ai_import_id") values
-    (owner_id, 1, '2026-08-03', 1, 'Monthly salary', 4200, 'income', null, null, null, false, false, 'demo', '7e679de25a59c66f670a3f0a140398db9484ad93760af258826434189e412927', '2026-08-23 20:52:57.474340', '2026-08-23 20:52:57.474341', null, null, null, null, null, false, null),
-    (owner_id, 2, '2026-08-04', 1, 'Rent', 1755, 'expense', 1, 2, null, false, true, 'demo', 'c68f1fe2b3f698d1a1678c4599a30c3cc3bfa686170288936d41a6de2097bab3', '2026-08-23 20:52:57.474343', '2026-08-23 20:52:57.474345', null, null, null, null, null, false, null),
-    (owner_id, 3, '2026-08-06', 3, 'Harris Teeter', 126.43, 'expense', 6, 7, null, false, false, 'demo', '13944f408b68cbc93d93917587bfbe2f29f04ee149e126b1d465c822b094b475', '2026-08-23 20:52:57.474348', '2026-08-23 20:52:57.474349', null, null, null, null, null, false, null),
-    (owner_id, 4, '2026-08-08', 3, 'City Bistro', 64.2, 'expense', 6, 8, null, false, false, 'demo', '2732f222429baf1e7455e4e0098b9b4c7f55365e58b46c37a0e1b1efd52970ac', '2026-08-23 20:52:57.474351', '2026-08-23 20:52:57.474352', null, null, null, null, null, false, null),
-    (owner_id, 5, '2026-08-11', 3, 'Shell', 52.1, 'expense', 10, 11, null, false, false, 'demo', 'f3919298fb5b5631762a4a174cd010da621377ec054b51129249c37d4bc0df7a', '2026-08-23 20:52:57.474354', '2026-08-23 20:52:57.474355', null, null, null, null, null, false, null),
-    (owner_id, 6, '2026-08-14', 1, 'Home internet', 35, 'expense', 1, 4, null, false, true, 'demo', 'cfcd6c04c418959a05b86275e747b2b194358838d21f096593e1bd19f2a35ba3', '2026-08-23 20:52:57.474360', '2026-08-23 20:52:57.474362', null, null, null, null, null, false, null),
-    (owner_id, 7, '2026-08-16', 3, 'Everyday goods', 88.49, 'expense', 14, 16, null, false, false, 'demo', '31f4f36fb3bb876b00fe552601615b29d05a03a644dbd6ebb8dc9a34a159d0ee', '2026-08-23 20:52:57.474363', '2026-08-23 20:52:57.474364', null, null, null, null, null, false, null),
-    (owner_id, 8, '2026-08-18', 3, 'Weekend tickets', 72, 'expense', 18, 20, null, false, false, 'demo', 'f761c66ed8d538b28f670448485aae58f6c377a057ba215c8c0a1d7004752288', '2026-08-23 20:52:57.474365', '2026-08-23 20:52:57.474366', null, null, null, null, null, false, null),
-    (owner_id, 9, '2026-08-20', 1, 'Card payment', 780, 'card_payment', null, null, null, true, false, 'demo', '8702eb1370f35fbbbadcb4e5b75be1849726a652ba991553f2735ec65d3cf465', '2026-08-23 20:52:57.474367', '2026-08-23 20:52:57.474369', null, null, null, null, null, false, null);
+  -- transactions -> fin_transactions (0 rows)
+  -- The source database's 9 rows were all source = 'demo' (filler entered
+  -- while first setting up NexaFi) and are intentionally omitted here.
 
   -- recurring_expenses -> fin_recurring_expenses (7 rows)
   insert into public.fin_recurring_expenses (owner, "id", "name", "amount", "frequency", "due_day", "is_variable", "category_id", "account_id", "is_active", "created_at", "updated_at") values
@@ -84,11 +76,13 @@ begin
   insert into public.fin_sinking_funds (owner, "id", "name", "target_amount", "current_amount", "due_date", "linked_account_id", "is_active", "created_at", "updated_at") values
     (owner_id, 1, 'Car Tax + Inspection', 250, 250, '2026-10-01', 2, true, '2026-08-23 20:52:57.473924', '2026-08-23 20:52:57.473926');
 
-  -- financial_goals -> fin_financial_goals (5 rows)
+  -- financial_goals -> fin_financial_goals (4 rows)
+  -- The source database's "Future House / Down Payment" goal (id 3, goal_type
+  -- 'house') is intentionally omitted here — that goal and its settings were
+  -- removed from the app entirely.
   insert into public.fin_financial_goals (owner, "id", "name", "goal_type", "target_amount", "current_amount", "recommended_monthly", "user_monthly_target", "target_date", "linked_account_id", "is_active", "created_at", "updated_at") values
     (owner_id, 1, 'Emergency Fund', 'emergency', 10000, 10000, 0, 0, null, 2, true, '2026-08-23 20:52:57.472500', '2026-08-23 20:52:57.472501'),
     (owner_id, 2, 'Travel', 'travel', 3000, 1500, 250, 250, null, 2, true, '2026-08-23 20:52:57.472503', '2026-08-23 20:52:57.472504'),
-    (owner_id, 3, 'Future House / Down Payment', 'house', 80000, 2250, 200, 200, null, 2, true, '2026-08-23 20:52:57.472505', '2026-08-23 21:19:16.887636'),
     (owner_id, 4, 'Roth IRA Annual Target', 'retirement', 3600, 0, 300, 300, null, 6, true, '2026-08-23 21:11:30.610648', '2026-08-23 21:11:30.610650'),
     (owner_id, 5, 'Taxable Investing Annual Target', 'taxable', 3600, 0, 300, 300, null, 7, true, '2026-08-23 21:11:30.610650', '2026-08-23 21:11:30.610651');
 
@@ -105,7 +99,11 @@ begin
     (owner_id, 5, '2026-07-01', 48860, 17804, 4200, 2680, '2026-08-23 20:52:57.472881', '2026-08-23 20:52:57.472882'),
     (owner_id, 6, '2026-08-01', 50500, 18380, 4200, 2625, '2026-08-23 20:52:57.472883', '2026-08-23 20:52:57.472884');
 
-  -- settings -> fin_settings (33 rows)
+  -- settings -> fin_settings (29 rows)
+  -- The source database's house_user_monthly_target, house_horizon_years,
+  -- house_equity_percent, and house_derisk_years settings (ids 7, 28-30) are
+  -- intentionally omitted here — that goal and its settings were removed from
+  -- the app entirely.
   insert into public.fin_settings (owner, "id", "key", "value", "value_type", "label", "description", "category", "created_at", "updated_at") values
     (owner_id, 1, 'savings_apy', '2.8', 'decimal', 'Savings APY', 'Annual percentage yield', 'cash', '2026-08-23 20:52:57.470685', '2026-08-23 20:52:57.470687'),
     (owner_id, 2, 'emergency_recommended_target', '10000', 'money', 'Emergency fund recommendation', 'NexaFi baseline recommendation', 'targets', '2026-08-23 20:52:57.470688', '2026-08-23 20:52:57.470689'),
@@ -113,7 +111,6 @@ begin
     (owner_id, 4, 'primary_card_payment_day', '22', 'integer', 'Primary card payment day', 'Used for cash-flow timing', 'cash', '2026-08-23 20:52:57.470693', '2026-08-23 20:52:57.470694'),
     (owner_id, 5, 'ira_user_monthly_target', '0', 'money', 'Roth IRA user target', 'Tracking begins in a later phase', 'targets', '2026-08-23 20:52:57.470695', '2026-08-23 20:52:57.470696'),
     (owner_id, 6, 'brokerage_user_monthly_target', '0', 'money', 'Brokerage user target', 'Tracking begins in a later phase', 'targets', '2026-08-23 20:52:57.470697', '2026-08-23 20:52:57.470698'),
-    (owner_id, 7, 'house_user_monthly_target', '200', 'money', 'House-fund target', 'Medium/long-term down-payment contribution', 'targets', '2026-08-23 21:11:30.608498', '2026-08-23 21:11:30.608501'),
     (owner_id, 8, 'tax_year', '2026', 'integer', 'Tax year', 'Selects a versioned tax-rule table', 'tax', '2026-08-23 21:11:30.608502', '2026-08-23 21:11:30.608503'),
     (owner_id, 9, 'filing_status', 'single', 'string', 'Filing status', 'Configured rules currently support single filing', 'tax', '2026-08-23 21:11:30.608503', '2026-08-23 21:11:30.608504'),
     (owner_id, 10, 'prior_income', '0', 'money', 'Other-employer income', 'Current-year W-2 income not represented by paychecks', 'tax', '2026-08-23 21:11:30.608504', '2026-08-23 21:11:30.608504'),
@@ -134,9 +131,6 @@ begin
     (owner_id, 25, 'salary_growth_percent', '3', 'decimal', 'Annual salary growth', 'Projection assumption, not a promise', 'retirement', '2026-08-23 21:11:30.608512', '2026-08-23 21:11:30.608513'),
     (owner_id, 26, 'expected_return_percent', '7', 'decimal', 'Expected return', 'Baseline projection assumption, not a promise', 'retirement', '2026-08-23 21:11:30.608513', '2026-08-23 21:11:30.608513'),
     (owner_id, 27, 'ira_contribution_limit_2026', '7500', 'money', '2026 IRA contribution limit', 'Editable, versioned annual limit', 'retirement', '2026-08-23 21:11:30.608513', '2026-08-23 21:11:30.608514'),
-    (owner_id, 28, 'house_horizon_years', '7', 'integer', 'House horizon', 'Editable target horizon in years', 'targets', '2026-08-23 21:11:30.608514', '2026-08-23 21:11:30.608514'),
-    (owner_id, 29, 'house_equity_percent', '40', 'decimal', 'House-fund equity allocation', 'Risk assumption; not a recommendation to hold 100% equities', 'targets', '2026-08-23 21:11:30.608514', '2026-08-23 21:11:30.608515'),
-    (owner_id, 30, 'house_derisk_years', '3', 'integer', 'House de-risk window', 'Years before target to begin reducing risk', 'targets', '2026-08-23 21:11:30.608515', '2026-08-23 21:11:30.608515'),
     (owner_id, 31, 'retirement_savings_rate_target', '15', 'decimal', 'Retirement savings benchmark', 'Editable comparison target, not a requirement', 'health', '2026-08-23 21:11:30.608516', '2026-08-23 21:11:30.608516'),
     (owner_id, 32, 'total_savings_rate_target', '20', 'decimal', 'Total savings benchmark', 'Editable comparison target, not a requirement', 'health', '2026-08-23 21:11:30.608516', '2026-08-23 21:11:30.608516'),
     (owner_id, 33, 'housing_cost_rate_target', '30', 'decimal', 'Housing-cost benchmark', 'Editable share of gross income, not a requirement', 'health', '2026-08-23 21:11:30.608517', '2026-08-23 21:11:30.608517');

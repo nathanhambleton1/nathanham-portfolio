@@ -169,6 +169,8 @@
 .finance-root .button.small { min-height: 34px; padding: 6px 11px; font-size: 12px; }
 .finance-root .button:disabled { cursor: not-allowed; opacity: .45; }
 .finance-root .button-row { display: flex; flex-wrap: wrap; gap: 8px; }
+.finance-root .button .spinner { width: 14px; height: 14px; border: 2px solid currentColor; border-right-color: transparent; border-radius: 50%; opacity: .7; animation: finance-spin .6s linear infinite; }
+@keyframes finance-spin { to { transform: rotate(360deg); } }
 
 .finance-root .alert { margin-bottom: 20px; padding: 12px 15px; border: 1px solid #d9c696; border-radius: 10px; background: #fff9e9; color: #705622; }
 .finance-root .alert.error { border-color: #e5b5af; background: #fff2f0; color: var(--danger); }
@@ -294,29 +296,9 @@
 .finance-root .principle-banner > div:nth-child(2) span { margin-top: 2px; color: var(--muted); font-size: 11px; }
 .finance-root .principle-banner > .tag { display: inline-flex; }
 .finance-root .principle-icon { display: grid; width: 38px; height: 38px; place-items: center; border-radius: 10px; background: var(--ink); color: #d7bc7b; font-weight: 800; }
-.finance-root .import-grid { align-items: stretch; }
 .finance-root .import-method { position: relative; overflow: hidden; }
-.finance-root .import-method.featured { border-color: #cfb36e; box-shadow: inset 0 3px 0 var(--gold); }
-.finance-root .import-method h2 { margin-bottom: 7px; font-size: 19px; }
-.finance-root .import-method > p { min-height: 42px; margin: 0 0 17px; color: var(--muted); font-size: 12px; }
 .finance-root .import-method form { display: grid; gap: 12px; }
 .finance-root .import-method form .button { justify-self: start; }
-.finance-root .method-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 14px; }
-.finance-root .method-number { color: #c7c7c0; font-size: 24px; font-weight: 750; letter-spacing: -.04em; }
-.finance-root .method-divider { display: flex; align-items: center; gap: 10px; margin: 4px 0; color: var(--muted); font-size: 11px; text-transform: uppercase; letter-spacing: .04em; }
-.finance-root .method-divider::before,
-.finance-root .method-divider::after { content: ""; flex: 1; height: 1px; background: var(--line); }
-.finance-root .workflow-card { background: #20211f; color: white; }
-.finance-root .workflow-card .eyebrow { color: #d6ba78; }
-.finance-root .workflow-steps { display: grid; gap: 14px; padding: 6px 0 0; margin: 0; list-style: none; }
-.finance-root .workflow-steps li { display: flex; align-items: center; gap: 12px; }
-.finance-root .workflow-steps li > span { display: grid; width: 29px; height: 29px; place-items: center; border: 1px solid #4b4c47; border-radius: 50%; color: #d6ba78; font-size: 11px; }
-.finance-root .workflow-steps strong,
-.finance-root .workflow-steps small { display: block; }
-.finance-root .workflow-steps small { color: #9e9f98; font-size: 10px; }
-.finance-root .prompt-card { margin-top: 18px; }
-.finance-root .code-area { min-height: 300px; border-color: #d4d4ce; background: #20211f; color: #e7e7e2; font: 11px/1.55 ui-monospace, SFMono-Regular, Menlo, monospace; tab-size: 2; }
-.finance-root .code-area.compact { min-height: 210px; }
 .finance-root .status-dot { display: inline-block; width: 7px; height: 7px; margin-right: 7px; border-radius: 50%; background: #999; }
 .finance-root .status-dot.staged,
 .finance-root .status-dot.metrics_ready { background: var(--gold); }
@@ -349,6 +331,9 @@
 .finance-root .commit-bar strong,
 .finance-root .commit-bar span { display: block; }
 .finance-root .commit-bar span { color: var(--muted); font-size: 11px; }
+.finance-root .import-panel .review-list { margin-bottom: 0; }
+.finance-root .import-batch { margin-top: 14px; }
+.finance-root .import-panel .commit-bar { position: static; left: auto; right: auto; margin-top: 14px; background: none; box-shadow: none; backdrop-filter: none; padding: 15px 0 0; }
 .finance-root .queue-list { display: grid; }
 .finance-root .queue-row,
 .finance-root .subscription-review { display: flex; align-items: center; justify-content: space-between; gap: 20px; padding: 14px 0; border-top: 1px solid #ecece8; }
@@ -475,36 +460,6 @@
 
 /* --- collapsible "Details" nav group -------------------------------------- */
 
-.finance-root .nav-details { margin-top: 3px; }
-.finance-root .nav-details > summary {
-  display: flex;
-  min-height: 42px;
-  align-items: center;
-  gap: 12px;
-  padding: 9px 11px;
-  border-radius: 10px;
-  color: #bdbdb7;
-  font-weight: 550;
-  cursor: pointer;
-  list-style: none;
-  transition: background .16s ease, color .16s ease;
-}
-.finance-root .nav-details > summary::-webkit-details-marker { display: none; }
-.finance-root .nav-details > summary::after {
-  margin-left: auto;
-  color: #85867f;
-  content: "+";
-  font-size: 15px;
-  line-height: 1;
-}
-.finance-root .nav-details[open] > summary::after { content: "\2212"; }
-.finance-root .nav-details > summary:hover { background: #252623; color: white; }
-.finance-root .nav-details > a {
-  min-height: 34px;
-  padding: 6px 11px 6px 40px;
-  font-size: 13px;
-  font-weight: 500;
-}
 
 /* --- money-flow tree ------------------------------------------------------ */
 
@@ -670,4 +625,156 @@
   .finance-root .card { break-inside: avoid; box-shadow: none; }
   .finance-root .chart { min-height: 190px; }
   .finance-root .report-history { break-before: page; }
+}
+
+/* --- month editor --------------------------------------------------------- */
+
+/* The equation strip: pay, minus bills, minus savings, equals what is left.
+ * It wraps rather than scrolls, because on a phone the four terms stacked in
+ * order still read as the same sentence. */
+.finance-root .flow-strip {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: stretch;
+  gap: 10px;
+  margin-bottom: 18px;
+}
+.finance-root .flow-strip .equation-part { flex: 1 1 150px; }
+.finance-root .flow-op { align-self: center; color: var(--muted); font-size: 17px; font-weight: 600; }
+
+.finance-root .plan-rows { display: grid; }
+.finance-root .plan-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 11px 0;
+  border-top: 1px solid #ecece8;
+}
+.finance-root .plan-row:first-child { border-top: 0; }
+.finance-root .plan-row-label { min-width: 0; flex: 1; }
+.finance-root .plan-row-label strong { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.finance-root .plan-row-label .flow-note { display: block; margin-top: 1px; }
+
+/* A bill the month could not fully cover. The left edge carries the signal so
+ * the row stays legible — a red fill behind small tabular numbers does not. */
+.finance-root .plan-row-short {
+  margin-left: -10px;
+  padding-left: 8px;
+  border-left: 2px solid var(--danger);
+}
+
+.finance-root .plan-input {
+  width: 108px;
+  flex: none;
+  padding: 7px 9px;
+  border: 1px solid var(--line);
+  border-radius: 9px;
+  background: var(--card);
+  font-variant-numeric: tabular-nums;
+  font-weight: 640;
+  text-align: right;
+}
+.finance-root .plan-input:focus { border-color: var(--gold); outline: 2px solid var(--gold-soft); }
+.finance-root .plan-input:disabled { background: #f6f6f3; color: var(--muted); }
+
+.finance-root .plan-all {
+  flex: none;
+  padding: 4px 9px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: transparent;
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 600;
+}
+.finance-root .plan-all:hover:not(:disabled) { border-color: var(--gold); color: var(--gold); }
+.finance-root .plan-all:disabled { opacity: .4; cursor: default; }
+
+.finance-root .plan-quick { margin-bottom: 4px; }
+
+.finance-root .plan-shortfall {
+  margin-top: 12px;
+  padding: 11px 13px;
+  border: 1px solid #e2c0ba;
+  border-radius: 11px;
+  background: #fdf5f4;
+}
+.finance-root .plan-shortfall strong { display: block; color: var(--danger); }
+.finance-root .plan-shortfall span { display: block; margin-top: 2px; color: var(--muted); font-size: 11px; }
+
+.finance-root .checkbox-row { display: flex; align-items: center; gap: 8px; font-size: 13px; }
+
+/* The save bar. It sits in the flow rather than fixed to the viewport: the
+ * decision it commits is the one directly above it, and a floating bar would
+ * cover the last row of the thing you are deciding. */
+.finance-root .plan-save {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  margin: 18px 0;
+  padding: 15px 19px;
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  background: var(--card);
+  box-shadow: var(--shadow);
+}
+.finance-root .plan-save.dirty { border-color: #d9c696; background: #fffaf0; }
+.finance-root .plan-save strong { display: block; font-size: 17px; }
+.finance-root .plan-save .small-text { display: block; margin-top: 1px; }
+
+/* --- bills and buckets ---------------------------------------------------- */
+
+.finance-root .bill-amounts { flex: none; text-align: right; }
+.finance-root .bill-amounts small { display: block; font-size: 11px; }
+.finance-root .bill-row .button-row,
+.finance-root .bucket-row .button-row { flex: none; }
+.finance-root .bucket-row { align-items: flex-start; }
+.finance-root .bucket-row .plan-row-label { padding-right: 8px; }
+
+/* --- what an account is made of ------------------------------------------- */
+
+.finance-root .account-breakdown {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 4px 12px;
+  padding: 16px 0;
+  border-top: 1px solid #ecece8;
+}
+.finance-root .account-breakdown:first-of-type { border-top: 0; padding-top: 6px; }
+.finance-root .breakdown-total { align-self: start; font-size: 17px; }
+
+.finance-root .breakdown-bar {
+  display: flex;
+  grid-column: 1 / -1;
+  height: 12px;
+  margin-top: 8px;
+  overflow: hidden;
+  border-radius: 999px;
+  /* The track itself is the "unassigned" slice, so free cash needs no element
+   * of its own and a bar with no buckets still reads as a full, unspoken-for
+   * balance rather than as nothing. */
+  background: #ecece8;
+}
+.finance-root .breakdown-slice { height: 100%; }
+.finance-root .breakdown-slice + .breakdown-slice { border-left: 1px solid var(--card); }
+
+.finance-root .breakdown-legend {
+  display: flex;
+  flex-wrap: wrap;
+  grid-column: 1 / -1;
+  gap: 6px 16px;
+  margin-top: 9px;
+}
+.finance-root .breakdown-key { display: inline-flex; align-items: center; gap: 6px; color: var(--muted); font-size: 11px; }
+.finance-root .breakdown-key i { width: 9px; height: 9px; flex: none; border-radius: 3px; }
+.finance-root .breakdown-key i.breakdown-free { background: #ecece8; }
+
+@media (max-width: 720px) {
+  .finance-root .plan-row { flex-wrap: wrap; }
+  .finance-root .plan-row-label { flex-basis: 100%; }
+  .finance-root .plan-input { width: 100%; flex: 1; }
+  .finance-root .bill-amounts { text-align: left; }
+  .finance-root .flow-op { display: none; }
 }

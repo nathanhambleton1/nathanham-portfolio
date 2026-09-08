@@ -1,45 +1,48 @@
 // The sidebar + topbar chrome, ported from nexafi/templates/base.html.
 //
-// The nav is split the way the original was: four things you touch every month
-// stay at the top level, everything else lives behind a collapsible "Details"
-// group that opens automatically when you are inside it.
+// The original split the nav into four things you touch monthly and a
+// collapsible "Details" drawer holding thirteen more. The drawer is gone: with
+// eight destinations left there is nothing to hide, and a nav you have to open
+// to read is a nav that makes you forget what is in it.
 
 import { useEffect, useState } from "react";
 import type { ReactNode } from "react";
 import { NavLink, useLocation } from "react-router-dom";
+import { Menu, ShieldCheck } from "lucide-react";
 import { fmtLongDay, todayISO } from "../lib/dates";
 import { APP_VERSION } from "../lib/version";
 
 interface NavItem {
   label: string;
   to: string;
-  /** SVG path data for the item's icon, from the original template. */
-  icon?: string;
-  /** Match nested routes too (e.g. /finance/imports/12). */
+  /** SVG path data for the item's icon. */
+  icon: string;
+  /** Match nested routes too (e.g. /finance/accounts/12). */
   end?: boolean;
 }
 
-const PRIMARY: NavItem[] = [
-  { label: "Money Flow", to: "", icon: "M12 3v6m0 0-3-3m3 3 3-3M6 12h12M6 12l3 9m9-9-3 9m-6-9v9", end: true },
-  { label: "Import", to: "imports", icon: "M4 5h16v14H4V5Zm4 4h8m-4-3v7m-3 3h6", end: true },
-  { label: "Accounts", to: "accounts", icon: "M3 7h18M5 7l2-3h10l2 3M5 11h14v9H5v-9Zm3 3h3" },
-  { label: "Needs Review", to: "imports/review", icon: "M12 8v5m0 3h.01M4 20h16L12 4 4 20Z" },
+/** The month: decide it, keep its inputs current. */
+const MONTHLY: NavItem[] = [
+  {
+    label: "Money Flow",
+    to: "",
+    icon: "M12 3v6m0 0-3-3m3 3 3-3M6 12h12M6 12l3 9m9-9-3 9m-6-9v9",
+    end: true,
+  },
+  { label: "Bills", to: "bills", icon: "M6 3h12v18l-3-2-3 2-3-2-3 2V3Zm3 5h6M9 12h6" },
+  {
+    label: "Savings & Goals",
+    to: "savings",
+    icon: "M4 9a8 5 0 0 1 16 0v6a8 5 0 0 1-16 0V9Zm0 0v6m16-6v6M15 12h.01",
+  },
+  { label: "Paychecks", to: "paychecks", icon: "M3 6h18v12H3V6Zm3 3h5m-5 3h3m7 1a2 2 0 1 0 0-4 2 2 0 0 0 0 4Z" },
 ];
 
-const DETAILS: NavItem[] = [
-  { label: "Dashboard", to: "dashboard" },
-  { label: "Transactions", to: "transactions" },
-  { label: "Paychecks", to: "paychecks" },
-  { label: "Spending", to: "spending" },
-  { label: "Goals", to: "goals" },
-  { label: "Sinking Funds", to: "sinking-funds" },
-  { label: "Retirement", to: "retirement" },
-  { label: "Investments", to: "investments" },
-  { label: "Taxes", to: "taxes" },
-  { label: "Financial Health", to: "health" },
-  { label: "Reports", to: "reports" },
-  { label: "AI Insights", to: "ai-insights" },
-  { label: "Data & Backup", to: "settings/data" },
+/** The record: what happened, and what it means. */
+const RECORD: NavItem[] = [
+  { label: "Accounts", to: "accounts", icon: "M3 7h18M5 7l2-3h10l2 3M5 11h14v9H5v-9Zm3 3h3" },
+  { label: "Taxes", to: "taxes", icon: "M6 3h12v18H6V3Zm3 5h6M9 12h2m2 0h2m-4 4h2" },
+  { label: "Reports", to: "reports", icon: "M4 20V10m5 10V4m5 16v-7m5 7V8" },
 ];
 
 const BASE = "/finance";
@@ -82,8 +85,6 @@ export default function Shell({ title, children, message, error }: ShellProps) {
   // open over the page you just navigated to.
   useEffect(() => setMenuOpen(false), [location.pathname]);
 
-  const inDetails = DETAILS.some((item) => location.pathname.startsWith(href(item.to)));
-
   return (
     <div className="shell">
       <aside className={`sidebar${menuOpen ? " open" : ""}`}>
@@ -97,33 +98,30 @@ export default function Shell({ title, children, message, error }: ShellProps) {
 
         <div className="nav-label">Every month</div>
         <nav className="nav" aria-label="Primary">
-          {PRIMARY.map((item) => (
+          {MONTHLY.map((item) => (
             <NavLink
               key={item.to}
               to={href(item.to)}
               end={item.end}
               className={({ isActive }) => (isActive ? "active" : "")}
             >
-              {item.icon && <NavIcon path={item.icon} />}
+              <NavIcon path={item.icon} />
               <span>{item.label}</span>
             </NavLink>
           ))}
 
-          <details className="nav-details" open={inDetails}>
-            <summary>
-              <NavIcon path="M4 7h16M4 12h16M4 17h10" />
-              <span>Details</span>
-            </summary>
-            {DETAILS.map((item) => (
-              <NavLink
-                key={item.to}
-                to={href(item.to)}
-                className={({ isActive }) => (isActive ? "active" : "")}
-              >
-                <span>{item.label}</span>
-              </NavLink>
-            ))}
-          </details>
+          <div className="nav-label">The record</div>
+          {RECORD.map((item) => (
+            <NavLink
+              key={item.to}
+              to={href(item.to)}
+              end={item.end}
+              className={({ isActive }) => (isActive ? "active" : "")}
+            >
+              <NavIcon path={item.icon} />
+              <span>{item.label}</span>
+            </NavLink>
+          ))}
 
           <div className="nav-divider" />
           <NavLink to={href("settings")} end className={({ isActive }) => (isActive ? "active" : "")}>
@@ -157,16 +155,14 @@ export default function Shell({ title, children, message, error }: ShellProps) {
               onClick={() => setMenuOpen((open) => !open)}
               aria-label="Open menu"
             >
-              ☰
+              <Menu size={20} strokeWidth={1.8} />
             </button>
             <p className="topbar-title">{title}</p>
           </div>
           <div className="topbar-meta">
             <span className="date-line">{fmtLongDay(todayISO())}</span>
             <span className="privacy-badge">
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                <path d="M7 11V8a5 5 0 0 1 10 0v3m-11 0h12v10H6V11Z" />
-              </svg>
+              <ShieldCheck size={14} strokeWidth={2} />
               Private
             </span>
           </div>

@@ -1,17 +1,30 @@
-// One staged batch and its review queue. Ported from templates/import_detail.html.
+// The import step of the Money Flow wizard.
+//
+// Import only ever happens once a month, right here, on the way through
+// closing it out — so there is no separate Import Center to navigate to.
+// Staging, reviewing, and committing a batch all happen inline.
 
 import { useState } from "react";
-import { Link, useNavigate, useParams } from "react-router-dom";
-import PageFrame from "../components/PageFrame";
-import { Button, Field, Metric, PageHead, Tag } from "../components/ui";
+import { Button, Card, Field, SectionHead, Tag } from "./ui";
 import { useAction } from "../lib/actions";
-import { commitImport, deleteImport, parsePayload, updateReview } from "../lib/imports";
+import {
+  commitImport, deleteImport, parsePayload, stageImport, updateReview,
+} from "../lib/imports";
 import type { StagedPayload } from "../lib/imports";
-import { dec, fmtMoney } from "../lib/money";
-import type { AIReview } from "../lib/types";
+import { extractionPrompt, parseImportJson } from "../lib/importSchema";
+import { Decimal, dec, fmtMoney } from "../lib/money";
+import type { AIImport, AIReview } from "../lib/types";
+import type { FinanceData } from "../lib/data";
+
+/** Rows below this confidence are sent to review rather than trusted. */
+const CONFIDENCE_THRESHOLD = new Decimal("0.85");
 
 /** Statuses whose row is settled and no longer editable. */
 const SETTLED = ["duplicate", "imported", "rejected"];
+
+function statusLabel(status: string): string {
+  return status.replace(/_/g, " ").replace(/\b\w/g, (char) => char.toUpperCase());
+}
 
 interface Draft {
   merchant: string;
@@ -31,136 +44,192 @@ function draftOf(payload: StagedPayload): Draft {
   };
 }
 
-export default function ImportDetail() {
-  const { importId } = useParams();
-  const action = useAction();
-  const navigate = useNavigate();
+export default function ImportPanel({
+  data, action,
+}: {
+  data: FinanceData;
+  action: ReturnType<typeof useAction>;
+}) {
+  const accounts = data.accounts.filter((account) => account.is_active);
+  const defaultAccount = accounts.find((account) => account.account_type === "credit_card");
+
+  const [textAccountId, setTextAccountId] = useState(defaultAccount ? String(defaultAccount.id) : "");
+  const [jsonText, setJsonText] = useState("");
+  const [copied, setCopied] = useState(false);
+  const [stagingText, setStagingText] = useState(false);
   const [drafts, setDrafts] = useState<Record<number, Draft>>({});
+  const [approvingId, setApprovingId] = useState<number | null>(null);
+
+  const imports = [...data.aiImports].sort((a, b) => b.id - a.id);
+  const staged = imports.filter((row) => row.status !== "committed");
+  const committed = imports.filter((row) => row.status === "committed");
+
+  const submitText = async (event: React.FormEvent) => {
+    event.preventDefault();
+    const text = jsonText.trim();
+    if (!text) {
+      await action.run(async () => {
+        throw new Error("Paste NexaFi JSON before staging it.");
+      });
+      return;
+    }
+    setStagingText(true);
+    try {
+      await action.run(async (current) => {
+        if (!/^\d+$/.test(textAccountId)) throw new Error("Choose a destination account.");
+        const document = parseImportJson(text);
+        await stageImport(current, {
+          document,
+          originalContent: text,
+          filename: "Pasted JSON",
+          sourceType: "json",
+          accountId: Number(textAccountId),
+          confidenceThreshold: CONFIDENCE_THRESHOLD,
+        });
+        return "Added below for review.";
+      });
+      setJsonText("");
+    } finally {
+      setStagingText(false);
+    }
+  };
+
+  const copyPrompt = async () => {
+    try {
+      await navigator.clipboard.writeText(extractionPrompt());
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    } catch {
+      // Clipboard access can be refused; there is nothing else to fall back to
+      // without showing the prompt text on screen.
+    }
+  };
+
+  const removeBatch = (batch: AIImport) => {
+    const confirmed = window.confirm(
+      batch.status === "committed"
+        ? "Delete this batch and remove the transactions it added to your ledger? This cannot be undone."
+        : "Delete this import batch? This cannot be undone.",
+    );
+    if (!confirmed) return;
+    void action.run(async (current) => {
+      const removed = await deleteImport(current, batch);
+      return removed > 0
+        ? `Import batch deleted. ${removed} transaction(s) it added were removed from the ledger.`
+        : "Import batch deleted.";
+    });
+  };
+
+  const saveReview = (review: AIReview, draft: Draft, act: "accept" | "reject") =>
+    action.run(async (current) => {
+      const live = current.aiReviews.find((row) => row.id === review.id);
+      if (!live) throw new Error("Review row not found.");
+      await updateReview(current, live, {
+        action: act,
+        merchant: draft.merchant.trim() || null,
+        categoryId: /^\d+$/.test(draft.category_id) ? Number(draft.category_id) : null,
+        subcategoryId: /^\d+$/.test(draft.subcategory_id) ? Number(draft.subcategory_id) : null,
+        isTransfer: draft.is_transfer,
+        isRecurring: draft.is_recurring,
+      });
+      return "Review decision saved.";
+    });
+
+  const approve = async (batch: AIImport) => {
+    setApprovingId(batch.id);
+    try {
+      await action.run(async (current) => {
+        const live = current.aiImports.find((row) => row.id === batch.id);
+        if (!live) throw new Error("Import not found.");
+        const { created, skipped, autoAccepted } = await commitImport(current, live);
+        let message = `Import approved: ${created} transaction(s) added.`;
+        if (autoAccepted > 0) {
+          message += ` ${autoAccepted} of those were uncertain and imported using their best guess.`;
+        }
+        if (skipped > 0) {
+          message += ` ${skipped} row(s) were skipped as duplicates already in the ledger.`;
+        }
+        return message;
+      });
+    } finally {
+      setApprovingId(null);
+    }
+  };
+
+  const accountSelect = (value: string, onChange: (value: string) => void) => (
+    <select value={value} onChange={(event) => onChange(event.target.value)} required>
+      <option value="">Choose account</option>
+      {accounts.map((account) => (
+        <option key={account.id} value={account.id}>
+          {account.name}
+        </option>
+      ))}
+    </select>
+  );
 
   return (
-    <PageFrame title="Import Center" message={action.message} error={action.error}>
-      {(data) => {
-        const batch = data.aiImports.find((row) => String(row.id) === importId);
-        if (!batch) {
-          return (
-            <>
-              <PageHead eyebrow="Import" title="Batch not found" />
-              <div className="alert error">That import batch no longer exists.</div>
-              <Link className="button secondary" to="/finance/imports">
-                Back to Import Center
-              </Link>
-            </>
-          );
-        }
+    <div className="import-panel">
+      <article className="card card-pad import-method">
+        <SectionHead
+          title="Paste this month's transactions"
+          caption="Copy the prompt, run your statement through Claude, then paste back only the JSON it returns"
+          aside={
+            <Button variant="secondary" small onClick={copyPrompt}>
+              {copied ? "Copied" : "Copy prompt"}
+            </Button>
+          }
+        />
 
+        <form onSubmit={submitText}>
+          <Field label="Destination account">{accountSelect(textAccountId, setTextAccountId)}</Field>
+          <Field label="NexaFi JSON">
+            <textarea
+              rows={6}
+              placeholder="Paste NexaFi JSON here"
+              value={jsonText}
+              onChange={(event) => setJsonText(event.target.value)}
+              required
+            />
+          </Field>
+          <Button type="submit" disabled={action.busy} loading={stagingText}>
+            Add to review queue
+          </Button>
+        </form>
+        <p className="small-text muted" style={{ marginTop: 4 }}>
+          This only stages the transactions below for review — press Continue once you're done.
+        </p>
+      </article>
+
+      {staged.map((batch) => {
         const reviews = data.aiReviews
           .filter((row) => row.ai_import_id === batch.id)
           .sort((a, b) => a.id - b.id);
+        const importable = reviews.filter((row) => ["ready", "accepted"].includes(row.status)).length;
+        const unresolved = reviews.filter((row) => row.status === "needs_review").length;
         const parents = data.categories.filter((row) => row.parent_id === null && row.is_active);
         const children = data.categories.filter((row) => row.parent_id !== null && row.is_active);
 
-        const importable = reviews.filter((row) => ["ready", "accepted"].includes(row.status)).length;
-        const unresolved = reviews.filter((row) => row.status === "needs_review").length;
-
-        const saveReview = (review: AIReview, draft: Draft, act: "accept" | "reject") =>
-          action.run(async (current) => {
-            const live = current.aiReviews.find((row) => row.id === review.id);
-            if (!live) throw new Error("Review row not found.");
-            await updateReview(current, live, {
-              action: act,
-              merchant: draft.merchant.trim() || null,
-              categoryId: /^\d+$/.test(draft.category_id) ? Number(draft.category_id) : null,
-              subcategoryId: /^\d+$/.test(draft.subcategory_id) ? Number(draft.subcategory_id) : null,
-              isTransfer: draft.is_transfer,
-              isRecurring: draft.is_recurring,
-            });
-            return "Review decision saved.";
-          });
-
-        const approve = () =>
-          action.run(async (current) => {
-            const live = current.aiImports.find((row) => row.id === batch.id);
-            if (!live) throw new Error("Import not found.");
-            const { created, skipped, autoAccepted } = await commitImport(current, live);
-
-            let message = `Import approved: ${created} transaction(s) added.`;
-            if (autoAccepted > 0) {
-              message += ` ${autoAccepted} of those were uncertain and imported using their best guess.`;
-            }
-            if (skipped > 0) {
-              message += ` ${skipped} row(s) were skipped as duplicates already in the ledger.`;
-            }
-            navigate("/finance/transactions");
-            return message;
-          });
-
-        const removeBatch = () => {
-          const confirmed = window.confirm(
-            batch.status === "committed"
-              ? "Delete this batch and remove the transactions it added to your ledger? This cannot be undone."
-              : "Delete this import batch? This cannot be undone.",
-          );
-          if (!confirmed) return;
-          void action.run(async (current) => {
-            const live = current.aiImports.find((row) => row.id === batch.id);
-            if (!live) throw new Error("Import not found.");
-            const removed = await deleteImport(current, live);
-            navigate("/finance/imports");
-            return removed > 0
-              ? `Import batch deleted. ${removed} transaction(s) it added were removed from the ledger.`
-              : "Import batch deleted.";
-          });
-        };
-
         return (
-          <>
-            <PageHead
-              eyebrow={`Batch #${batch.id} · ${batch.source_type}`}
+          <Card key={batch.id} className="import-batch">
+            <SectionHead
               title={batch.source_name}
-              subtitle="Review the staged proposal if you want to. Duplicate and rejected rows will not be committed; uncertain rows import with their best guess unless you fix them here."
-              actions={
-                <>
-                  <Link className="button secondary" to="/finance/imports">
-                    Back to Import Center
-                  </Link>
-                  <Button variant="secondary" onClick={removeBatch} disabled={action.busy}>
-                    Delete batch
-                  </Button>
-                </>
+              caption={`Batch #${batch.id} · ${batch.source_type} · ${batch.transaction_count} row(s), ${batch.duplicate_count} duplicate(s)`}
+              aside={
+                <Button variant="secondary" small disabled={action.busy} onClick={() => removeBatch(batch)}>
+                  Delete batch
+                </Button>
               }
             />
 
-            <div className="grid metrics import-metrics">
-              <Metric label="Staged rows" value={batch.transaction_count} note="Validated schema" />
-              <Metric
-                label="Ready to import"
-                value={importable}
-                note="Pending final approval"
-                notePositive
-              />
-              <Metric
-                label="Unsure"
-                value={unresolved}
-                note={unresolved > 0 ? "Will import with best guess" : "All clear"}
-                notePositive={unresolved === 0}
-              />
-              <Metric
-                label="Duplicates blocked"
-                value={batch.duplicate_count}
-                note="Will not reach ledger"
-              />
-            </div>
-
             <div className="review-list">
               {reviews.length === 0 ? (
-                <article className="card empty">This batch has no staged transactions.</article>
+                <p className="empty">This batch has no staged transactions.</p>
               ) : (
                 reviews.map((review) => {
                   const payload = parsePayload(review);
                   const draft = drafts[review.id] ?? draftOf(payload);
                   const setDraft = (patch: Partial<Draft>) =>
                     setDrafts((current) => ({ ...current, [review.id]: { ...draft, ...patch } }));
-
                   const confidence = Math.round(dec(review.confidence ?? 0).times(100).toNumber());
                   const editable = !SETTLED.includes(review.status);
 
@@ -226,8 +295,6 @@ export default function ImportDetail() {
                                 <select
                                   value={draft.category_id}
                                   onChange={(event) =>
-                                    // Changing the parent invalidates any child
-                                    // chosen under the previous one.
                                     setDraft({ category_id: event.target.value, subcategory_id: "" })
                                   }
                                 >
@@ -297,8 +364,8 @@ export default function ImportDetail() {
                           </form>
                         ) : review.status === "duplicate" ? (
                           <p className="muted">
-                            Matched existing transaction #{review.duplicate_transaction_id}. This row
-                            is safely excluded.
+                            Matched existing transaction #{review.duplicate_transaction_id}. This row is
+                            safely excluded.
                           </p>
                         ) : review.status === "rejected" ? (
                           <p className="muted">You rejected this row. It will not be imported.</p>
@@ -325,15 +392,60 @@ export default function ImportDetail() {
               </div>
               <Button
                 variant="gold"
-                onClick={approve}
-                disabled={action.busy || batch.status === "committed"}
+                onClick={() => approve(batch)}
+                disabled={action.busy}
+                loading={approvingId === batch.id}
               >
-                {batch.status === "committed" ? "Already committed" : "Approve & commit import"}
+                Approve &amp; commit import
               </Button>
             </div>
-          </>
+          </Card>
         );
-      }}
-    </PageFrame>
+      })}
+
+      {committed.length > 0 && (
+        <details style={{ marginTop: 14 }}>
+          <summary className="small-text muted">Previously imported ({committed.length})</summary>
+          <div className="table-wrap" style={{ marginTop: 8 }}>
+            <table>
+              <thead>
+                <tr>
+                  <th>Batch</th>
+                  <th>Source</th>
+                  <th>Status</th>
+                  <th>Transactions</th>
+                  <th>Duplicates</th>
+                  <th />
+                </tr>
+              </thead>
+              <tbody>
+                {committed.map((item) => (
+                  <tr key={item.id}>
+                    <td>
+                      <strong>#{item.id}</strong>
+                      <div className="muted small-text">{item.source_name}</div>
+                    </td>
+                    <td>
+                      <Tag>{item.source_type}</Tag>
+                    </td>
+                    <td>
+                      <span className={`status-dot ${item.status}`} />
+                      {statusLabel(item.status)}
+                    </td>
+                    <td>{item.transaction_count}</td>
+                    <td>{item.duplicate_count}</td>
+                    <td>
+                      <Button variant="secondary" small disabled={action.busy} onClick={() => removeBatch(item)}>
+                        Delete
+                      </Button>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </details>
+      )}
+    </div>
   );
 }

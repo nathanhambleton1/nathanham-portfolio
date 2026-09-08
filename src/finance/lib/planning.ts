@@ -254,7 +254,6 @@ export function allocationRecommendation(
     sinkingFunds: Decimal;
     travelTarget: Decimal;
     rothIraTarget: Decimal;
-    houseTarget: Decimal;
     brokerageTarget: Decimal;
     employerMatchCaptured: boolean;
   },
@@ -284,7 +283,6 @@ export function allocationRecommendation(
   allocate("Required sinking funds", input.sinkingFunds, "Fund known costs by their due dates.");
   allocate("Travel", input.travelTarget, "Fund the editable travel target.");
   allocate("Roth IRA", input.rothIraTarget, "Add diversified retirement savings without forcing the annual maximum.");
-  allocate("House fund", input.houseTarget, "Build a down-payment pool on the selected horizon.");
   allocate("Taxable investments", input.brokerageTarget, "Invest accessible long-term money after nearer priorities.");
 
   return { availableSurplus: money(availableSurplus), items, remaining };
@@ -295,36 +293,6 @@ export function contributionLimitWarning(annualContribution: Decimal, annualLimi
     return `Planned contribution exceeds the configured annual limit by ${money(annualContribution.minus(annualLimit)).toFixed(2)}.`;
   }
   return null;
-}
-
-// --- house glide path -------------------------------------------------------
-
-export interface HouseRiskMilestone {
-  yearsUntilGoal: number;
-  equityPercent: Decimal;
-  capitalPreservationPercent: Decimal;
-}
-
-/** A simple glide path that reaches 0% equity at the target date. */
-export function houseRiskPath(
-  horizonYears: number,
-  equityPercent: Decimal,
-  deriskYears: number,
-): HouseRiskMilestone[] {
-  const horizon = Math.max(1, horizonYears);
-  const derisk = Math.max(1, Math.min(deriskYears, horizon));
-  const startingEquity = minDec(100, maxDec(0, equityPercent));
-  const rows: HouseRiskMilestone[] = [];
-  for (let yearsLeft = horizon; yearsLeft >= 0; yearsLeft -= 1) {
-    const raw = yearsLeft >= derisk ? startingEquity : startingEquity.times(yearsLeft).div(derisk);
-    const equity = quantize(raw, 2);
-    rows.push({
-      yearsUntilGoal: yearsLeft,
-      equityPercent: equity,
-      capitalPreservationPercent: money(new Decimal(100).minus(equity)),
-    });
-  }
-  return rows;
 }
 
 // --- goal forecasting -------------------------------------------------------

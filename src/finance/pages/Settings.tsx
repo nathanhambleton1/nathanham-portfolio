@@ -1,27 +1,40 @@
-// Settings - every assumption the app uses. Ported from templates/settings.html.
+// Settings — the assumptions, and nothing else.
 //
-// The whole point of this page is that no recommendation input is hidden in the
-// source. Anything the planning math reads is editable here.
+// This page used to double as a second, worse Bills editor: it listed every
+// recurring expense with an amount and a frequency box, alongside the real one.
+// Bills has that job now, and having it in one place is the whole point.
+//
+// What is left is the numbers the math reads — your pay, your tax situation,
+// your retirement assumptions — plus the two account choices the money-flow
+// engine used to guess at. Those two matter more than they look: they decide
+// which account bills are held in and which one savings transfers land in, and
+// leaving them to a fallback is how money ends up in the wrong place.
 
 import { useState } from "react";
-import { Link } from "react-router-dom";
 import PageFrame from "../components/PageFrame";
-import { Button, Field, FormActions, PageHead, SectionHead, Tag } from "../components/ui";
+import { Advisory, Button, Field, FormActions, PageHead, SectionHead, Tag } from "../components/ui";
 import { useAction } from "../lib/actions";
-import { createRecurringExpense, removeRecurringExpense, saveSetting, ValidationError } from "../lib/mutations";
-import { currentAccountBalances, projectedInterest } from "../lib/finance";
+import { saveSetting, ValidationError } from "../lib/mutations";
+import { checkingAccountId, defaultSavingsAccountId } from "../lib/allocation";
 import { getTaxRules } from "../lib/taxRules";
-import { updateRow, T } from "../lib/db";
-import { dec, fmtMoney, toNumeric, ZERO } from "../lib/money";
+import { dec } from "../lib/money";
 import { APP_VERSION } from "../lib/version";
-import { FREQUENCIES, type Frequency, type RecurringExpense } from "../lib/types";
+import type { FinanceData } from "../lib/data";
+import type { Setting } from "../lib/types";
 
-/** Frequencies the settings page allows, including the escape hatch. */
-const SETTING_FREQUENCIES = [...FREQUENCIES, "custom"] as const;
+/** Category key → the heading and one-line explanation it gets. */
+const GROUPS: [key: string, title: string, caption: string][] = [
+  ["employment", "Your pay", "What payroll assumes when it fills a paycheck in for you"],
+  ["cash", "Cash", "Interest and the day your card statement is due"],
+  ["retirement", "Retirement", "Contribution rates and the growth the projections assume"],
+  ["tax", "Tax", "The year, your filing status, and last year's numbers for the refund estimate"],
+  ["targets", "Suggested monthly targets", "What Money Flow pre-fills a bucket with when it has no date to work from"],
+];
 
-const BLANK_EXPENSE = { name: "", amount: "", frequency: "monthly" };
+/** Categories with no reader left in the app — kept in the database, off the page. */
+const HIDDEN_CATEGORIES = new Set(["health"]);
 
-/** Percentage-ish settings are capped, matching validate_named_setting. */
+/** Percentage-ish settings are capped, matching the original validate_named_setting. */
 function validateSetting(key: string, value: string, valueType: string): void {
   if (valueType === "boolean" || valueType === "string") return;
 
@@ -49,90 +62,65 @@ function inputType(valueType: string): string {
 export default function SettingsPage() {
   const action = useAction();
   const [values, setValues] = useState<Record<string, string> | null>(null);
-  const [expenseDrafts, setExpenseDrafts] = useState<
-    Record<number, { amount: string; frequency: string; is_active: boolean }>
-  >({});
-  const [newExpense, setNewExpense] = useState(BLANK_EXPENSE);
 
   return (
     <PageFrame title="Settings" message={action.message} error={action.error}>
       {(data) => {
-        const settings = [...data.settingRows].sort((a, b) => {
-          const byCategory = a.category.localeCompare(b.category);
-          return byCategory !== 0 ? byCategory : a.id - b.id;
-        });
-        const expenses = [...data.recurringExpenses].sort(
-          (a, b) => (a.due_day ?? 99) - (b.due_day ?? 99),
-        );
-
-        const current = values ?? Object.fromEntries(settings.map((row) => [row.key, row.value]));
-        const draftFor = (expense: RecurringExpense) =>
-          expenseDrafts[expense.id] ?? {
-            amount: String(expense.amount),
-            frequency: expense.frequency,
-            is_active: expense.is_active,
+        const rows = data.settingRows.filter((row) => !HIDDEN_CATEGORIES.has(row.category));
+        const current =
+          values ??
+          {
+            ...Object.fromEntries(rows.map((row) => [row.key, row.value])),
+            // These two have no seeded row, so their starting value is whatever
+            // the engine would fall back to — shown, rather than left blank.
+            flow_checking_account_id:
+              data.settings.flow_checking_account_id ?? String(checkingAccountId(data, data.settings) ?? ""),
+            flow_savings_account_id:
+              data.settings.flow_savings_account_id ??
+              String(defaultSavingsAccountId(data, data.settings) ?? ""),
+            auto_allocate_enabled: data.settings.auto_allocate_enabled ?? "true",
           };
 
-        const balances = currentAccountBalances(data);
-        const savingsAccount = data.accounts.find((row) => row.account_type === "savings");
-        const projected = projectedInterest(
-          savingsAccount ? (balances.get(savingsAccount.id) ?? ZERO) : ZERO,
-          dec(current.savings_apy ?? "0"),
-        );
+        const set = (key: string, value: string) => setValues({ ...current, [key]: value });
 
-        const saveAll = async (event: React.FormEvent) => {
+        const grouped = GROUPS.map(([key, title, caption]) => ({
+          key,
+          title,
+          caption,
+          settings: rows
+            .filter((row) => row.category === key)
+            .sort((a, b) => a.id - b.id),
+        })).filter((group) => group.settings.length > 0);
+
+        // Anything in a category GROUPS does not name still needs somewhere to go,
+        // or a setting added by a later version would be invisible and unfixable.
+        const named = new Set(GROUPS.map(([key]) => key));
+        const other = rows.filter((row) => !named.has(row.category)).sort((a, b) => a.id - b.id);
+
+        const save = async (event: React.FormEvent) => {
           event.preventDefault();
           await action.run(async (live) => {
             for (const row of live.settingRows) {
-              const raw = (current[row.key] ?? row.value).trim();
-              validateSetting(row.key, raw, row.value_type);
+              if (HIDDEN_CATEGORIES.has(row.category)) continue;
+              validateSetting(row.key, (current[row.key] ?? row.value).trim(), row.value_type);
             }
-            // A tax year with no configured tables would break the Taxes page
-            // on its next load, so it is rejected here rather than there.
-            getTaxRules(
-              Number(current.tax_year ?? "2026"),
-              current.filing_status ?? "single",
-            );
+            // A tax year with no configured tables would break the Taxes page on
+            // its next load, so it is rejected here rather than there.
+            getTaxRules(Number(current.tax_year ?? "2026"), current.filing_status ?? "single");
 
             for (const row of live.settingRows) {
+              if (HIDDEN_CATEGORIES.has(row.category)) continue;
               const raw = (current[row.key] ?? row.value).trim();
               if (raw !== row.value) await saveSetting(live, row.key, raw);
             }
 
-            for (const expense of live.recurringExpenses) {
-              const draft = expenseDrafts[expense.id];
-              if (!draft) continue;
-              if (!(SETTING_FREQUENCIES as readonly string[]).includes(draft.frequency)) {
-                throw new ValidationError(`Choose a valid frequency for ${expense.name}.`);
-              }
-              const updated = await updateRow<RecurringExpense>(T.recurringExpenses, expense.id, {
-                amount: toNumeric(dec(draft.amount || "0")),
-                frequency: draft.frequency,
-                is_active: draft.is_active,
-              });
-              Object.assign(expense, updated);
+            for (const key of ["flow_checking_account_id", "flow_savings_account_id", "auto_allocate_enabled"]) {
+              const raw = (current[key] ?? "").trim();
+              if (raw !== (live.settings[key] ?? "")) await saveSetting(live, key, raw);
             }
 
             setValues(null);
-            setExpenseDrafts({});
-            return "Assumptions saved.";
-          });
-        };
-
-        const addExpense = async (event: React.FormEvent) => {
-          event.preventDefault();
-          await action.run(async (live) => {
-            const name = newExpense.name.trim();
-            if (live.recurringExpenses.some((row) => row.name === name)) {
-              throw new ValidationError("An obligation with that name already exists.");
-            }
-            const message = await createRecurringExpense(live, {
-              name,
-              amount: newExpense.amount,
-              frequency: newExpense.frequency as Frequency,
-            });
-            setNewExpense(BLANK_EXPENSE);
-            return message;
+            return "Settings saved.";
           });
         };
 
@@ -141,210 +129,86 @@ export default function SettingsPage() {
             <PageHead
               eyebrow="Your assumptions"
               title="Settings"
-              subtitle="Every recommendation input is editable here — nothing requires a source-code change."
-              actions={
-                <>
-                  <Link className="button secondary" to="/finance/setup?rerun=1">
-                    Rerun Setup
-                  </Link>
-                  <Link className="button" to="/finance/settings/data">
-                    Data &amp; Backup
-                  </Link>
-                </>
-              }
+              subtitle="Every input the math reads. Bills live on the Bills page; buckets live on Savings & Goals."
             />
 
-            <div className="principle-banner">
-              <div className="principle-icon">✓</div>
-              <div>
-                <strong>Rerunning setup preserves your data</strong>
-                <span>
-                  Existing accounts, transactions, imports, and history are updated only when you
-                  explicitly edit them.
-                </span>
-              </div>
-              <Tag tone="gold">Non-destructive</Tag>
-            </div>
-
-            <form onSubmit={saveAll}>
+            <form onSubmit={save}>
               <section className="card card-pad settings-section">
                 <SectionHead
-                  title="Targets & planning assumptions"
-                  caption="Recommended baselines and your chosen targets stay visibly distinct"
-                  aside={<Tag tone="gold">Projected annual interest {fmtMoney(projected)}</Tag>}
+                  title="Where the money moves"
+                  caption="Which real accounts the money-flow engine reserves from and transfers into"
                 />
-                {settings.map((setting) => (
-                  <div className="setting-row" key={setting.key}>
-                    <div className="setting-copy">
-                      <strong>{setting.label}</strong>
-                      <span>{setting.description}</span>
-                      <small className="muted">{setting.category}</small>
-                    </div>
-                    <div className="field">
-                      {setting.value_type === "boolean" ? (
-                        <label className="checkbox">
-                          <input
-                            type="checkbox"
-                            checked={current[setting.key] === "true"}
-                            onChange={(event) =>
-                              setValues({
-                                ...current,
-                                [setting.key]: event.target.checked ? "true" : "false",
-                              })
-                            }
-                          />
-                          Enabled
-                        </label>
-                      ) : (
-                        <Field label="Value">
-                          <input
-                            type={inputType(setting.value_type)}
-                            min={["decimal", "money", "integer"].includes(setting.value_type) ? "0" : undefined}
-                            step={
-                              setting.value_type === "integer"
-                                ? "1"
-                                : ["decimal", "money"].includes(setting.value_type)
-                                  ? "0.01"
-                                  : undefined
-                            }
-                            value={current[setting.key] ?? ""}
-                            onChange={(event) =>
-                              setValues({ ...current, [setting.key]: event.target.value })
-                            }
-                          />
-                        </Field>
-                      )}
-                    </div>
+                <AccountSetting
+                  label="Bills are paid from"
+                  hint="Money reserved for bills and the card statement stays here."
+                  data={data}
+                  types={["checking"]}
+                  value={current.flow_checking_account_id ?? ""}
+                  onChange={(value) => set("flow_checking_account_id", value)}
+                />
+                <AccountSetting
+                  label="Savings transfers land in"
+                  hint="Used for any bucket that has no account of its own."
+                  data={data}
+                  types={["savings", "checking", "taxable_brokerage", "brokerage"]}
+                  value={current.flow_savings_account_id ?? ""}
+                  onChange={(value) => set("flow_savings_account_id", value)}
+                />
+                <div className="setting-row">
+                  <div className="setting-copy">
+                    <strong>Take bills out automatically</strong>
+                    <span>
+                      When a paycheck lands, reserve the month's bills without being asked. Savings
+                      buckets are never automatic — those are always your call in Money Flow.
+                    </span>
                   </div>
-                ))}
+                  <label className="checkbox">
+                    <input
+                      type="checkbox"
+                      checked={current.auto_allocate_enabled !== "false"}
+                      onChange={(event) =>
+                        set("auto_allocate_enabled", event.target.checked ? "true" : "false")
+                      }
+                    />
+                    Enabled
+                  </label>
+                </div>
               </section>
 
-              <section className="card card-pad settings-section">
-                <SectionHead
-                  title="Recurring expenses"
-                  caption="Amounts keep their real frequency; annual costs are not recorded as fake monthly spending"
-                />
-                {expenses.map((expense) => {
-                  const draft = draftFor(expense);
-                  const setDraft = (patch: Partial<typeof draft>) =>
-                    setExpenseDrafts((state) => ({
-                      ...state,
-                      [expense.id]: { ...draft, ...patch },
-                    }));
+              {grouped.map((group) => (
+                <section className="card card-pad settings-section" key={group.key}>
+                  <SectionHead title={group.title} caption={group.caption} />
+                  {group.settings.map((setting) => (
+                    <SettingRow
+                      key={setting.key}
+                      setting={setting}
+                      value={current[setting.key] ?? ""}
+                      onChange={(value) => set(setting.key, value)}
+                    />
+                  ))}
+                </section>
+              ))}
 
-                  return (
-                    <div className="setting-row" key={expense.id}>
-                      <div className="setting-copy">
-                        <strong>{expense.name}</strong>
-                        <span>
-                          Due day {expense.due_day ?? "—"} ·{" "}
-                          {expense.is_variable ? "Variable budget" : "Fixed amount"}
-                        </span>
-                        <label className="checkbox" style={{ marginTop: 7 }}>
-                          <input
-                            type="checkbox"
-                            checked={draft.is_active}
-                            onChange={(event) => setDraft({ is_active: event.target.checked })}
-                          />
-                          Active
-                        </label>
-                      </div>
-                      <div className="form-grid">
-                        <Field label="Amount">
-                          <input
-                            type="number"
-                            min="0"
-                            step="0.01"
-                            value={draft.amount}
-                            onChange={(event) => setDraft({ amount: event.target.value })}
-                          />
-                        </Field>
-                        <Field label="Frequency">
-                          <select
-                            value={draft.frequency}
-                            onChange={(event) => setDraft({ frequency: event.target.value })}
-                          >
-                            {SETTING_FREQUENCIES.map((frequency) => (
-                              <option key={frequency} value={frequency}>
-                                {frequency.charAt(0).toUpperCase() + frequency.slice(1)}
-                              </option>
-                            ))}
-                          </select>
-                        </Field>
-                        <Button
-                          variant="secondary"
-                          small
-                          disabled={action.busy}
-                          onClick={() => {
-                            if (!window.confirm(`Delete the "${expense.name}" obligation?`)) return;
-                            void action.run((live) => removeRecurringExpense(live, expense.id));
-                          }}
-                        >
-                          Delete
-                        </Button>
-                      </div>
-                    </div>
-                  );
-                })}
-                {expenses.length === 0 && <p className="muted">No recurring obligations yet.</p>}
-              </section>
+              {other.length > 0 && (
+                <section className="card card-pad settings-section">
+                  <SectionHead title="Other" caption="Settings without a group of their own" />
+                  {other.map((setting) => (
+                    <SettingRow
+                      key={setting.key}
+                      setting={setting}
+                      value={current[setting.key] ?? ""}
+                      onChange={(value) => set(setting.key, value)}
+                    />
+                  ))}
+                </section>
+              )}
 
               <FormActions>
-                <Button type="submit" disabled={action.busy}>
-                  Save all settings
+                <Button type="submit" loading={action.busy}>
+                  Save settings
                 </Button>
               </FormActions>
             </form>
-
-            <section className="card card-pad settings-section">
-              <SectionHead
-                title="Add obligation"
-                caption="Create another recurring cost without editing code"
-              />
-              <form onSubmit={addExpense}>
-                <div className="form-grid three">
-                  <Field label="Name">
-                    <input
-                      maxLength={100}
-                      value={newExpense.name}
-                      onChange={(event) => setNewExpense({ ...newExpense, name: event.target.value })}
-                      required
-                    />
-                  </Field>
-                  <Field label="Amount">
-                    <input
-                      type="number"
-                      min="0"
-                      step="0.01"
-                      value={newExpense.amount}
-                      onChange={(event) =>
-                        setNewExpense({ ...newExpense, amount: event.target.value })
-                      }
-                      required
-                    />
-                  </Field>
-                  <Field label="Frequency">
-                    <select
-                      value={newExpense.frequency}
-                      onChange={(event) =>
-                        setNewExpense({ ...newExpense, frequency: event.target.value })
-                      }
-                    >
-                      {SETTING_FREQUENCIES.map((frequency) => (
-                        <option key={frequency} value={frequency}>
-                          {frequency.charAt(0).toUpperCase() + frequency.slice(1)}
-                        </option>
-                      ))}
-                    </select>
-                  </Field>
-                </div>
-                <FormActions>
-                  <Button variant="secondary" type="submit" disabled={action.busy}>
-                    Add expense
-                  </Button>
-                </FormActions>
-              </form>
-            </section>
 
             <section className="card card-pad settings-section">
               <SectionHead
@@ -352,14 +216,94 @@ export default function SettingsPage() {
                 caption="Track Today. Build Tomorrow."
                 aside={<Tag>v{APP_VERSION}</Tag>}
               />
-              <p className="muted">
-                NexaFi is a personal financial-planning application. Estimates are educational and
-                are not professional tax, legal, investment, or accounting advice.
-              </p>
+              <Advisory>
+                Estimates here are educational and are not professional tax, legal, investment, or
+                accounting advice.
+              </Advisory>
             </section>
           </>
         );
       }}
     </PageFrame>
+  );
+}
+
+function SettingRow({
+  setting, value, onChange,
+}: {
+  setting: Setting;
+  value: string;
+  onChange: (value: string) => void;
+}) {
+  return (
+    <div className="setting-row">
+      <div className="setting-copy">
+        <strong>{setting.label}</strong>
+        <span>{setting.description}</span>
+      </div>
+      <div className="field">
+        {setting.value_type === "boolean" ? (
+          <label className="checkbox">
+            <input
+              type="checkbox"
+              checked={value === "true"}
+              onChange={(event) => onChange(event.target.checked ? "true" : "false")}
+            />
+            Enabled
+          </label>
+        ) : (
+          <Field label="Value">
+            <input
+              type={inputType(setting.value_type)}
+              min={["decimal", "money", "integer"].includes(setting.value_type) ? "0" : undefined}
+              step={
+                setting.value_type === "integer"
+                  ? "1"
+                  : ["decimal", "money"].includes(setting.value_type)
+                    ? "0.01"
+                    : undefined
+              }
+              value={value}
+              onChange={(event) => onChange(event.target.value)}
+            />
+          </Field>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function AccountSetting({
+  label, hint, data, types, value, onChange,
+}: {
+  label: string;
+  hint: string;
+  data: FinanceData;
+  types: string[];
+  value: string;
+  onChange: (value: string) => void;
+}) {
+  const accounts = data.accounts.filter(
+    (account) => account.is_active && types.includes(account.account_type),
+  );
+  return (
+    <div className="setting-row">
+      <div className="setting-copy">
+        <strong>{label}</strong>
+        <span>{hint}</span>
+      </div>
+      <div className="field">
+        <Field label="Account">
+          <select value={value} onChange={(event) => onChange(event.target.value)}>
+            <option value="">Let the app pick</option>
+            {accounts.map((account) => (
+              <option key={account.id} value={account.id}>
+                {account.name}
+              </option>
+            ))}
+          </select>
+        </Field>
+      </div>
+    </div>
   );
 }

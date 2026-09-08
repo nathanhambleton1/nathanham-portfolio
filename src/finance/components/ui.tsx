@@ -6,6 +6,7 @@
 import { cloneElement, isValidElement, useEffect, useId, useRef } from "react";
 import type { ReactElement, ReactNode } from "react";
 import { createPortal } from "react-dom";
+import { X } from "lucide-react";
 import type { Decimal } from "../lib/money";
 import { fmtMoney, fmtPercent, money } from "../lib/money";
 
@@ -269,7 +270,7 @@ export function Modal({
             <h2 id={headingId}>{title}</h2>
           </div>
           <button className="icon-button" type="button" onClick={onClose} aria-label="Close">
-            ×
+            <X size={18} strokeWidth={2} />
           </button>
         </div>
         <div className="dialog-body">{children}</div>
@@ -318,16 +319,27 @@ export function Button({
   children,
   variant,
   small = false,
+  loading = false,
   type = "button",
+  disabled,
   ...rest
 }: {
   children: ReactNode;
   variant?: "secondary" | "gold";
   small?: boolean;
+  /** Shows an inline spinner and forces the button disabled while true. */
+  loading?: boolean;
 } & React.ButtonHTMLAttributes<HTMLButtonElement>) {
   const className = ["button", variant, small ? "small" : ""].filter(Boolean).join(" ");
   return (
-    <button className={className} type={type} {...rest}>
+    <button
+      className={className}
+      type={type}
+      disabled={disabled || loading}
+      aria-busy={loading || undefined}
+      {...rest}
+    >
+      {loading && <span className="spinner" aria-hidden="true" />}
       {children}
     </button>
   );

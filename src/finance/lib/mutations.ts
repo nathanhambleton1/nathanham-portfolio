@@ -19,7 +19,7 @@ import type {
   Account, AccountBalance, AccountType, FinancialGoal, Paycheck, RecurringExpense,
   SinkingFund, Subscription, TransactionType,
 } from "./types";
-import { ACCOUNT_TYPES, LIABILITY_ACCOUNT_TYPES } from "./types";
+import { ACCOUNT_TYPES, GOAL_TYPES, LIABILITY_ACCOUNT_TYPES } from "./types";
 
 /** Mirrors Pydantic's ValidationError: a message meant for the page's banner. */
 export class ValidationError extends Error {}
@@ -395,9 +395,26 @@ export async function editPaycheck(
 export async function updateGoal(
   data: FinanceData,
   id: number,
-  values: { user_monthly_target?: string; current_amount?: string; target_amount?: string; target_date?: string | null },
+  values: {
+    name?: string;
+    goal_type?: string;
+    user_monthly_target?: string;
+    current_amount?: string;
+    target_amount?: string;
+    target_date?: string | null;
+    linked_account_id?: string;
+    is_active?: boolean;
+  },
 ): Promise<string> {
   const patch: Record<string, unknown> = {};
+  if (values.name !== undefined) patch.name = requireText(values.name, "Name", 2, 100);
+  if (values.goal_type !== undefined && (GOAL_TYPES as readonly string[]).includes(values.goal_type)) {
+    patch.goal_type = values.goal_type;
+  }
+  if (values.linked_account_id !== undefined) {
+    patch.linked_account_id = optionalId(values.linked_account_id);
+  }
+  if (values.is_active !== undefined) patch.is_active = values.is_active;
   if (values.user_monthly_target !== undefined) {
     patch.user_monthly_target = toNumeric(requireAmount(values.user_monthly_target || "0", "Monthly target", { min: ZERO }));
   }
@@ -414,7 +431,7 @@ export async function updateGoal(
   const row = await updateRow<FinancialGoal>(T.goals, id, patch);
   const existing = data.goals.find((goal) => goal.id === id);
   if (existing) Object.assign(existing, row);
-  return "Goal updated.";
+  return "Bucket updated.";
 }
 
 export interface SinkingFundForm {
@@ -435,15 +452,26 @@ export async function createSinkingFund(data: FinanceData, form: SinkingFundForm
     is_active: true,
   });
   data.sinkingFunds.push(row);
-  return "Sinking fund added.";
+  return "Bucket added.";
 }
 
 export async function updateSinkingFund(
   data: FinanceData,
   id: number,
-  values: { current_amount?: string; target_amount?: string; due_date?: string | null; is_active?: boolean },
+  values: {
+    name?: string;
+    current_amount?: string;
+    target_amount?: string;
+    due_date?: string | null;
+    linked_account_id?: string;
+    is_active?: boolean;
+  },
 ): Promise<string> {
   const patch: Record<string, unknown> = {};
+  if (values.name !== undefined) patch.name = requireText(values.name, "Name", 2, 100);
+  if (values.linked_account_id !== undefined) {
+    patch.linked_account_id = optionalId(values.linked_account_id);
+  }
   if (values.current_amount !== undefined) {
     patch.current_amount = toNumeric(requireAmount(values.current_amount || "0", "Current amount", { min: ZERO }));
   }
@@ -456,7 +484,7 @@ export async function updateSinkingFund(
   const row = await updateRow<SinkingFund>(T.sinkingFunds, id, patch);
   const existing = data.sinkingFunds.find((fund) => fund.id === id);
   if (existing) Object.assign(existing, row);
-  return "Sinking fund updated.";
+  return "Bucket updated.";
 }
 
 export interface RecurringExpenseForm {
@@ -484,13 +512,133 @@ export async function createRecurringExpense(
     is_active: true,
   });
   data.recurringExpenses.push(row);
-  return "Recurring expense added.";
+  return "Bill added.";
+}
+
+export async function updateRecurringExpense(
+  data: FinanceData,
+  id: number,
+  form: Partial<RecurringExpenseForm> & { is_active?: boolean },
+): Promise<string> {
+  const patch: Record<string, unknown> = {};
+  if (form.name !== undefined) patch.name = requireText(form.name, "Name", 2, 100);
+  if (form.amount !== undefined) {
+    patch.amount = toNumeric(requireAmount(form.amount, "Amount", { gt: ZERO }));
+  }
+  if (form.frequency !== undefined) patch.frequency = form.frequency || "monthly";
+  if (form.due_day !== undefined) patch.due_day = optionalDay(form.due_day ?? "", "Due day");
+  if (form.is_variable !== undefined) patch.is_variable = form.is_variable;
+  if (form.account_id !== undefined) patch.account_id = optionalId(form.account_id ?? "");
+  if (form.category_id !== undefined) patch.category_id = optionalId(form.category_id ?? "");
+  if (form.is_active !== undefined) patch.is_active = form.is_active;
+
+  const row = await updateRow<RecurringExpense>(T.recurringExpenses, id, patch);
+  const existing = data.recurringExpenses.find((item) => item.id === id);
+  if (existing) Object.assign(existing, row);
+  return "Bill updated.";
+}
+
+/**
+ * Subscriptions are edited but never created here.
+ *
+ * The two tables model the same thing and the Bills page shows them as one
+ * list, so new bills all go to `fin_recurring_expenses`. The subscription rows
+ * that already exist stay editable so nothing has to be migrated by hand.
+ */
+export async function updateSubscription(
+  data: FinanceData,
+  id: number,
+  form: {
+    name?: string;
+    amount?: string;
+    billing_frequency?: string;
+    next_due_date?: string | null;
+    is_active?: boolean;
+  },
+): Promise<string> {
+  const patch: Record<string, unknown> = {};
+  if (form.name !== undefined) patch.name = requireText(form.name, "Name", 2, 100);
+  if (form.amount !== undefined) {
+    patch.amount = toNumeric(requireAmount(form.amount, "Amount", { gt: ZERO }));
+  }
+  if (form.billing_frequency !== undefined) {
+    patch.billing_frequency = form.billing_frequency || "monthly";
+  }
+  if (form.next_due_date !== undefined) patch.next_due_date = form.next_due_date?.trim() || null;
+  if (form.is_active !== undefined) patch.is_active = form.is_active;
+
+  const row = await updateRow<Subscription>(T.subscriptions, id, patch);
+  const existing = data.subscriptions.find((item) => item.id === id);
+  if (existing) Object.assign(existing, row);
+  return "Bill updated.";
+}
+
+export async function removeSubscription(data: FinanceData, id: number): Promise<string> {
+  await deleteRow(T.subscriptions, id);
+  data.subscriptions = data.subscriptions.filter((item) => item.id !== id);
+  return "Bill removed.";
+}
+
+// --- savings buckets --------------------------------------------------------
+
+export interface GoalForm {
+  name: string;
+  goal_type: string;
+  target_amount: string;
+  current_amount?: string;
+  user_monthly_target?: string;
+  target_date?: string;
+  linked_account_id?: string;
+}
+
+export async function createGoal(data: FinanceData, form: GoalForm): Promise<string> {
+  const goalType = (GOAL_TYPES as readonly string[]).includes(form.goal_type)
+    ? form.goal_type
+    : "other";
+  const row = await insertRow<FinancialGoal>(T.goals, {
+    name: requireText(form.name, "Name", 2, 100),
+    goal_type: goalType,
+    target_amount: toNumeric(requireAmount(form.target_amount, "Target amount", { gt: ZERO })),
+    current_amount: toNumeric(requireAmount(form.current_amount || "0", "Current amount", { min: ZERO })),
+    user_monthly_target: toNumeric(
+      requireAmount(form.user_monthly_target || "0", "Monthly target", { min: ZERO }),
+    ),
+    recommended_monthly: toNumeric(ZERO),
+    target_date: form.target_date?.trim() || null,
+    linked_account_id: optionalId(form.linked_account_id ?? ""),
+    is_active: true,
+  });
+  data.goals.push(row);
+  return "Bucket added.";
+}
+
+/**
+ * Archive rather than delete.
+ *
+ * A bucket that has been funded is referenced by every allocation row that ever
+ * fed it, and those rows are the record of what you decided in past months.
+ * Deleting the bucket would either fail on the foreign key or take that history
+ * with it, so a removed bucket is simply switched off: it leaves every list and
+ * every breakdown, and the history it explains stays readable.
+ */
+export async function archiveGoal(data: FinanceData, id: number): Promise<string> {
+  const row = await updateRow<FinancialGoal>(T.goals, id, { is_active: false });
+  const existing = data.goals.find((goal) => goal.id === id);
+  if (existing) Object.assign(existing, row);
+  return "Bucket archived.";
+}
+
+export async function archiveSinkingFund(data: FinanceData, id: number): Promise<string> {
+  const row = await updateRow<SinkingFund>(T.sinkingFunds, id, { is_active: false });
+  const existing = data.sinkingFunds.find((fund) => fund.id === id);
+  if (existing) Object.assign(existing, row);
+  return "Bucket archived.";
 }
 
 export async function removeRecurringExpense(data: FinanceData, id: number): Promise<string> {
   await deleteRow(T.recurringExpenses, id);
   data.recurringExpenses = data.recurringExpenses.filter((item) => item.id !== id);
-  return "Recurring expense removed.";
+  return "Bill removed.";
 }
 
 // --- settings ---------------------------------------------------------------

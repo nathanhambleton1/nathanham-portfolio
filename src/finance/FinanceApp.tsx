@@ -1,84 +1,58 @@
-// The /finance sub-app: NexaFi, ported from the FastAPI original.
+// The /finance sub-app.
 //
-// Route paths mirror the Python app's URLs one-for-one (just under /finance),
-// so bookmarks, the nav, and the docs all still describe the same places.
+// Eight routes, down from twenty-two. The ones that went were either a second
+// view of something already on screen elsewhere (Dashboard, Financial Health,
+// Retirement, Investments), a wizard for an install that has long since
+// happened (Setup), a page whose whole job was asking you to confirm what the
+// importer had already worked out (Needs Review), or a separate destination
+// for something that only ever happens once a month, on the way through
+// closing it out (Import Center — now the import step of Money Flow itself).
+//
+// What is left maps to the four things this app is actually used for: deciding
+// a month, keeping the bills current, knowing what the savings are for, and
+// seeing what happened.
 
 import { Route, Routes } from "react-router-dom";
 import "./finance.css";
 
 import { FinanceAuthProvider } from "./context/FinanceAuth";
 import FinanceGate from "./components/FinanceGate";
-import RequireSetup from "./components/RequireSetup";
+import { useAutoSync } from "./lib/actions";
 
 import MoneyFlow from "./pages/MoneyFlow";
-import Dashboard from "./pages/Dashboard";
+import Bills from "./pages/Bills";
+import Savings from "./pages/Savings";
 import Accounts from "./pages/Accounts";
-import Transactions from "./pages/Transactions";
 import Paychecks from "./pages/Paychecks";
-import Spending from "./pages/Spending";
-import Goals from "./pages/Goals";
-import SinkingFunds from "./pages/SinkingFunds";
-import Retirement from "./pages/Retirement";
-import Investments from "./pages/Investments";
 import Taxes from "./pages/Taxes";
-import Health from "./pages/Health";
 import Reports from "./pages/Reports";
-import AIInsights from "./pages/AIInsights";
-import Imports from "./pages/Imports";
-import ImportDetail from "./pages/ImportDetail";
-import NeedsReview from "./pages/NeedsReview";
 import SettingsPage from "./pages/Settings";
-import DataBackup from "./pages/DataBackup";
-import Setup from "./pages/Setup";
-import ComingSoon from "./pages/ComingSoon";
 import NotFound from "./pages/NotFound";
+
+/**
+ * Runs the once-per-session payroll and bill backfill regardless of which
+ * finance page loads first, mirroring the old middleware's "every GET" reach.
+ */
+function AutoSync() {
+  useAutoSync();
+  return null;
+}
 
 export default function FinanceApp() {
   return (
     <FinanceAuthProvider>
       <div className="finance-root">
         <FinanceGate>
+          <AutoSync />
           <Routes>
-            {/* These two are the app's entry points, so they are where a
-                fresh install gets sent to setup. */}
-            <Route
-              index
-              element={
-                <RequireSetup>
-                  <MoneyFlow />
-                </RequireSetup>
-              }
-            />
-            <Route
-              path="dashboard"
-              element={
-                <RequireSetup>
-                  <Dashboard />
-                </RequireSetup>
-              }
-            />
+            <Route index element={<MoneyFlow />} />
+            <Route path="bills" element={<Bills />} />
+            <Route path="savings" element={<Savings />} />
             <Route path="accounts" element={<Accounts />} />
-            <Route path="transactions" element={<Transactions />} />
             <Route path="paychecks" element={<Paychecks />} />
-            <Route path="spending" element={<Spending />} />
-            <Route path="goals" element={<Goals />} />
-            <Route path="sinking-funds" element={<SinkingFunds />} />
-            <Route path="retirement" element={<Retirement />} />
-            <Route path="investments" element={<Investments />} />
             <Route path="taxes" element={<Taxes />} />
-            <Route path="health" element={<Health />} />
             <Route path="reports" element={<Reports />} />
-            <Route path="ai-insights" element={<AIInsights />} />
-
-            {/* "review" must precede ":importId" or it would be read as an id. */}
-            <Route path="imports" element={<Imports />} />
-            <Route path="imports/review" element={<NeedsReview />} />
-            <Route path="imports/:importId" element={<ImportDetail />} />
-
             <Route path="settings" element={<SettingsPage />} />
-            <Route path="settings/data" element={<DataBackup />} />
-            <Route path="setup" element={<Setup />} />
-            <Route path="future/:feature" element={<ComingSoon />} />
             <Route path="*" element={<NotFound />} />
           </Routes>
         </FinanceGate>

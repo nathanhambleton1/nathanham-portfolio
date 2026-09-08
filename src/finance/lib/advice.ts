@@ -45,7 +45,6 @@ export function buildAllocation(data: FinanceData, totals: MonthlyTotals): Alloc
     sinkingFunds: requiredSinking,
     travelTarget: dec(settings.travel_recommended_monthly ?? "0"),
     rothIraTarget: dec(settings.ira_user_monthly_target ?? "0"),
-    houseTarget: dec(settings.house_user_monthly_target ?? "0"),
     brokerageTarget: dec(settings.brokerage_user_monthly_target ?? "0"),
     employerMatchCaptured: dec(settings.roth_401k_percent ?? "0").greaterThanOrEqualTo(
       dec(settings.employer_match_percent ?? "0"),
