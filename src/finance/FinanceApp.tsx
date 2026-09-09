@@ -24,6 +24,7 @@ import Bills from "./pages/Bills";
 import Savings from "./pages/Savings";
 import Accounts from "./pages/Accounts";
 import Paychecks from "./pages/Paychecks";
+import Pto from "./pages/Pto";
 import Taxes from "./pages/Taxes";
 import Reports from "./pages/Reports";
 import SettingsPage from "./pages/Settings";
@@ -50,6 +51,7 @@ export default function FinanceApp() {
             <Route path="savings" element={<Savings />} />
             <Route path="accounts" element={<Accounts />} />
             <Route path="paychecks" element={<Paychecks />} />
+            <Route path="pto" element={<Pto />} />
             <Route path="taxes" element={<Taxes />} />
             <Route path="reports" element={<Reports />} />
             <Route path="settings" element={<SettingsPage />} />

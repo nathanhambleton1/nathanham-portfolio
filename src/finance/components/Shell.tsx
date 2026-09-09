@@ -36,6 +36,11 @@ const MONTHLY: NavItem[] = [
     icon: "M4 9a8 5 0 0 1 16 0v6a8 5 0 0 1-16 0V9Zm0 0v6m16-6v6M15 12h.01",
   },
   { label: "Paychecks", to: "paychecks", icon: "M3 6h18v12H3V6Zm3 3h5m-5 3h3m7 1a2 2 0 1 0 0-4 2 2 0 0 0 0 4Z" },
+  {
+    label: "PTO",
+    to: "pto",
+    icon: "M8 2v4M16 2v4M3 10h18M5 4h14a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2Z",
+  },
 ];
 
 /** The record: what happened, and what it means. */

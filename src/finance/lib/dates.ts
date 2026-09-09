@@ -80,6 +80,12 @@ export function isBetween(value: ISODate, start: ISODate, end: ISODate): boolean
   return value >= start && value <= end;
 }
 
+/** 0 (Sunday) through 6 (Saturday). */
+export function weekdayOf(value: ISODate): number {
+  const { year, month, day } = parts(value);
+  return new Date(Date.UTC(year, month - 1, day)).getUTCDay();
+}
+
 // --- formatting -------------------------------------------------------------
 
 /** "Sep 7, 2026" */

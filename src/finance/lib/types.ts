@@ -150,6 +150,29 @@ export interface PaycheckDeduction {
   is_pre_tax: boolean;
 }
 
+export const PTO_LEAVE_TYPES = ["vacation", "sick", "flex", "paid_holiday", "unpaid"] as const;
+export type PtoLeaveType = (typeof PTO_LEAVE_TYPES)[number];
+
+export const PTO_LEAVE_TYPE_LABELS: Record<PtoLeaveType, string> = {
+  vacation: "Vacation",
+  sick: "Sick",
+  flex: "Flex",
+  paid_holiday: "Paid Holiday",
+  unpaid: "Unpaid",
+};
+
+/** A logged or planned stretch of time off, entered here rather than inferred. */
+export interface PtoEntry {
+  id: number;
+  start_date: ISODate;
+  end_date: ISODate;
+  hours_per_day: Numeric;
+  leave_type: PtoLeaveType;
+  notes: string | null;
+  created_at: Timestamp;
+  updated_at: Timestamp;
+}
+
 export interface Subscription {
   id: number;
   name: string;

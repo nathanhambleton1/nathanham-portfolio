@@ -16,7 +16,7 @@ import type {
   Account, AccountBalance, AIImport, AIReview, FinancialGoal, InvestmentAccount,
   InvestmentHolding, InvestmentSnapshot, InvestmentTransaction, MerchantRule,
   MonthlyAIInsight, MonthlySnapshot, MonthPlan, Paycheck, PaycheckAllocation,
-  PaycheckDeduction, RecurringExpense, RecurringSuggestion, RetirementContribution,
+  PaycheckDeduction, PtoEntry, RecurringExpense, RecurringSuggestion, RetirementContribution,
   Security, SecurityPrice, Setting, SetupProgress, SinkingFund, Subscription,
   Transaction, TransactionCategory, Transfer,
 } from "./types";
@@ -29,6 +29,7 @@ export interface FinanceData {
   transfers: Transfer[];
   paychecks: Paycheck[];
   paycheckDeductions: PaycheckDeduction[];
+  ptoEntries: PtoEntry[];
   subscriptions: Subscription[];
   recurringExpenses: RecurringExpense[];
   sinkingFunds: SinkingFund[];
@@ -59,7 +60,7 @@ export const FINANCE_QUERY_KEY = ["finance", "dataset"] as const;
 export async function loadFinanceData(): Promise<FinanceData> {
   const [
     accounts, accountBalances, categories, transactions, transfers, paychecks,
-    paycheckDeductions, subscriptions, recurringExpenses, sinkingFunds, goals,
+    paycheckDeductions, ptoEntries, subscriptions, recurringExpenses, sinkingFunds, goals,
     retirementContributions, settingRows, setupProgress, monthlySnapshots,
     investmentAccounts, securities, holdings, investmentTransactions,
     securityPrices, investmentSnapshots, aiImports, aiReviews, merchantRules,
@@ -67,7 +68,7 @@ export async function loadFinanceData(): Promise<FinanceData> {
   ] = await Promise.all([
     db.fetchAccounts(), db.fetchAccountBalances(), db.fetchCategories(),
     db.fetchTransactions(), db.fetchTransfers(), db.fetchPaychecks(),
-    db.fetchPaycheckDeductions(), db.fetchSubscriptions(), db.fetchRecurringExpenses(),
+    db.fetchPaycheckDeductions(), db.fetchPtoEntries(), db.fetchSubscriptions(), db.fetchRecurringExpenses(),
     db.fetchSinkingFunds(), db.fetchGoals(), db.fetchRetirementContributions(),
     db.fetchSettings(), db.fetchSetupProgress(), db.fetchMonthlySnapshots(),
     db.fetchInvestmentAccounts(), db.fetchSecurities(), db.fetchHoldings(),
@@ -82,7 +83,7 @@ export async function loadFinanceData(): Promise<FinanceData> {
 
   return {
     accounts, accountBalances, categories, transactions, transfers, paychecks,
-    paycheckDeductions, subscriptions, recurringExpenses, sinkingFunds, goals,
+    paycheckDeductions, ptoEntries, subscriptions, recurringExpenses, sinkingFunds, goals,
     retirementContributions, settingRows, setupProgress, monthlySnapshots,
     investmentAccounts, securities, holdings, investmentTransactions,
     securityPrices, investmentSnapshots, aiImports, aiReviews, merchantRules,

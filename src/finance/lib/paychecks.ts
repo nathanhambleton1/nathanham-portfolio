@@ -99,9 +99,13 @@ export async function backfillScheduledPaychecks(
   // A baseline that nets nothing is a misconfiguration, not a paycheck.
   if (net.lessThanOrEqualTo(ZERO)) return EMPTY_SYNC;
 
+  // Pay lags the period it covers: a two-week period ending Sunday isn't paid
+  // out until the following Friday, five days later — so the period itself
+  // runs from 18 days before the pay date (a Monday) through 5 days before it
+  // (the Sunday), not up to the pay date itself.
   const baselineFor = (payDate: ISODate) => ({
-    pay_period_start: addDays(payDate, -13),
-    pay_period_end: payDate,
+    pay_period_start: addDays(payDate, -18),
+    pay_period_end: addDays(payDate, -5),
     employer: baseline.employer,
     regular_hours: toNumeric(baseline.hours, 2),
     gross_amount: toNumeric(baseline.gross),

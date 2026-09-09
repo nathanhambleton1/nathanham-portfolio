@@ -14,12 +14,15 @@ import {
   recordRetirementContribution, SCHEDULED_PAYCHECK_NOTE, updateRetirementContribution,
 } from "./paychecks";
 import { unallocatePaycheck } from "./allocation";
+import {
+  entryHours, flexHoursInPeriod, FLEX_MAX_HOURS_PER_DAY, FLEX_MAX_HOURS_PER_PERIOD, payPeriodContaining,
+} from "./ptoCalendar";
 import type { FinanceData } from "./data";
 import type {
-  Account, AccountBalance, AccountType, FinancialGoal, Paycheck, RecurringExpense,
+  Account, AccountBalance, AccountType, FinancialGoal, Paycheck, PtoEntry, RecurringExpense,
   SinkingFund, Subscription, TransactionType,
 } from "./types";
-import { ACCOUNT_TYPES, GOAL_TYPES, LIABILITY_ACCOUNT_TYPES } from "./types";
+import { ACCOUNT_TYPES, GOAL_TYPES, LIABILITY_ACCOUNT_TYPES, PTO_LEAVE_TYPES } from "./types";
 
 /** Mirrors Pydantic's ValidationError: a message meant for the page's banner. */
 export class ValidationError extends Error {}
@@ -639,6 +642,89 @@ export async function removeRecurringExpense(data: FinanceData, id: number): Pro
   await deleteRow(T.recurringExpenses, id);
   data.recurringExpenses = data.recurringExpenses.filter((item) => item.id !== id);
   return "Bill removed.";
+}
+
+// --- pto ----------------------------------------------------------------
+
+export interface PtoEntryForm {
+  start_date: string;
+  end_date: string;
+  hours_per_day?: string;
+  leave_type: string;
+  notes?: string;
+}
+
+function ptoEntryValues(form: PtoEntryForm) {
+  const start = form.start_date?.trim();
+  if (!start) throw new ValidationError("Start date is required.");
+  const end = form.end_date?.trim() || start;
+  if (end < start) throw new ValidationError("End date cannot be before the start date.");
+
+  const leaveType = (PTO_LEAVE_TYPES as readonly string[]).includes(form.leave_type)
+    ? form.leave_type
+    : "vacation";
+
+  return {
+    start_date: start,
+    end_date: end,
+    hours_per_day: toNumeric(requireAmount(form.hours_per_day || "8", "Hours per day", { gt: ZERO }), 2),
+    leave_type: leaveType,
+    notes: form.notes?.trim() || null,
+  };
+}
+
+/**
+ * Flex isn't paid from the PTO bank — it's owed back as extra work the same
+ * pay period, so it gets its own caps: a day of it at most, two days of it
+ * across the whole period.
+ */
+function validateFlexEntry(
+  data: FinanceData,
+  values: { start_date: ISODate; end_date: ISODate; hours_per_day: string; leave_type: string },
+  excludeEntryId?: number,
+): void {
+  if (values.leave_type !== "flex") return;
+
+  const perDay = dec(values.hours_per_day);
+  if (perDay.greaterThan(FLEX_MAX_HOURS_PER_DAY)) {
+    throw new ValidationError(`Flex time can't exceed ${FLEX_MAX_HOURS_PER_DAY} hours in a single day.`);
+  }
+
+  const bounds = payPeriodContaining(data.settings, values.start_date);
+  if (!bounds) return;
+
+  const draftEntry = { start_date: values.start_date, end_date: values.end_date, hours_per_day: values.hours_per_day } as PtoEntry;
+  const existingFlexHours = flexHoursInPeriod(data.ptoEntries, bounds.start, bounds.end, excludeEntryId);
+  const periodTotal = existingFlexHours.plus(entryHours(draftEntry, bounds.start, bounds.end));
+
+  if (periodTotal.greaterThan(FLEX_MAX_HOURS_PER_PERIOD)) {
+    throw new ValidationError(
+      `Flex time can't exceed ${FLEX_MAX_HOURS_PER_PERIOD} hours in one pay period — this period already has ${existingFlexHours.toFixed(2)} hrs flexed.`,
+    );
+  }
+}
+
+export async function createPtoEntry(data: FinanceData, form: PtoEntryForm): Promise<string> {
+  const values = ptoEntryValues(form);
+  validateFlexEntry(data, values);
+  const row = await insertRow<PtoEntry>(T.ptoEntries, values);
+  data.ptoEntries.push(row);
+  return values.leave_type === "flex" ? "Flex time logged." : "PTO logged.";
+}
+
+export async function updatePtoEntry(data: FinanceData, id: number, form: PtoEntryForm): Promise<string> {
+  const values = ptoEntryValues(form);
+  validateFlexEntry(data, values, id);
+  const row = await updateRow<PtoEntry>(T.ptoEntries, id, values);
+  const existing = data.ptoEntries.find((entry) => entry.id === id);
+  if (existing) Object.assign(existing, row);
+  return "PTO entry updated.";
+}
+
+export async function removePtoEntry(data: FinanceData, id: number): Promise<string> {
+  await deleteRow(T.ptoEntries, id);
+  data.ptoEntries = data.ptoEntries.filter((entry) => entry.id !== id);
+  return "PTO entry removed.";
 }
 
 // --- settings ---------------------------------------------------------------

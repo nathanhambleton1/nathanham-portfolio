@@ -9,7 +9,7 @@ import type {
   Account, AccountBalance, AIImport, AIReview, FinancialGoal, InvestmentAccount,
   InvestmentHolding, InvestmentSnapshot, InvestmentTransaction, MerchantRule,
   MonthlyAIInsight, MonthlySnapshot, MonthPlan, Paycheck, PaycheckAllocation,
-  PaycheckDeduction, RecurringExpense, RecurringSuggestion, RetirementContribution,
+  PaycheckDeduction, PtoEntry, RecurringExpense, RecurringSuggestion, RetirementContribution,
   Security, SecurityPrice, Setting, SetupProgress, SinkingFund, Subscription,
   Transaction, TransactionCategory, Transfer,
 } from "./types";
@@ -23,6 +23,7 @@ export const T = {
   transfers: "fin_transfers",
   paychecks: "fin_paychecks",
   paycheckDeductions: "fin_paycheck_deductions",
+  ptoEntries: "fin_pto_entries",
   subscriptions: "fin_subscriptions",
   recurringExpenses: "fin_recurring_expenses",
   sinkingFunds: "fin_sinking_funds",
@@ -75,6 +76,7 @@ export const fetchTransactions = () => selectAll<Transaction>(T.transactions, "t
 export const fetchTransfers = () => selectAll<Transfer>(T.transfers, "transfer_date");
 export const fetchPaychecks = () => selectAll<Paycheck>(T.paychecks, "pay_date");
 export const fetchPaycheckDeductions = () => selectAll<PaycheckDeduction>(T.paycheckDeductions);
+export const fetchPtoEntries = () => selectAll<PtoEntry>(T.ptoEntries, "start_date");
 export const fetchSubscriptions = () => selectAll<Subscription>(T.subscriptions, "name");
 export const fetchRecurringExpenses = () => selectAll<RecurringExpense>(T.recurringExpenses, "name");
 export const fetchSinkingFunds = () => selectAll<SinkingFund>(T.sinkingFunds, "name");
