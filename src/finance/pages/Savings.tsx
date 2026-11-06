@@ -23,7 +23,7 @@ import type { FinanceData } from "../lib/data";
 import { CASH_ACCOUNT_TYPES, GOAL_TYPES, GOAL_TYPE_LABELS } from "../lib/types";
 
 /** Five stable slice colours, in the order the palette pairs safely. */
-const SLICE_COLORS = ["#b99345", "#4d7c6f", "#8f8e87", "#7a6099", "#a35d4a"];
+const SLICE_COLORS = ["hsl(var(--brand))", "#4fb393", "#8b7cf0", "#e0a24a", "#e26d5c"];
 
 const BLANK = {
   name: "", goal_type: "other", target_amount: "", current_amount: "0",

@@ -108,9 +108,16 @@ export default function PayPopup({
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogPortal>
-      <DialogOverlay className="fixed inset-0 z-[100000] bg-black/50 data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0" />
+      <DialogOverlay className="fixed inset-0 z-[100000] bg-transparent data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0" />
       <DialogContent>
-        <DialogHeader>
+        <DialogHeader className="items-center sm:items-start">
+          <img
+            src={mode === "tax" ? "/drunkopoly/luxury_tax.webp" : mode === "players" ? "/drunkopoly/players.webp" : "/drunkopoly/bank.webp"}
+            alt=""
+            aria-hidden
+            draggable={false}
+            className="mb-2 h-20 w-auto max-w-[70%] select-none object-contain"
+          />
           <DialogTitle>Pay — {mode === "bank" ? "Bank" : mode === "tax" ? "Tax" : "Players"}</DialogTitle>
           <DialogDescription>
             {mode === "bank" && "Pay the bank. This will deduct the amount from your balance."}
@@ -122,20 +129,21 @@ export default function PayPopup({
         <div className="space-y-4">
           {mode === "players" && (
             <div className="space-y-2">
-              <div className="text-sm font-medium">Choose recipients</div>
+              <div className="text-[11px] font-semibold uppercase tracking-widest text-muted-foreground">Choose recipients</div>
               <div className="grid gap-2">
                 {others.length === 0 && <div className="text-sm text-muted-foreground">No other players</div>}
                 {others.map((p) => (
-                  <label key={p.id} className={`flex items-center gap-2 p-2 border rounded ${selectedIds.has(p.id) ? 'bg-primary/10' : ''}`}>
+                  <label key={p.id} className={`flex min-h-[48px] cursor-pointer items-center gap-3 rounded-xl border px-3 py-2 transition duration-200 ${selectedIds.has(p.id) ? 'border-brand/60 bg-brand/10 ring-1 ring-inset ring-brand/30' : 'border-foreground/10 bg-foreground/[0.03] hover:border-brand/40'}`}>
                     <input
+                      className="h-4 w-4 shrink-0 accent-[hsl(var(--brand))]"
                       type="checkbox"
                       checked={selectedIds.has(p.id)}
                       onChange={() => togglePlayer(p.id)}
                     />
                     <PlayerAvatar player={p} size="sm" />
-                    <div className="flex-1">{p.name}</div>
+                    <div className="min-w-0 flex-1 truncate text-sm font-medium">{p.name}</div>
                     {showBalances && (
-                      <div className="text-sm text-muted-foreground">${(p.balance ?? 0).toLocaleString()}</div>
+                      <div className="text-sm tabular-nums text-muted-foreground">${(p.balance ?? 0).toLocaleString()}</div>
                     )}
                   </label>
                 ))}
@@ -145,25 +153,25 @@ export default function PayPopup({
 
           {mode === 'tax' ? (
             <div className="space-y-2">
-              <div className="text-sm font-medium">Tax Type</div>
+              <div className="text-[11px] font-semibold uppercase tracking-widest text-muted-foreground">Tax Type</div>
               <div className="flex gap-2">
                 <button
                   type="button"
                   onClick={() => { setAmountPer(100); setRawAmount('100'); }}
-                  className={`px-4 py-3 rounded-lg border text-sm font-medium shadow-sm flex-1 transition-colors
+                  className={`min-h-[48px] flex-1 rounded-xl border px-3 py-3 text-sm font-medium transition duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand
                     ${amountPer === 100
-                      ? 'bg-white text-black border-black'
-                      : 'bg-muted text-foreground border border-input hover:bg-accent hover:text-accent-foreground'}`}
+                      ? 'border-brand/60 bg-brand/10 text-foreground ring-1 ring-inset ring-brand/30'
+                      : 'border-foreground/10 bg-foreground/[0.03] text-muted-foreground hover:-translate-y-0.5 hover:border-brand/40 hover:text-foreground'}`}
                 >
                   Luxury Tax — $100
                 </button>
                 <button
                   type="button"
                   onClick={() => { setAmountPer(200); setRawAmount('200'); }}
-                  className={`px-4 py-3 rounded-lg border text-sm font-medium shadow-sm flex-1 transition-colors
+                  className={`min-h-[48px] flex-1 rounded-xl border px-3 py-3 text-sm font-medium transition duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand
                     ${amountPer === 200
-                      ? 'bg-white text-black border-black'
-                      : 'bg-muted text-foreground border border-input hover:bg-accent hover:text-accent-foreground'}`}
+                      ? 'border-brand/60 bg-brand/10 text-foreground ring-1 ring-inset ring-brand/30'
+                      : 'border-foreground/10 bg-foreground/[0.03] text-muted-foreground hover:-translate-y-0.5 hover:border-brand/40 hover:text-foreground'}`}
                 >
                   Income Tax — $200
                 </button>
@@ -172,15 +180,15 @@ export default function PayPopup({
           ) : (
             <div className="space-y-1">
               <div className="flex items-center justify-between">
-                <div className="text-sm font-medium">
+                <div className="text-[11px] font-semibold uppercase tracking-widest text-muted-foreground">
                   Amount{mode === 'players' && count > 1 ? ' per player' : ''}
                 </div>
                 {mode === 'players' && count > 1 && (
-                  <div className="text-sm text-muted-foreground">Total: ${total.toLocaleString()}</div>
+                  <div className="rounded-full border border-foreground/10 bg-foreground/[0.03] px-3 py-1 text-xs tabular-nums text-muted-foreground">Total: <span className="font-semibold text-foreground">${total.toLocaleString()}</span></div>
                 )}
               </div>
               <div className="relative">
-                <span className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground font-medium text-lg select-none pointer-events-none">$</span>
+                <span className="absolute left-4 top-1/2 -translate-y-1/2 font-display text-xl font-semibold text-muted-foreground select-none pointer-events-none">$</span>
                 <Input
                   ref={inputRef}
                   value={rawAmount}
@@ -192,7 +200,7 @@ export default function PayPopup({
                       setRawAmount(String(roundToFive(Number(rawAmount))));
                     }
                   }}
-                  className="pl-9 text-lg h-12"
+                  className="h-14 pl-9 font-display text-2xl font-semibold tracking-tight md:text-2xl"
                   type="tel"
                   inputMode="numeric"
                   pattern="[0-9]*"
@@ -209,11 +217,11 @@ export default function PayPopup({
 
         {mode === 'players' && (
           <div className="mt-4">
-            <div className="text-sm font-medium">Leave a message (optional)</div>
+            <div className="text-[11px] font-semibold uppercase tracking-widest text-muted-foreground">Leave a message (optional)</div>
             <Input
               value={message}
               onChange={(e: any) => setMessage(e.target.value)}
-              className="w-full mt-2 h-10 rounded bg-muted border border-input px-3"
+              className="mt-2 w-full"
               placeholder="Write a short message"
               maxLength={200}
               type="text"
@@ -222,12 +230,12 @@ export default function PayPopup({
         )}
 
         <DialogFooter>
-          <div className="flex gap-2 w-full justify-end">
-            <Button variant="secondary" onMouseDown={(e) => e.preventDefault()} onClick={() => onOpenChange(false)}>Cancel</Button>
+          <div className="flex w-full flex-col-reverse gap-2 sm:flex-row sm:justify-end">
+            <Button variant="secondary" className="h-11 sm:h-10" onMouseDown={(e) => e.preventDefault()} onClick={() => onOpenChange(false)}>Cancel</Button>
             <Button
               onMouseDown={(e) => e.preventDefault()}
               onClick={handleSubmit}
-              className={`bg-primary${insufficientFunds ? ' opacity-60 cursor-not-allowed' : ''}`}
+              className={`h-11 sm:h-10${insufficientFunds ? ' opacity-60 cursor-not-allowed' : ''}`}
               disabled={
                 (mode === 'players' && selectedIds.size === 0) ||
                 (mode === 'tax' && amountPer === 0) ||
@@ -240,7 +248,7 @@ export default function PayPopup({
           </div>
         </DialogFooter>
         {insufficientFunds && (
-          <div className="mt-3 text-sm text-destructive">Insufficient funds — you have ${balance.toLocaleString()}</div>
+          <div className="rounded-xl bg-destructive/10 px-3 py-2 text-sm text-destructive ring-1 ring-inset ring-destructive/20">Insufficient funds — you have ${balance.toLocaleString()}</div>
         )}
         </DialogContent>
       </DialogPortal>

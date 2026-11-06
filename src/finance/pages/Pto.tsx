@@ -33,11 +33,11 @@ const WEEKDAY_LABELS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
 
 /** Stable colours, reused from Savings so an entry's color means the same thing everywhere. */
 const LEAVE_TYPE_COLORS: Record<string, string> = {
-  vacation: "#4d7c6f",
-  sick: "#a35d4a",
-  flex: "#4a6f8a",
-  paid_holiday: "#b98d3e",
-  unpaid: "#8f8e87",
+  vacation: "#3f9c80",
+  sick: "#c4584a",
+  flex: "#4a7fc0",
+  paid_holiday: "#c08a2e",
+  unpaid: "#7b7c85",
 };
 
 const BLANK_ENTRY = {
@@ -349,7 +349,7 @@ export default function Pto() {
                   {selected > today ? "Projected balance" : "Current balance"} as of this date
                 </div>
                 {makeupByDate.has(selected) && (
-                  <div className="day-detail-sub" style={{ marginTop: 4, color: "#8a682d" }}>
+                  <div className="day-detail-sub" style={{ marginTop: 4, color: "hsl(var(--brand))" }}>
                     +{makeupByDate.get(selected)!.toFixed(2)} hrs extra owed this day (flex make-up)
                   </div>
                 )}

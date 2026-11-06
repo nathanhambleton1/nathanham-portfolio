@@ -1,6 +1,6 @@
 import { useEffect } from "react";
+import { DEFAULT_TITLE } from "@/lib/sites";
 import { Routes, Route } from "react-router-dom";
-import Header from "../components/Header";
 import Index from "../../drunk/pages/Index";
 import PowerHour from "../../drunk/pages/PowerHour";
 import BeerPong from "../../drunk/pages/BeerPong";
@@ -15,6 +15,17 @@ import "../../drunk/index.css";
 
 
 const Drunk = () => {
+  // The drinking games are monochrome: swap the site's cyan accent for plain
+  // white across every /drunk page. Set on <html> (not a wrapper) so portalled
+  // dialogs/popovers inherit it; removed again when leaving the section.
+  useEffect(() => {
+    const root = document.documentElement;
+    root.style.setProperty("--brand", "var(--foreground)");
+    return () => {
+      root.style.removeProperty("--brand");
+    };
+  }, []);
+
   useEffect(() => {
     document.title = "Drinking Games";
     // Change favicon
@@ -39,7 +50,7 @@ const Drunk = () => {
     }
     
     return () => {
-      document.title = "Nathan Hambleton – Portfolio";
+      document.title = DEFAULT_TITLE;
       if (favicon) {
         favicon.setAttribute("href", "/logo.png");
       }

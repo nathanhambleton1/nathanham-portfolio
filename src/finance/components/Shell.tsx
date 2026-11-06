@@ -1,80 +1,51 @@
-// The sidebar + topbar chrome, ported from nexafi/templates/base.html.
-//
-// The original split the nav into four things you touch monthly and a
-// collapsible "Details" drawer holding thirteen more. The drawer is gone: with
-// eight destinations left there is nothing to hide, and a nav you have to open
-// to read is a nav that makes you forget what is in it.
+// The finance chrome. Finance is mounted inside SiteLayout, so the site's own
+// header and footer carry straight through from the home page; this only adds
+// what the home page has around its content (faded grid + grain backdrop, the
+// "// label" eyebrow row) and a pill sub-nav for the nine finance pages.
 
-import { useEffect, useState } from "react";
+import { useEffect } from "react";
 import type { ReactNode } from "react";
-import { NavLink, useLocation } from "react-router-dom";
-import { Menu, ShieldCheck } from "lucide-react";
+import { NavLink } from "react-router-dom";
+import { ShieldCheck } from "lucide-react";
+import { cn } from "@/lib/utils";
 import { fmtLongDay, todayISO } from "../lib/dates";
 import { APP_VERSION } from "../lib/version";
 
 interface NavItem {
   label: string;
   to: string;
-  /** SVG path data for the item's icon. */
-  icon: string;
-  /** Match nested routes too (e.g. /finance/accounts/12). */
   end?: boolean;
 }
 
-/** The month: decide it, keep its inputs current. */
-const MONTHLY: NavItem[] = [
-  {
-    label: "Money Flow",
-    to: "",
-    icon: "M12 3v6m0 0-3-3m3 3 3-3M6 12h12M6 12l3 9m9-9-3 9m-6-9v9",
-    end: true,
-  },
-  { label: "Bills", to: "bills", icon: "M6 3h12v18l-3-2-3 2-3-2-3 2V3Zm3 5h6M9 12h6" },
-  {
-    label: "Savings & Goals",
-    to: "savings",
-    icon: "M4 9a8 5 0 0 1 16 0v6a8 5 0 0 1-16 0V9Zm0 0v6m16-6v6M15 12h.01",
-  },
-  { label: "Paychecks", to: "paychecks", icon: "M3 6h18v12H3V6Zm3 3h5m-5 3h3m7 1a2 2 0 1 0 0-4 2 2 0 0 0 0 4Z" },
-  {
-    label: "PTO",
-    to: "pto",
-    icon: "M8 2v4M16 2v4M3 10h18M5 4h14a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2Z",
-  },
-];
-
-/** The record: what happened, and what it means. */
-const RECORD: NavItem[] = [
-  { label: "Accounts", to: "accounts", icon: "M3 7h18M5 7l2-3h10l2 3M5 11h14v9H5v-9Zm3 3h3" },
-  { label: "Taxes", to: "taxes", icon: "M6 3h12v18H6V3Zm3 5h6M9 12h2m2 0h2m-4 4h2" },
-  { label: "Reports", to: "reports", icon: "M4 20V10m5 10V4m5 16v-7m5 7V8" },
+const NAV: NavItem[] = [
+  { label: "Money Flow", to: "", end: true },
+  { label: "Bills", to: "bills" },
+  { label: "Savings", to: "savings" },
+  { label: "Paychecks", to: "paychecks" },
+  { label: "PTO", to: "pto" },
+  { label: "Accounts", to: "accounts" },
+  { label: "Taxes", to: "taxes" },
+  { label: "Reports", to: "reports" },
+  { label: "Settings", to: "settings", end: true },
 ];
 
 const BASE = "/finance";
 
-function href(to: string): string {
-  return to ? `${BASE}/${to}` : BASE;
-}
+const href = (to: string) => (to ? `${BASE}/${to}` : BASE);
 
-function NavIcon({ path }: { path: string }) {
-  return (
-    <svg
-      className="nav-icon"
-      viewBox="0 0 24 24"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="1.7"
-      strokeLinecap="round"
-      strokeLinejoin="round"
-      aria-hidden="true"
-    >
-      <path d={path} />
-    </svg>
+const pillClass = ({ isActive }: { isActive: boolean }) =>
+  cn(
+    "whitespace-nowrap rounded-full px-3.5 py-1.5 text-sm transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand",
+    isActive
+      ? "bg-foreground/10 text-foreground shadow-[inset_0_1px_0_0_hsl(var(--foreground)/0.08)]"
+      : "text-muted-foreground hover:text-foreground",
   );
-}
+
+const NOISE =
+  "url(\"data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E\")";
 
 export interface ShellProps {
-  /** Shown in the topbar and used to highlight the matching nav entry. */
+  /** Used for the document title. */
   title: string;
   children: ReactNode;
   /** Rendered by pages that need a banner above their content. */
@@ -83,101 +54,44 @@ export interface ShellProps {
 }
 
 export default function Shell({ title, children, message, error }: ShellProps) {
-  const location = useLocation();
-  const [menuOpen, setMenuOpen] = useState(false);
-
-  // Close the mobile drawer whenever the route changes, otherwise it stays
-  // open over the page you just navigated to.
-  useEffect(() => setMenuOpen(false), [location.pathname]);
+  useEffect(() => {
+    document.title = `${title} · Finance`;
+  }, [title]);
 
   return (
-    <div className="shell">
-      <aside className={`sidebar${menuOpen ? " open" : ""}`}>
-        <NavLink className="brand" to={BASE}>
-          <img src="/finance/logo.svg" alt="" width={39} height={39} />
-          <span>
-            <span className="brand-name">NexaFi</span>
-            <span className="brand-tagline">Track Today. Build Tomorrow.</span>
+    <div className="shell relative isolate overflow-hidden">
+      {/* Ambient background: fading grid, film grain (same as the home page). */}
+      <div aria-hidden className="pointer-events-none absolute inset-0 -z-10">
+        <div className="absolute inset-0 bg-[linear-gradient(hsl(var(--foreground)/0.05)_1px,transparent_1px),linear-gradient(90deg,hsl(var(--foreground)/0.05)_1px,transparent_1px)] bg-[size:56px_56px] [mask-image:radial-gradient(ellipse_70%_40%_at_50%_0%,black,transparent)]" />
+        <div className="absolute inset-0 opacity-[0.035] mix-blend-overlay" style={{ backgroundImage: NOISE }} />
+      </div>
+
+      <div className="content">
+        <div className="no-print mb-6 flex flex-wrap items-center justify-between gap-3 text-xs uppercase tracking-[0.2em] text-muted-foreground">
+          <span className="flex items-center gap-2">
+            <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-brand shadow-[0_0_10px_hsl(var(--brand))]" />
+            Finance · {fmtLongDay(todayISO())}
           </span>
-        </NavLink>
+          <span className="inline-flex items-center gap-2 rounded-full border border-foreground/10 bg-foreground/[0.03] px-3 py-1 normal-case tracking-normal">
+            <ShieldCheck className="h-3.5 w-3.5 text-brand" />
+            Private · v{APP_VERSION}
+          </span>
+        </div>
 
-        <div className="nav-label">Every month</div>
-        <nav className="nav" aria-label="Primary">
-          {MONTHLY.map((item) => (
-            <NavLink
-              key={item.to}
-              to={href(item.to)}
-              end={item.end}
-              className={({ isActive }) => (isActive ? "active" : "")}
-            >
-              <NavIcon path={item.icon} />
-              <span>{item.label}</span>
+        <nav
+          aria-label="Finance"
+          className="no-print mb-10 flex gap-1 overflow-x-auto rounded-2xl border border-foreground/10 bg-foreground/[0.03] p-1.5 shadow-[inset_0_1px_0_0_hsl(var(--foreground)/0.06)] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
+        >
+          {NAV.map((item) => (
+            <NavLink key={item.to} to={href(item.to)} end={item.end} className={pillClass}>
+              {item.label}
             </NavLink>
           ))}
-
-          <div className="nav-label">The record</div>
-          {RECORD.map((item) => (
-            <NavLink
-              key={item.to}
-              to={href(item.to)}
-              end={item.end}
-              className={({ isActive }) => (isActive ? "active" : "")}
-            >
-              <NavIcon path={item.icon} />
-              <span>{item.label}</span>
-            </NavLink>
-          ))}
-
-          <div className="nav-divider" />
-          <NavLink to={href("settings")} end className={({ isActive }) => (isActive ? "active" : "")}>
-            <NavIcon path="M12 15.5a3.5 3.5 0 1 0 0-7 3.5 3.5 0 0 0 0 7Zm7-3.5 2-1-2-3-2 .5-1-2.5.5-2V6l-3-1-1 1.5-3-.5-1 3 1.5 1v3L3 14l1 3 2.5-.5 2 2.5-.5 2h4" />
-            <span>Settings</span>
-          </NavLink>
         </nav>
 
-        <div className="sidebar-foot">
-          <div className="local-pill">
-            <span className="local-dot" />
-            Private database connected
-          </div>
-          <div>Only you can read this data.</div>
-          <div>NexaFi v{APP_VERSION}</div>
-        </div>
-      </aside>
-
-      <div
-        className={`sidebar-backdrop${menuOpen ? " visible" : ""}`}
-        onClick={() => setMenuOpen(false)}
-        aria-hidden="true"
-      />
-
-      <div className="main">
-        <header className="topbar">
-          <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-            <button
-              className="menu-button"
-              type="button"
-              onClick={() => setMenuOpen((open) => !open)}
-              aria-label="Open menu"
-            >
-              <Menu size={20} strokeWidth={1.8} />
-            </button>
-            <p className="topbar-title">{title}</p>
-          </div>
-          <div className="topbar-meta">
-            <span className="date-line">{fmtLongDay(todayISO())}</span>
-            <span className="privacy-badge">
-              <ShieldCheck size={14} strokeWidth={2} />
-              Private
-            </span>
-          </div>
-        </header>
-
-        <div className="content">
-          {message && <div className="alert">{message}</div>}
-          {error && <div className="alert error">{error}</div>}
-          {children}
-        </div>
+        {message && <div className="alert">{message}</div>}
+        {error && <div className="alert error">{error}</div>}
+        {children}
       </div>
     </div>
   );

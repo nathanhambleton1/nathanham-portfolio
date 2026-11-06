@@ -118,97 +118,107 @@ export default function BankruptStatus({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogPortal>
         <DialogOverlay />
-        <DialogPrimitive.Content className="fixed left-1/2 top-1/2 z-50 mx-4 w-full max-w-2xl -translate-x-1/2 -translate-y-1/2 border bg-background p-6 shadow-lg sm:rounded-lg md:w-full">
+        <DialogPrimitive.Content className="fixed left-1/2 top-1/2 z-[1000001] w-[calc(100%-2rem)] max-w-2xl max-h-[calc(100dvh-2rem)] overflow-y-auto -translate-x-1/2 -translate-y-1/2 rounded-2xl border border-foreground/10 bg-background/90 backdrop-blur-xl backdrop-saturate-150 p-5 sm:p-6 shadow-[0_24px_60px_-20px_rgb(0_0_0/0.75),inset_0_1px_0_0_hsl(var(--foreground)/0.06)]">
           <DialogHeader>
-            <DialogTitle>Game Stats Recap</DialogTitle>
+            <div className="flex items-center justify-center gap-2 text-xs font-semibold uppercase tracking-[0.2em] text-muted-foreground sm:justify-start">
+              <span className="h-1.5 w-1.5 rounded-full bg-destructive shadow-[0_0_10px_hsl(var(--destructive))]" />
+              Bankruptcy
+            </div>
+            <DialogTitle className="font-display font-semibold tracking-tight">Game Stats Recap</DialogTitle>
             <DialogDescription>
                 Here's a summary of your game stats before declaring bankruptcy.
             </DialogDescription>
           </DialogHeader>
 
-          <div className="mt-4 p-3 bg-background rounded border">
-            <div className="text-sm font-semibold mb-2">Stats Recap</div>
+          <div className="mt-4">
+            <div className="mb-3 text-xs font-semibold uppercase tracking-[0.2em] text-muted-foreground"><span className="text-brand">//</span> Stats Recap</div>
             {loading ? (
-              <div className="text-sm text-muted-foreground">Loading stats...</div>
+              <div className="rounded-xl border border-foreground/10 bg-foreground/[0.03] p-4 text-sm text-muted-foreground">Loading stats...</div>
             ) : stats ? (
               <div className="space-y-3">
-                <div>
-                  <div className="text-xs font-semibold text-muted-foreground mb-1">Movement & Events</div>
-                  <div className="grid grid-cols-2 gap-2 text-sm">
+                <div className="rounded-xl border border-foreground/10 bg-foreground/[0.03] p-3 shadow-[inset_0_1px_0_0_hsl(var(--foreground)/0.06)]">
+                  <div className="text-[11px] uppercase tracking-widest text-muted-foreground mb-2">Movement & Events</div>
+                  <div className="grid grid-cols-2 gap-x-3 gap-y-2 text-sm">
                     <div>
-                      <div className="text-muted-foreground">Times Passed Go</div>
-                      <div className="font-medium">{stats.times_passed_go}</div>
+                      <div className="text-xs text-muted-foreground">Times Passed Go</div>
+                      <div className="font-display font-semibold tabular-nums">{stats.times_passed_go}</div>
                     </div>
                     <div>
-                      <div className="text-muted-foreground">Times Went To Jail</div>
-                      <div className="font-medium">{stats.times_went_to_jail}</div>
+                      <div className="text-xs text-muted-foreground">Times Went To Jail</div>
+                      <div className="font-display font-semibold tabular-nums">{stats.times_went_to_jail}</div>
                     </div>
                     <div>
-                      <div className="text-muted-foreground">Free Parking Landings</div>
-                      <div className="font-medium">{stats.times_landed_free_parking}</div>
+                      <div className="text-xs text-muted-foreground">Free Parking Landings</div>
+                      <div className="font-display font-semibold tabular-nums">{stats.times_landed_free_parking}</div>
                     </div>
                   </div>
                 </div>
 
-                <div>
-                  <div className="text-xs font-semibold text-green-600 mb-1">Money Received</div>
-                  <div className="grid grid-cols-2 gap-2 text-sm">
+                <div className="rounded-xl border border-foreground/10 bg-foreground/[0.03] p-3 shadow-[inset_0_1px_0_0_hsl(var(--foreground)/0.06)]">
+                  <div className="flex items-center gap-2 text-[11px] uppercase tracking-widest text-emerald-500 mb-2">
+                    <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" />
+                    Money Received
+                  </div>
+                  <div className="grid grid-cols-2 gap-x-3 gap-y-2 text-sm">
                     <div>
-                      <div className="text-muted-foreground">From Passing Go</div>
-                      <div className="font-medium text-green-600">${stats.money_received_from_go.toLocaleString()}</div>
+                      <div className="text-xs text-muted-foreground">From Passing Go</div>
+                      <div className="font-display font-semibold tabular-nums text-emerald-500">${stats.money_received_from_go.toLocaleString()}</div>
                     </div>
                     <div>
-                      <div className="text-muted-foreground">From Free Parking</div>
-                      <div className="font-medium text-green-600">${stats.money_received_from_free_parking.toLocaleString()}</div>
+                      <div className="text-xs text-muted-foreground">From Free Parking</div>
+                      <div className="font-display font-semibold tabular-nums text-emerald-500">${stats.money_received_from_free_parking.toLocaleString()}</div>
                     </div>
                     <div>
-                      <div className="text-muted-foreground">From Players</div>
-                      <div className="font-medium text-green-600">${stats.money_received_from_players.toLocaleString()}</div>
+                      <div className="text-xs text-muted-foreground">From Players</div>
+                      <div className="font-display font-semibold tabular-nums text-emerald-500">${stats.money_received_from_players.toLocaleString()}</div>
                     </div>
                     <div>
-                      <div className="text-muted-foreground">From Bank</div>
-                      <div className="font-medium text-green-600">${stats.money_received_from_bank.toLocaleString()}</div>
+                      <div className="text-xs text-muted-foreground">From Bank</div>
+                      <div className="font-display font-semibold tabular-nums text-emerald-500">${stats.money_received_from_bank.toLocaleString()}</div>
                     </div>
-                    <div className="col-span-2 pt-1 border-t">
-                      <div className="text-muted-foreground">Total Money Received</div>
-                      <div className="font-bold text-green-600">${stats.total_money_received.toLocaleString()}</div>
+                    <div className="col-span-2 mt-1 pt-2 border-t border-foreground/10">
+                      <div className="text-xs text-muted-foreground">Total Money Received</div>
+                      <div className="font-display text-lg font-bold tracking-tight tabular-nums text-emerald-500">${stats.total_money_received.toLocaleString()}</div>
                     </div>
                   </div>
                 </div>
 
-                <div>
-                  <div className="text-xs font-semibold text-red-600 mb-1">Money Spent</div>
-                  <div className="grid grid-cols-2 gap-2 text-sm">
+                <div className="rounded-xl border border-foreground/10 bg-foreground/[0.03] p-3 shadow-[inset_0_1px_0_0_hsl(var(--foreground)/0.06)]">
+                  <div className="flex items-center gap-2 text-[11px] uppercase tracking-widest text-destructive mb-2">
+                    <span className="h-1.5 w-1.5 rounded-full bg-destructive" />
+                    Money Spent
+                  </div>
+                  <div className="grid grid-cols-2 gap-x-3 gap-y-2 text-sm">
                     <div>
-                      <div className="text-muted-foreground">Paid to Bank (Tax/Fees)</div>
-                      <div className="font-medium text-red-600">${stats.money_paid_to_bank.toLocaleString()}</div>
+                      <div className="text-xs text-muted-foreground">Paid to Bank (Tax/Fees)</div>
+                      <div className="font-display font-semibold tabular-nums text-destructive">${stats.money_paid_to_bank.toLocaleString()}</div>
                     </div>
                     <div>
-                      <div className="text-muted-foreground">Paid to Players</div>
-                      <div className="font-medium text-red-600">${stats.money_paid_to_players.toLocaleString()}</div>
+                      <div className="text-xs text-muted-foreground">Paid to Players</div>
+                      <div className="font-display font-semibold tabular-nums text-destructive">${stats.money_paid_to_players.toLocaleString()}</div>
                     </div>
                     <div>
-                      <div className="text-muted-foreground">Jail Payments</div>
-                      <div className="font-medium text-red-600">${stats.money_paid_for_jail.toLocaleString()}</div>
+                      <div className="text-xs text-muted-foreground">Jail Payments</div>
+                      <div className="font-display font-semibold tabular-nums text-destructive">${stats.money_paid_for_jail.toLocaleString()}</div>
                     </div>
-                    <div className="col-span-2 pt-1 border-t">
-                      <div className="text-muted-foreground">Total Money Spent</div>
-                      <div className="font-bold text-red-600">${stats.total_money_spent.toLocaleString()}</div>
+                    <div className="col-span-2 mt-1 pt-2 border-t border-foreground/10">
+                      <div className="text-xs text-muted-foreground">Total Money Spent</div>
+                      <div className="font-display text-lg font-bold tracking-tight tabular-nums text-destructive">${stats.total_money_spent.toLocaleString()}</div>
                     </div>
                   </div>
                 </div>
 
-                <div className="p-2 bg-muted rounded">
-                  <div className="grid grid-cols-2 gap-2 text-sm">
+                <div className="rounded-xl border border-brand/20 bg-brand/[0.06] p-3 shadow-[inset_0_1px_0_0_hsl(var(--foreground)/0.06)]">
+                  <div className="grid grid-cols-2 gap-x-3 gap-y-2 text-sm">
                     <div>
-                      <div className="text-muted-foreground">Net Money Flow</div>
-                      <div className={`font-bold ${(stats.total_money_received - stats.total_money_spent) >= 0 ? 'text-green-600' : 'text-red-600'}`}>
+                      <div className="text-[11px] uppercase tracking-widest text-muted-foreground">Net Money Flow</div>
+                      <div className={`font-display text-xl font-bold tracking-tight tabular-nums ${(stats.total_money_received - stats.total_money_spent) >= 0 ? 'text-emerald-500' : 'text-destructive'}`}>
                         {(stats.total_money_received - stats.total_money_spent) >= 0 ? '+' : ''}${(stats.total_money_received - stats.total_money_spent).toLocaleString()}
                       </div>
                     </div>
                     <div>
-                      <div className="text-muted-foreground">Luck Score</div>
-                      <div className={`font-medium ${stats.current_luck_score >= 0 ? 'text-green-600' : 'text-red-600'}`}>
+                      <div className="text-[11px] uppercase tracking-widest text-muted-foreground">Luck Score</div>
+                      <div className={`font-display text-xl font-bold tracking-tight tabular-nums ${stats.current_luck_score >= 0 ? 'text-emerald-500' : 'text-destructive'}`}>
                         {stats.current_luck_score >= 0 ? '+' : ''}{stats.current_luck_score.toFixed(2)}
                       </div>
                     </div>
@@ -216,7 +226,7 @@ export default function BankruptStatus({
                 </div>
               </div>
             ) : (
-              <div className="text-sm text-muted-foreground">No stats available for this game.</div>
+              <div className="rounded-xl border border-foreground/10 bg-foreground/[0.03] p-4 text-sm text-muted-foreground">No stats available for this game.</div>
             )}
           </div>
 

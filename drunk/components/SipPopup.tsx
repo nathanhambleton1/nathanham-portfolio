@@ -154,16 +154,17 @@ export default function SipPopup({
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogPortal>
-        <DialogOverlay className="fixed inset-0 z-[100000] bg-black/50 data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0" />
+        <DialogOverlay className="fixed inset-0 z-[100000] bg-transparent data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0" />
         <DialogContent>
-        <DialogHeader>
+        <DialogHeader className="items-center sm:items-start">
+          <img src="/drunkopoly/sips.webp" alt="" aria-hidden draggable={false} className="mb-2 h-20 w-auto max-w-[70%] select-none object-contain" />
           <DialogTitle>Give Sips</DialogTitle>
           <DialogDescription>Select one or more players and how many sips to assign.</DialogDescription>
         </DialogHeader>
 
         <div className="space-y-4">
           <div className="space-y-2">
-            <div className="text-sm font-medium">Choose recipient</div>
+            <div className="text-[11px] font-semibold uppercase tracking-widest text-muted-foreground">Choose recipient</div>
             <div className="grid gap-2">
               {others.length === 0 && <div className="text-sm text-muted-foreground">No players</div>}
               {others.length > 0 && (
@@ -172,11 +173,11 @@ export default function SipPopup({
                   {(() => {
                     const first = others[0];
                     return (
-                      <label key={first.id} className={`flex items-center gap-2 p-2 border rounded ${selectedIds.has(first.id) ? 'bg-primary/10' : ''}`}>
-                        <input type="checkbox" name="sip-recipient" checked={selectedIds.has(first.id)} onChange={() => toggleSelected(first.id)} />
+                      <label key={first.id} className={`flex min-h-[48px] cursor-pointer items-center gap-3 rounded-xl border px-3 py-2 transition duration-200 ${selectedIds.has(first.id) ? 'border-brand/60 bg-brand/10 ring-1 ring-inset ring-brand/30' : 'border-foreground/10 bg-foreground/[0.03] hover:border-brand/40'}`}>
+                        <input className="h-4 w-4 shrink-0 accent-[hsl(var(--brand))]" type="checkbox" name="sip-recipient" checked={selectedIds.has(first.id)} onChange={() => toggleSelected(first.id)} />
                         <PlayerAvatar player={first} size="sm" />
-                        <div className="flex-1">{first.name}{first.id === currentPlayer?.id ? ' (you)' : ''}</div>
-                        <div className="text-sm text-muted-foreground">{(first.pending_sips || 0) > 0 ? `${first.pending_sips} pending` : ''}</div>
+                        <div className="min-w-0 flex-1 truncate text-sm font-medium">{first.name}{first.id === currentPlayer?.id ? ' (you)' : ''}</div>
+                        <div className="shrink-0 text-xs tabular-nums text-muted-foreground">{(first.pending_sips || 0) > 0 ? `${first.pending_sips} pending` : ''}</div>
                       </label>
                     );
                   })()}
@@ -185,11 +186,11 @@ export default function SipPopup({
 
                   {/* render remaining players (skip first) */}
                   {others.slice(1).map((p) => (
-                    <label key={p.id} className={`flex items-center gap-2 p-2 border rounded ${selectedIds.has(p.id) ? 'bg-primary/10' : ''}`}>
-                      <input type="checkbox" name="sip-recipient" checked={selectedIds.has(p.id)} onChange={() => toggleSelected(p.id)} />
+                    <label key={p.id} className={`flex min-h-[48px] cursor-pointer items-center gap-3 rounded-xl border px-3 py-2 transition duration-200 ${selectedIds.has(p.id) ? 'border-brand/60 bg-brand/10 ring-1 ring-inset ring-brand/30' : 'border-foreground/10 bg-foreground/[0.03] hover:border-brand/40'}`}>
+                      <input className="h-4 w-4 shrink-0 accent-[hsl(var(--brand))]" type="checkbox" name="sip-recipient" checked={selectedIds.has(p.id)} onChange={() => toggleSelected(p.id)} />
                       <PlayerAvatar player={p} size="sm" />
-                      <div className="flex-1">{p.name}{p.id === currentPlayer?.id ? ' (you)' : ''}</div>
-                      <div className="text-sm text-muted-foreground">{(p.pending_sips || 0) > 0 ? `${p.pending_sips} pending` : ''}</div>
+                      <div className="min-w-0 flex-1 truncate text-sm font-medium">{p.name}{p.id === currentPlayer?.id ? ' (you)' : ''}</div>
+                      <div className="shrink-0 text-xs tabular-nums text-muted-foreground">{(p.pending_sips || 0) > 0 ? `${p.pending_sips} pending` : ''}</div>
                     </label>
                   ))}
                 </>
@@ -199,8 +200,8 @@ export default function SipPopup({
 
           <div className="space-y-1">
             <div className="flex items-center justify-between">
-              <div className="text-sm font-medium">Sips</div>
-              <div className="text-sm text-muted-foreground">{effectiveCount}</div>
+              <div className="text-[11px] font-semibold uppercase tracking-widest text-muted-foreground">Sips</div>
+              <div className="bg-gradient-to-b from-foreground to-foreground/60 bg-clip-text font-display text-3xl font-bold tabular-nums tracking-tight text-transparent">{effectiveCount}</div>
             </div>
             <input
               type="range"
@@ -223,7 +224,7 @@ export default function SipPopup({
                     setRawSip(String(n));
                   }
                 }}
-                className="w-32"
+                className="h-11 w-32"
                 type="tel"
                 inputMode="numeric"
                 pattern="[0-9]*"
@@ -236,19 +237,19 @@ export default function SipPopup({
         </div>
 
         <DialogFooter>
-            <div className="flex gap-2 w-full justify-between items-center">
+            <div className="flex w-full flex-col-reverse gap-2 sm:flex-row sm:items-center sm:justify-between">
               <Button
                 variant="ghost"
                 size="sm"
                 onClick={toggleViewMode}
-                className="text-xs"
+                className="h-10 self-center text-xs sm:self-auto"
               >
                 <LayoutGrid className="h-4 w-4 mr-1" />
                 Seating Chart
               </Button>
               <div className="flex gap-2">
-                <Button variant="secondary" onClick={() => onOpenChange(false)}>Cancel</Button>
-                <Button onClick={handleSubmit} className="bg-primary" disabled={!(selectedIds && selectedIds.size > 0)}>Give</Button>
+                <Button variant="secondary" className="h-11 flex-1 sm:h-10 sm:flex-none" onClick={() => onOpenChange(false)}>Cancel</Button>
+                <Button onClick={handleSubmit} className="h-11 flex-1 sm:h-10 sm:flex-none" disabled={!(selectedIds && selectedIds.size > 0)}>Give</Button>
               </div>
             </div>
         </DialogFooter>

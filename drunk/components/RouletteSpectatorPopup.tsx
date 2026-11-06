@@ -51,24 +51,28 @@ export default function RouletteSpectatorPopup({
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent
-        className="p-0 border border-border overflow-hidden max-w-sm w-full bg-background"
+        className="p-0 gap-0 overflow-hidden max-w-sm"
         style={{ maxHeight: '80vh', display: 'flex', flexDirection: 'column' }}
       >
         {/* Header */}
-        <div className="px-4 pt-4 pb-3 flex-shrink-0 border-b border-border">
+        <div className="px-4 pt-4 pb-3 flex-shrink-0 border-b border-foreground/10">
+          <div className="mb-2 flex items-center justify-center gap-2 text-[11px] font-semibold uppercase tracking-[0.2em] text-muted-foreground">
+            <span className="h-1.5 w-1.5 rounded-full bg-brand shadow-[0_0_10px_hsl(var(--brand))]" />
+            Live roulette
+          </div>
           <div className="flex items-center justify-center gap-2">
             {data.spinnerAvatar && (
-              <img src={data.spinnerAvatar} alt="" className="w-7 h-7 rounded-full object-cover border border-border flex-shrink-0" />
+              <img src={data.spinnerAvatar} alt="" className="w-8 h-8 rounded-full object-cover ring-1 ring-foreground/10 flex-shrink-0" />
             )}
             <div className="text-center">
-              <div className="text-sm font-bold text-foreground leading-tight">
+              <div className="font-display text-base font-semibold tracking-tight text-foreground leading-tight">
                 {data.spinnerName || 'A player'} is gambling!
               </div>
               <div className="text-xs text-muted-foreground mt-0.5">
                 ${data.amount.toLocaleString()} on{' '}
                 <span className="font-semibold text-foreground">{data.betLabel}</span>
                 {' '}·{' '}
-                <span className="text-primary">{oddsLabel}</span>
+                <span className="text-brand">{oddsLabel}</span>
               </div>
             </div>
           </div>
@@ -82,11 +86,11 @@ export default function RouletteSpectatorPopup({
 
           <div className="text-center min-h-[3.5rem]">
             {phase === 'spinning' && (
-              <p className="text-primary animate-pulse font-semibold text-sm">Spinning...</p>
+              <p className="text-brand animate-pulse font-semibold text-sm">Spinning...</p>
             )}
             {phase === 'result' && (
               <div>
-                <div className={`text-xl font-bold ${data.won ? 'text-primary' : 'text-destructive'}`}>
+                <div className={`font-display text-2xl font-bold tracking-tight ${data.won ? 'text-emerald-500' : 'text-destructive'}`}>
                   {data.won ? `${data.spinnerName} Won!` : `${data.spinnerName} Lost`}
                 </div>
                 <div className="text-sm mt-0.5 text-muted-foreground">
@@ -110,8 +114,8 @@ export default function RouletteSpectatorPopup({
         </div>
 
         {/* Footer close button */}
-        <div className="px-4 py-3 flex-shrink-0 border-t border-border">
-          <Button variant="outline" className="w-full" onClick={() => onOpenChange(false)}>
+        <div className="px-4 py-3 flex-shrink-0 border-t border-foreground/10">
+          <Button variant="outline" className="h-11 w-full" onClick={() => onOpenChange(false)}>
             Dismiss
           </Button>
         </div>

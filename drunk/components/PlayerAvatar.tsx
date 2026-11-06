@@ -20,14 +20,14 @@ export default function PlayerAvatar({ player, size = 'md', className = '' }: Pr
       <img
         src={player.avatar_url}
         alt={displayName || 'Player'}
-        className={`${sz} rounded-full object-cover shrink-0 ${className}`}
+        className={`${sz} rounded-full object-cover shrink-0 ring-1 ring-foreground/10 ${className}`}
       />
     );
   }
 
   return (
     <div
-      className={`${sz} rounded-full bg-primary/20 text-primary flex items-center justify-center shrink-0 select-none ${className}`}
+      className={`${sz} rounded-full bg-brand/10 text-brand ring-1 ring-inset ring-brand/20 flex items-center justify-center shrink-0 select-none ${className}`}
       aria-label={displayName || 'Player'}
     >
       <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" className="w-3/5 h-3/5">

@@ -366,3 +366,38 @@ body.drunk-overlay-open .drunk-eye-toggle {
   display: inline-block;
 }
 /* ─────────────────────────────────────────────────────────────────────────── */
+
+/* ─── Ambient page backdrop (matches the home page) ──────────────────────────
+ * Every drunk page shell uses `bg-gradient-bg`. It paints the home page's
+ * fading grid + film grain behind the content via pseudo-elements, so it never
+ * affects layout (flex centering etc. keeps working).
+ */
+@layer components {
+.bg-gradient-bg {
+  position: relative;
+  isolation: isolate;
+  background-color: hsl(var(--background));
+}
+.bg-gradient-bg::before,
+.bg-gradient-bg::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  pointer-events: none;
+}
+.bg-gradient-bg::before {
+  background-image:
+    linear-gradient(hsl(var(--foreground) / 0.05) 1px, transparent 1px),
+    linear-gradient(90deg, hsl(var(--foreground) / 0.05) 1px, transparent 1px);
+  background-size: 56px 56px;
+  -webkit-mask-image: radial-gradient(ellipse 70% 55% at 50% 0%, black, transparent);
+  mask-image: radial-gradient(ellipse 70% 55% at 50% 0%, black, transparent);
+}
+.bg-gradient-bg::after {
+  opacity: 0.035;
+  mix-blend-mode: overlay;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+}
+}
+/* ─────────────────────────────────────────────────────────────────────────── */

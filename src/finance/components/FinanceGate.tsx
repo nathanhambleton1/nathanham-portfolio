@@ -53,7 +53,7 @@ export default function FinanceGate({ children }: { children: ReactNode }) {
             <path d="M7 11V8a5 5 0 0 1 10 0v3m-11 0h12v10H6V11Z" />
           </svg>
         </div>
-        <h1>NexaFi</h1>
+        <h1>Finance</h1>
         <p>Enter your password to open your finances.</p>
 
         <input
@@ -65,7 +65,7 @@ export default function FinanceGate({ children }: { children: ReactNode }) {
           value={password}
           onChange={(event) => setPassword(event.target.value)}
         />
-        <button className="button" type="submit" disabled={submitting || !password} style={{ width: "100%", marginTop: 10 }}>
+        <button className="button" type="submit" disabled={submitting || !password} style={{ width: "100%" }}>
           {submitting ? "Unlocking…" : "Unlock"}
         </button>
 

@@ -29,3 +29,6 @@ dist-ssr
 .env.staging
 .claude
 lab-public/
+
+# Claude Code personal settings
+.claude/settings.local.json

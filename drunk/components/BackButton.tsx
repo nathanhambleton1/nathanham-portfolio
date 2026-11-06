@@ -8,7 +8,7 @@ export const BackButton = () => {
   return (
     <Button
       variant="ghost"
-      onClick={() => navigate("/")}
+      onClick={() => navigate("/drunk")}
       className="mb-6 hover:bg-muted"
     >
       <ArrowLeft className="w-4 h-4 mr-2" />

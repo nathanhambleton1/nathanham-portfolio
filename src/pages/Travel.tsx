@@ -1,4 +1,5 @@
 import { useEffect } from "react";
+import { DEFAULT_TITLE } from "@/lib/sites";
 import TravelApp from "../travel/TravelApp";
 
 // Route entry for /travel. Sets the document title (and restores it on
@@ -7,7 +8,7 @@ const Travel = () => {
   useEffect(() => {
     document.title = "Our Travels";
     return () => {
-      document.title = "Nathan Hambleton – Portfolio";
+      document.title = DEFAULT_TITLE;
     };
   }, []);
 

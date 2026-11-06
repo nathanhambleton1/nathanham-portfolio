@@ -7,16 +7,16 @@ import {
   CardContent,
   CardFooter,
 } from "../components/ui/card";
-import { Dice1, Beer, Home, Building, DollarSign, Gift, ArrowLeft } from "lucide-react";
+import { Dice1, Beer, Home, Building, DollarSign, Gift, ChevronLeft } from "lucide-react";
 
 const RuleRow = ({ icon: Icon, title, children }: any) => (
-  <div className="flex gap-4 items-start">
-    <div className="w-12 h-12 rounded-md bg-transparent flex items-center justify-center text-foreground/90 shadow-sm">
-      <Icon className="w-6 h-6" />
+  <div className="flex items-start gap-4 rounded-xl border border-foreground/10 bg-foreground/[0.03] p-4 transition duration-300 hover:-translate-y-0.5 hover:border-brand/40">
+    <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-brand/10 text-brand ring-1 ring-inset ring-brand/20">
+      <Icon className="h-5 w-5" />
     </div>
-    <div className="flex-1">
-      <div className="font-semibold text-foreground">{title}</div>
-      <div className="text-sm text-muted-foreground mt-1">{children}</div>
+    <div className="min-w-0 flex-1">
+      <div className="font-display font-semibold tracking-tight text-foreground">{title}</div>
+      <div className="mt-1 text-sm leading-relaxed text-muted-foreground">{children}</div>
     </div>
   </div>
 );
@@ -28,20 +28,35 @@ const Rules = () => {
     <div className="min-h-screen bg-gradient-bg">
       <div className="w-full" style={{ height: '36px' }} />
       <div className="container max-w-3xl mx-auto px-4 py-10">
-        <div className="mb-6 flex items-center justify-between">
-          <div className="flex items-center gap-4">
-            <h1 className="text-3xl font-bold text-foreground">Rules</h1>
+        <div className="mb-8">
+          <button
+            type="button"
+            onClick={() => navigate(-1)}
+            className="inline-flex min-h-10 items-center gap-2 rounded-full border border-foreground/10 bg-foreground/[0.03] px-4 py-2 text-sm text-muted-foreground transition-colors hover:border-brand/40 hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand motion-safe:animate-rise"
+          >
+            <ChevronLeft className="h-4 w-4" />Back
+          </button>
+          <div
+            className="mt-8 flex items-center gap-2 text-xs uppercase tracking-[0.2em] text-muted-foreground motion-safe:animate-rise"
+            style={{ animationDelay: '70ms' }}
+          >
+            <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-brand shadow-[0_0_10px_hsl(var(--brand))]" />
+            Drunkopoly
           </div>
-          <div className="flex items-center gap-2">
-            <Button variant="ghost" onClick={() => navigate(-1)}>
-              <ArrowLeft className="w-4 h-4 mr-2" />Back
-            </Button>
-          </div>
+          <h1
+            className="mt-3 bg-gradient-to-b from-foreground to-foreground/60 bg-clip-text pb-2 font-display text-5xl font-bold leading-[0.95] tracking-tight text-transparent motion-safe:animate-rise"
+            style={{ animationDelay: '140ms' }}
+          >
+            Rules
+          </h1>
         </div>
 
-        <Card className="bg-gradient-card border-border p-6">
-          <CardContent>
-            <div className="grid gap-6">
+        <Card className="p-4 sm:p-6 motion-safe:animate-rise" style={{ animationDelay: '210ms' }}>
+          <CardContent className="p-0">
+            <div className="mb-5 text-xs font-semibold uppercase tracking-[0.2em] text-muted-foreground">
+              <span className="text-brand">//</span> How to drink
+            </div>
+            <div className="grid gap-4">
               <RuleRow icon={Beer} title="Drinks & Sips">
                 Take sips as dictated by actions below. Rules are additive — multiple rules may apply on a single landing.
               </RuleRow>
@@ -86,8 +101,8 @@ const Rules = () => {
             </div>
           </CardContent>
 
-          <CardFooter className="flex justify-end">
-            <Button onClick={() => navigate(-1)}>Close</Button>
+          <CardFooter className="mt-6 flex justify-end border-t border-foreground/10 p-0 pt-4">
+            <Button className="h-11 rounded-full px-6" onClick={() => navigate(-1)}>Close</Button>
           </CardFooter>
         </Card>
       </div>

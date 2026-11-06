@@ -7,6 +7,7 @@ export default {
 		"./components/**/*.{ts,tsx}",
 		"./app/**/*.{ts,tsx}",
 		"./src/**/*.{ts,tsx}",
+		"./drunk/**/*.{ts,tsx}",
 	],
 	prefix: "",
 	theme: {
@@ -20,8 +21,11 @@ export default {
 		extend: {
 			fontFamily: {
 				mono: ['JetBrains Mono', 'Fira Code', 'monospace'],
+				display: ['Space Grotesk', 'JetBrains Mono', 'sans-serif'],
+				board: ['Oswald', 'Space Grotesk', 'sans-serif'],
 			},
 			colors: {
+				brand: 'hsl(var(--brand) / <alpha-value>)',
 				border: 'hsl(var(--border))',
 				input: 'hsl(var(--input))',
 				ring: 'hsl(var(--ring))',
@@ -64,6 +68,10 @@ export default {
 				sm: 'calc(var(--radius) - 4px)'
 			},
 			keyframes: {
+				rise: {
+					from: { opacity: '0', transform: 'translateY(14px)' },
+					to: { opacity: '1', transform: 'translateY(0)' }
+				},
 				'accordion-down': {
 					from: {
 						height: '0'
@@ -82,6 +90,7 @@ export default {
 				}
 			},
 			animation: {
+				rise: 'rise 0.7s cubic-bezier(0.2, 0.7, 0.2, 1) both',
 				'accordion-down': 'accordion-down 0.2s ease-out',
 				'accordion-up': 'accordion-up 0.2s ease-out',
 				'fade-in': 'fade-in 0.3s ease-out',

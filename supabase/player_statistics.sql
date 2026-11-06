@@ -1,4 +1,4 @@
--- Player statistics table for advanced win probability calculations
+-- Player statistics table (powers the "View Stats" screen)
 -- Tracks gameplay events and patterns for each player in a game
 create table public.player_statistics (
   id uuid primary key default gen_random_uuid(),
@@ -49,27 +49,4 @@ alter table public.player_statistics enable row level security;
 -- Allow anyone to read/write statistics
 create policy "Allow all operations on player_statistics"
   on public.player_statistics for all
-  using (true);
-
--- Property landing tracking - tracks which properties are "hot" in this game
-create table public.property_landing_stats (
-  id uuid primary key default gen_random_uuid(),
-  game_id uuid not null references public.games (id) on delete cascade,
-  property_id text not null, -- references MONOPOLY_PROPERTIES.id
-  times_landed int4 not null default 0,
-  
-  created_at timestamptz not null default now(),
-  updated_at timestamptz not null default now()
-);
-
--- Indexes
-create unique index property_landing_stats_game_property_key on public.property_landing_stats (game_id, property_id);
-create index property_landing_stats_game_id_idx on public.property_landing_stats (game_id);
-
--- Enable Row Level Security
-alter table public.property_landing_stats enable row level security;
-
--- Allow anyone to read/write landing stats
-create policy "Allow all operations on property_landing_stats"
-  on public.property_landing_stats for all
   using (true);

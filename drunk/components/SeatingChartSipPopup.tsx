@@ -59,7 +59,7 @@ export default function SeatingChartSipPopup({
     if (initializedRef.current && positionsPercent.length === players.length) return;
 
     // Normalized radius for the circular default layout.
-    // Container is aspect-square; TABLE is w-32 (128px) in ~400px reference.
+    // Container is aspect-square; seats ring a ~400px reference around the table.
     const computeDefaults = (): PlayerPosition[] => {
       const total = players.length || 1;
       const R = 0.5 - (64 + 16) / 400; // ~0.3
@@ -223,16 +223,22 @@ export default function SeatingChartSipPopup({
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogPortal>
-        <DialogOverlay className="fixed inset-0 z-[100000] bg-black/50 data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0" />
-        <DialogContent>
-          <div className="space-y-0">
-            <div className="flex items-center justify-between mb-4">
-              <h2 className="text-2xl font-bold">Give Sips</h2>
+        <DialogOverlay className="fixed inset-0 z-[100000] bg-transparent data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0" />
+        <DialogContent onOpenAutoFocus={(e) => e.preventDefault()}>
+          <div>
+            <div className="mb-4 flex items-center justify-between gap-3">
+              <div>
+                <div className="flex items-center gap-2 text-[11px] font-semibold uppercase tracking-[0.2em] text-muted-foreground">
+                  <span className="h-1.5 w-1.5 rounded-full bg-brand" />
+                  Tap a seat to send
+                </div>
+                <h2 className="mt-1 font-display text-2xl font-semibold tracking-tight">Give Sips</h2>
+              </div>
             </div>
 
             <div
               ref={containerRef}
-              className="relative w-full aspect-square bg-accent/20 rounded-lg border-2 border-dashed border-accent overflow-hidden select-none"
+              className="relative w-full aspect-square overflow-hidden select-none rounded-2xl border border-dashed border-foreground/15 bg-foreground/[0.03] bg-[radial-gradient(circle_at_center,hsl(var(--brand)/0.08),transparent_65%)] shadow-[inset_0_1px_0_0_hsl(var(--foreground)/0.06)]"
               onMouseMove={handleMouseMove}
               onMouseUp={handleDragEnd}
               onMouseLeave={handleDragEnd}
@@ -240,8 +246,8 @@ export default function SeatingChartSipPopup({
               onTouchEnd={handleDragEnd}
             >
               {/* Center table indicator */}
-              <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-32 aspect-square rounded-full border-4 border-accent/40 flex items-center justify-center">
-                <span className="text-sm text-muted-foreground font-semibold">TABLE</span>
+              <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-24 aspect-square rounded-full border border-foreground/10 bg-foreground/[0.04] ring-8 ring-foreground/[0.02] shadow-[inset_0_1px_0_0_hsl(var(--foreground)/0.06)] flex items-center justify-center">
+                <span className="text-[11px] font-semibold uppercase tracking-[0.2em] text-muted-foreground">Table</span>
               </div>
 
               {/* Player seats — CSS % positions need no container measurement */}
@@ -267,16 +273,16 @@ export default function SeatingChartSipPopup({
                     }}
                   >
                     <div
-                      className={`relative px-4 py-2 pt-3 rounded-lg border-2 font-semibold text-sm transition-all ${
+                      className={`relative px-4 py-2 pt-3 rounded-xl border font-semibold text-sm transition-all backdrop-blur-md ${
                         tapCount > 0
-                          ? 'bg-primary text-primary-foreground border-primary shadow-lg'
-                          : 'bg-background border-accent hover:bg-accent/50'
+                          ? 'bg-brand/15 text-foreground border-brand/60 ring-1 ring-inset ring-brand/40 shadow-[0_0_24px_-4px_hsl(var(--brand)/0.6)]'
+                          : 'bg-background/80 border-foreground/15 shadow-[0_8px_20px_-10px_rgb(0_0_0/0.6),inset_0_1px_0_0_hsl(var(--foreground)/0.06)] hover:border-brand/40'
                       }`}
                       style={{ minWidth: 56 }}
                     >
                       {tapCount > 0 && (
                         <div
-                          className="absolute top-0 right-0 bg-destructive text-destructive-foreground rounded-full min-w-[1.75rem] h-7 px-2 flex items-center justify-center text-xs font-bold shadow-lg animate-bounce border-2 border-background z-10"
+                          className="absolute top-0 right-0 bg-brand text-background rounded-full min-w-[1.75rem] h-7 px-2 flex items-center justify-center font-display text-xs font-bold tabular-nums shadow-[0_0_12px_hsl(var(--brand)/0.6)] animate-bounce border-2 border-background z-10"
                           style={{ transform: 'translate(50%, -50%)' }}
                         >
                           +{tapCount}
@@ -285,10 +291,10 @@ export default function SeatingChartSipPopup({
                       <div className="whitespace-nowrap text-center">{player.name}</div>
                       <div className="mt-2 flex justify-center">
                         <div
-                          className={`inline-flex items-center justify-center rounded-full min-w-[1.5rem] h-6 px-2 text-xs font-bold ${
+                          className={`inline-flex items-center justify-center rounded-full min-w-[1.5rem] h-6 px-2 text-xs font-bold tabular-nums ${
                             currentSips > 0
-                              ? 'bg-muted text-foreground border border-border'
-                              : 'bg-transparent text-muted-foreground border border-border'
+                              ? 'bg-amber-500/10 text-amber-500 ring-1 ring-inset ring-amber-500/25'
+                              : 'bg-foreground/[0.03] text-muted-foreground border border-foreground/10'
                           }`}
                         >
                           {currentSips}
@@ -300,19 +306,19 @@ export default function SeatingChartSipPopup({
               })}
             </div>
 
-            <div className="mt-4 flex items-center justify-between">
-              <Button variant="ghost" size="sm" onClick={switchToClassic} className="text-xs">
+            <div className="mt-5 flex items-center justify-between gap-2">
+              <Button variant="ghost" size="sm" onClick={switchToClassic} className="h-10 text-xs">
                 <List className="h-4 w-4 mr-1" />
                 Classic View
               </Button>
               <div className="text-center flex-1">
                 {totalTaps > 0 && (
-                  <p className="text-sm text-primary font-semibold animate-pulse">
+                  <p className="text-sm font-semibold text-brand animate-pulse">
                     Sending {totalTaps} sip{totalTaps !== 1 ? 's' : ''}...
                   </p>
                 )}
               </div>
-              <Button variant="secondary" onClick={() => onOpenChange(false)}>Close</Button>
+              <Button variant="secondary" className="h-10" onClick={() => onOpenChange(false)}>Close</Button>
             </div>
           </div>
         </DialogContent>

@@ -145,16 +145,16 @@ export default function TradeLockOverlay({
   const expired = remainingMs !== null ? remainingMs <= 0 : false;
 
   return (
-    <div className="fixed inset-0 z-[99999] pointer-events-auto overflow-auto" style={{ backgroundColor: 'hsl(var(--background))' }}>
-      <div className="relative z-[99999] min-h-screen flex items-center justify-center px-6 py-12">
-        <div className={`max-w-lg w-full text-center p-12 rounded overflow-auto max-h-[calc(100vh-6rem)]`} style={{ background: 'hsl(var(--background))', color: 'hsl(var(--foreground))' }}>
-          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" className="w-16 h-16 mx-auto mb-4" fill="none" stroke="currentColor" strokeWidth={1.5}>
-            <path strokeLinecap="round" strokeLinejoin="round" d="M12 15v2" />
-            <rect x="4" y="10" width="16" height="10" rx="2" strokeWidth={1.5} />
-            <path strokeLinecap="round" strokeLinejoin="round" d="M7 10V8a5 5 0 0110 0v2" />
-          </svg>
+    <div className="fixed inset-0 z-[99999] pointer-events-auto overflow-auto bg-background text-foreground">
+      <div className="relative z-[99999] min-h-screen flex items-center justify-center px-4 py-10 sm:px-6 sm:py-12">
+        <div className="max-w-lg w-full text-center p-6 sm:p-8 rounded-2xl border border-foreground/10 bg-foreground/[0.03] shadow-[inset_0_1px_0_0_hsl(var(--foreground)/0.06)] overflow-auto max-h-[calc(100vh-5rem)] text-foreground motion-safe:animate-rise">
+          <img src="/drunkopoly/trade_timer.webp" alt="Trade Timer" draggable={false} className="mx-auto mb-5 h-28 w-auto select-none drop-shadow-[0_12px_24px_rgb(0_0_0/0.5)]" />
 
-          <div className="text-2xl font-bold mb-2">Trade Timer Countdown</div>
+          <div className="flex items-center justify-center gap-2 text-xs font-semibold uppercase tracking-[0.2em] text-muted-foreground">
+            <span className="h-1.5 w-1.5 rounded-full bg-brand shadow-[0_0_10px_hsl(var(--brand))]" />
+            Trade in progress
+          </div>
+          <div className="mt-2 font-display text-2xl font-semibold tracking-tight">Trade Timer Countdown</div>
           <style>{`
             @keyframes alarmPulse {
               0%, 100% { text-shadow: 0 0 20px rgba(220,38,38,0.7), 0 0 10px rgba(220,38,38,0.5); }
@@ -162,7 +162,7 @@ export default function TradeLockOverlay({
             }
           `}</style>
           <h2
-            className={`text-5xl font-extrabold mb-2 ${expired ? 'text-red-600' : ''}`}
+            className={`mt-3 mb-6 font-display text-6xl font-bold tracking-tight tabular-nums leading-none pb-1 ${expired ? 'text-destructive' : 'bg-gradient-to-b from-foreground to-foreground/60 bg-clip-text text-transparent'}`}
             style={expired ? { animation: 'alarmPulse 0.4s ease-in-out infinite' } : undefined}
           >
             {formatRemaining(remainingMs ?? 0)}
@@ -235,8 +235,7 @@ export default function TradeLockOverlay({
 
           <div className="w-full">
             <button
-              className={`w-full px-4 py-3 rounded text-lg border border-transparent`}
-              style={{ background: 'hsl(var(--primary))', color: 'hsl(var(--primary-foreground))' }}
+              className="w-full h-12 px-4 rounded-xl text-base font-semibold bg-primary text-primary-foreground shadow-[inset_0_1px_0_0_hsl(var(--primary-foreground)/0.12)] transition hover:bg-primary/90 active:scale-[0.98] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand focus-visible:ring-offset-2 focus-visible:ring-offset-background"
               onClick={() => {
                 // stop alarm when user dismisses
                 if (audioRef.current) {
@@ -299,32 +298,34 @@ function BalancesAndInfo({
           <button
             type="button"
             onClick={() => setOpenSection((v) => (v === 'actions' ? null : 'actions'))}
-            className="w-full flex items-center justify-between gap-3 p-3 rounded bg-white/5 hover:bg-white/8"
+            className="w-full flex items-center justify-between gap-3 p-3 rounded-xl border border-foreground/10 bg-foreground/[0.03] shadow-[inset_0_1px_0_0_hsl(var(--foreground)/0.06)] transition duration-300 hover:border-brand/40 aria-expanded:border-brand/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand"
             aria-expanded={openSection === 'actions'}
           >
-            <div className="flex items-center gap-3">
-              <MoreVertical className="w-5 h-5" />
-              <div className="text-left">
-                <div className="font-medium">Actions</div>
-                <div className="text-sm" style={{ color: 'hsl(var(--popover-foreground) / 0.8)' }}>{actionsCaption}</div>
+            <div className="flex min-w-0 items-center gap-3">
+              <span className="flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-xl bg-brand/10 text-brand ring-1 ring-inset ring-brand/20">
+                <MoreVertical className="w-5 h-5" />
+              </span>
+              <div className="min-w-0 text-left">
+                <div className="font-display font-semibold tracking-tight">Actions</div>
+                <div className="text-sm text-muted-foreground truncate">{actionsCaption}</div>
               </div>
             </div>
             <ChevronDown
-              className="w-5 h-5 transform-gpu"
+              className="w-5 h-5 flex-shrink-0 text-muted-foreground transform-gpu"
               style={{ transform: openSection === 'actions' ? 'rotate(180deg)' : 'rotate(0deg)', transition: 'transform 200ms ease-in-out', willChange: 'transform' }}
             />
           </button>
 
           {openSection === 'actions' && (
               <div className="mt-3 px-0">
-              <div className="rounded p-3" style={{ background: 'hsl(var(--card) / 0.06)', border: '1px solid hsl(var(--minimal-border) / 0.08)' }}>
-                <div className="space-y-2">
+              <div className="rounded-xl border border-foreground/10 bg-foreground/[0.03] p-2">
+                <div className="space-y-1">
                   {/* If player is bankrupt, hide collect/pay buttons and only show Give Sips */}
                   {(allowGiveSips || isBankrupt) && (
                     <button
                       type="button"
                       onClick={() => { onOpenSip && onOpenSip(); }}
-                      className={`w-full text-left p-2 rounded bg-transparent flex items-center gap-2`}
+                      className="w-full min-h-[44px] text-left px-3 py-2 rounded-lg flex items-center gap-3 text-sm font-medium text-foreground transition hover:bg-foreground/[0.06] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand [&>svg]:text-brand"
                     >
                       <UserPlus className="w-4 h-4" />
                       <span>Give Sips</span>
@@ -336,7 +337,7 @@ function BalancesAndInfo({
                       <button
                         type="button"
                         onClick={() => onOpenCollect && onOpenCollect()}
-                        className="w-full text-left p-2 rounded bg-transparent flex items-center gap-2"
+                        className="w-full min-h-[44px] text-left px-3 py-2 rounded-lg flex items-center gap-3 text-sm font-medium text-foreground transition hover:bg-foreground/[0.06] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand [&>svg]:text-brand"
                       >
                         <DollarSign className="w-4 h-4" />
                         <span>Collect From Bank</span>
@@ -345,7 +346,7 @@ function BalancesAndInfo({
                       <button
                         type="button"
                         onClick={() => onOpenPay && onOpenPay('bank')}
-                        className="w-full text-left p-2 rounded bg-transparent flex items-center gap-2"
+                        className="w-full min-h-[44px] text-left px-3 py-2 rounded-lg flex items-center gap-3 text-sm font-medium text-foreground transition hover:bg-foreground/[0.06] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand [&>svg]:text-brand"
                       >
                         <DollarSign className="w-4 h-4" />
                         <span>Pay Bank</span>
@@ -354,7 +355,7 @@ function BalancesAndInfo({
                       <button
                         type="button"
                         onClick={() => onOpenPay && onOpenPay('players')}
-                        className="w-full text-left p-2 rounded bg-transparent flex items-center gap-2"
+                        className="w-full min-h-[44px] text-left px-3 py-2 rounded-lg flex items-center gap-3 text-sm font-medium text-foreground transition hover:bg-foreground/[0.06] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand [&>svg]:text-brand"
                       >
                         <Users className="w-4 h-4" />
                         <span>Pay Players</span>
@@ -372,29 +373,30 @@ function BalancesAndInfo({
           <button
             type="button"
             onClick={() => setOpenSection((v) => (v === 'balances' ? null : 'balances'))}
-            className="w-full flex items-center justify-between gap-3 p-3 rounded"
-            style={{ background: 'hsl(var(--card) / 0.06)' }}
+            className="w-full flex items-center justify-between gap-3 p-3 rounded-xl border border-foreground/10 bg-foreground/[0.03] shadow-[inset_0_1px_0_0_hsl(var(--foreground)/0.06)] transition duration-300 hover:border-brand/40 aria-expanded:border-brand/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand"
             aria-expanded={openSection === 'balances'}
           >
-            <div className="flex items-center gap-3">
-              <DollarSign className="w-5 h-5" />
-              <div className="text-left">
-                <div className="font-medium">Balances</div>
-                <div className="text-sm" style={{ color: 'hsl(var(--popover-foreground) / 0.8)' }}>Your balance and others</div>
+            <div className="flex min-w-0 items-center gap-3">
+              <span className="flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-xl bg-brand/10 text-brand ring-1 ring-inset ring-brand/20">
+                <DollarSign className="w-5 h-5" />
+              </span>
+              <div className="min-w-0 text-left">
+                <div className="font-display font-semibold tracking-tight">Balances</div>
+                <div className="text-sm text-muted-foreground truncate">Your balance and others</div>
               </div>
             </div>
             <ChevronDown
-              className="w-5 h-5 transform-gpu"
+              className="w-5 h-5 flex-shrink-0 text-muted-foreground transform-gpu"
               style={{ transform: openSection === 'balances' ? 'rotate(180deg)' : 'rotate(0deg)', transition: 'transform 200ms ease-in-out', willChange: 'transform' }}
             />
           </button>
 
           {openSection === 'balances' && (
               <div className="mt-3 px-0">
-              <div className="rounded p-3" style={{ background: 'hsl(var(--card) / 0.06)', border: '1px solid hsl(var(--minimal-border) / 0.08)' }}>
+              <div className="rounded-xl border border-foreground/10 bg-foreground/[0.03] p-2">
                 {/* unified list: current player first, then others */}
-                <div className="text-sm font-medium mb-2" style={{ color: 'hsl(var(--popover-foreground) / 0.8)' }}>Player balances</div>
-                <div className="divide-y max-h-40 overflow-auto" style={{ borderColor: 'hsl(var(--minimal-border) / 0.06)' }}>
+                <div className="mb-1 px-2 pt-1 text-[11px] uppercase tracking-widest text-muted-foreground">Player balances</div>
+                <div className="divide-y divide-foreground/10 max-h-40 overflow-auto px-2">
                   {(activePlayers && activePlayers.length > 0) ? (
                     showBalances ? (
                       // put current (active) player first
@@ -405,11 +407,11 @@ function BalancesAndInfo({
                           return (a.name || '').toString().localeCompare((b.name || '').toString());
                         });
                         return sorted.map((p) => (
-                          <div key={p.id} className="flex items-center justify-between py-2 text-sm" style={{ color: 'hsl(var(--popover-foreground) / 0.8)' }}>
-                            <div className={`${String(p.id) === String(currentPlayerId) ? 'font-medium' : ''}`}>
+                          <div key={p.id} className="flex items-center justify-between gap-3 py-2 text-sm text-muted-foreground">
+                            <div className={`min-w-0 truncate ${String(p.id) === String(currentPlayerId) ? 'font-medium text-foreground' : ''}`}>
                               {p.name}{String(p.id) === String(currentPlayerId) ? ' • You' : ''}
                             </div>
-                            <div>${Number(p.balance ?? 0).toLocaleString()}</div>
+                            <div className="flex-shrink-0 font-display font-semibold tabular-nums text-foreground">${Number(p.balance ?? 0).toLocaleString()}</div>
                           </div>
                         ));
                       })()
@@ -418,25 +420,25 @@ function BalancesAndInfo({
                         const currentActive = activePlayers.find((p) => String(p.id) === String(currentPlayerId));
                         if (currentActive) {
                           return (
-                            <div key={currentActive.id} className="flex items-center justify-between py-2 text-sm" style={{ color: 'hsl(var(--popover-foreground) / 0.8)' }}>
-                              <div className="font-medium">{currentActive.name} • You</div>
-                              <div>${Number(currentActive.balance ?? 0).toLocaleString()}</div>
+                            <div key={currentActive.id} className="flex items-center justify-between gap-3 py-2 text-sm text-muted-foreground">
+                              <div className="min-w-0 truncate font-medium text-foreground">{currentActive.name} • You</div>
+                              <div className="flex-shrink-0 font-display font-semibold tabular-nums text-foreground">${Number(currentActive.balance ?? 0).toLocaleString()}</div>
                             </div>
                           );
                         }
                         // If current player is bankrupt or no active current player, don't show balances
                         if (isBankrupt) {
-                          return <div className="text-sm" style={{ color: 'hsl(var(--popover-foreground) / 0.7)' }}>You are bankrupt — balances hidden.</div>;
+                          return <div className="py-2 text-sm text-muted-foreground">You are bankrupt — balances hidden.</div>;
                         }
-                        return <div className="text-sm" style={{ color: 'hsl(var(--popover-foreground) / 0.7)' }}>Other players' balances are hidden by game settings.</div>;
+                        return <div className="py-2 text-sm text-muted-foreground">Other players' balances are hidden by game settings.</div>;
                       })()
                     )
                   ) : (
-                    <div className="text-sm" style={{ color: 'hsl(var(--popover-foreground) / 0.7)' }}>No active players</div>
+                    <div className="py-2 text-sm text-muted-foreground">No active players</div>
                   )}
                 </div>
                 {!showBalances && (
-                  <div className="mt-2 text-sm" style={{ color: 'hsl(var(--popover-foreground) / 0.7)' }}>Other players' balances are hidden by game settings.</div>
+                  <div className="mt-1 border-t border-foreground/10 px-2 pt-2 pb-1 text-xs text-muted-foreground">Other players' balances are hidden by game settings.</div>
                 )}
               </div>
             </div>
@@ -447,27 +449,28 @@ function BalancesAndInfo({
           <button
             type="button"
             onClick={() => setOpenSection((v) => (v === 'info' ? null : 'info'))}
-            className="w-full flex items-center justify-between gap-3 p-3 rounded"
-            style={{ background: 'hsl(var(--card) / 0.06)' }}
+            className="w-full flex items-center justify-between gap-3 p-3 rounded-xl border border-foreground/10 bg-foreground/[0.03] shadow-[inset_0_1px_0_0_hsl(var(--foreground)/0.06)] transition duration-300 hover:border-brand/40 aria-expanded:border-brand/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand"
             aria-expanded={openSection === 'info'}
           >
-            <div className="flex items-center gap-3">
-              <Info className="w-5 h-5" />
-              <div className="text-left">
-                <div className="font-medium">Info</div>
-                <div className="text-sm" style={{ color: 'hsl(var(--popover-foreground) / 0.8)' }}>Hints and status</div>
+            <div className="flex min-w-0 items-center gap-3">
+              <span className="flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-xl bg-brand/10 text-brand ring-1 ring-inset ring-brand/20">
+                <Info className="w-5 h-5" />
+              </span>
+              <div className="min-w-0 text-left">
+                <div className="font-display font-semibold tracking-tight">Info</div>
+                <div className="text-sm text-muted-foreground truncate">Hints and status</div>
               </div>
             </div>
             <ChevronDown
-              className="w-5 h-5 transform-gpu"
+              className="w-5 h-5 flex-shrink-0 text-muted-foreground transform-gpu"
               style={{ transform: openSection === 'info' ? 'rotate(180deg)' : 'rotate(0deg)', transition: 'transform 200ms ease-in-out', willChange: 'transform' }}
             />
           </button>
 
           {openSection === 'info' && (
             <div className="mt-3 px-0">
-              <div className="rounded p-3 text-sm" style={{ background: 'hsl(var(--card) / 0.06)', border: '1px solid hsl(var(--minimal-border) / 0.08)', color: 'hsl(var(--popover-foreground) / 0.9)' }}>
-                {startedByName && <div className="mb-2">Started by {startedByName}</div>}
+              <div className="rounded-xl border border-foreground/10 bg-foreground/[0.03] p-3 text-sm leading-relaxed text-muted-foreground">
+                {startedByName && <div className="mb-2 text-[11px] uppercase tracking-widest">Started by <span className="text-foreground">{startedByName}</span></div>}
                 <div>The trade UI is locked for the duration. When finished, press <strong>Done</strong> to unlock for everyone.</div>
               </div>
             </div>

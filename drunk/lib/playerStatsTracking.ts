@@ -248,21 +248,3 @@ export async function getPlayerStatistics(gameId: string) {
     return [];
   }
 }
-
-/**
- * Get property landing statistics for a game
- */
-export async function getPropertyLandingStats(gameId: string) {
-  try {
-    const { data, error } = await supabase
-      .from('property_landing_stats')
-      .select('*')
-      .eq('game_id', gameId);
-    
-    if (error) throw error;
-    return data || [];
-  } catch (err) {
-    console.error('Failed to get property landing stats:', err);
-    return [];
-  }
-}

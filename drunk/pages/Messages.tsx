@@ -451,7 +451,7 @@ export default function Messages() {
 
   if (loading) {
     return (
-      <div className="h-screen flex items-center justify-center bg-background">
+      <div className="h-screen flex items-center justify-center bg-gradient-bg">
         <div className="text-muted-foreground text-sm">Loading...</div>
       </div>
     );
@@ -459,37 +459,48 @@ export default function Messages() {
 
   return (
     <div className="fixed inset-0 overflow-hidden flex bg-background">
+      <div className="flex flex-1 min-w-0 overflow-hidden bg-gradient-bg">
 
       {/* ── SIDEBAR / CHAT LIST ── */}
       <div
         className={[
-          "flex flex-col bg-background border-r border-border/60",
+          "flex flex-col md:border-r md:border-foreground/10",
           "w-full md:w-80 md:shrink-0",
           inConversation ? "hidden md:flex" : "flex",
         ].join(" ")}
       >
         {/* Header */}
         <div
-          className="shrink-0 flex items-center gap-3 px-5 pb-3 border-b border-border/60 relative"
+          className="shrink-0 px-4 pb-4 border-b border-foreground/10"
           style={safeTop}
         >
           <button
             onClick={() => navigate("/drunk/drunkopoly")}
-            className="flex items-center gap-0.5 text-primary text-sm font-medium -ml-1 px-1 py-1 rounded-md hover:bg-primary/10 transition-colors shrink-0"
+            className="inline-flex min-h-10 items-center gap-2 rounded-full border border-foreground/10 bg-foreground/[0.03] px-4 py-2 text-sm text-muted-foreground transition-colors hover:border-brand/40 hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand shrink-0 motion-safe:animate-rise"
           >
-            <ChevronLeft className="w-5 h-5" />
+            <ChevronLeft className="w-4 h-4" />
             Back
           </button>
-          <div className="absolute left-1/2 top-1/2 transform -translate-x-1/2 -translate-y-1/2 pointer-events-none w-full flex justify-center">
-            <span className="font-semibold text-base pointer-events-auto">Messages</span>
+          <div
+            className="mt-6 flex items-center gap-2 text-xs uppercase tracking-[0.2em] text-muted-foreground motion-safe:animate-rise"
+            style={{ animationDelay: "70ms" }}
+          >
+            <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-brand shadow-[0_0_10px_hsl(var(--brand))]" />
+            Drunkopoly
           </div>
+          <h1
+            className="mt-2 bg-gradient-to-b from-foreground to-foreground/60 bg-clip-text pb-2 font-display text-5xl font-bold leading-[0.95] tracking-tight text-transparent motion-safe:animate-rise"
+            style={{ animationDelay: "140ms" }}
+          >
+            Messages
+          </h1>
           {/* compose removed; messages show all players */}
         </div>
 
         {/* Compose feature removed — list shows all players */}
 
         {/* Chat list: show all players and open/create direct chat on click */}
-        <div className="flex-1 overflow-y-auto md:overflow-hidden">
+        <div className="flex-1 overflow-y-auto md:overflow-hidden px-3 py-3">
           {chatsLoading ? (
             <div className="flex-1 flex items-center justify-center py-8">
               <svg className="w-8 h-8 text-primary" viewBox="0 0 50 50" xmlns="http://www.w3.org/2000/svg" aria-hidden>
@@ -501,7 +512,7 @@ export default function Messages() {
             </div>
           ) : (
             playersSorted.length === 0 ? (
-              <div className="text-sm text-muted-foreground text-center mt-16 px-8 leading-relaxed">No other players in this game.</div>
+              <div className="mx-1 mt-6 rounded-2xl border border-dashed border-foreground/10 bg-foreground/[0.03] px-6 py-10 text-sm text-muted-foreground text-center leading-relaxed">No other players in this game.</div>
             ) : (
               playersSorted.map(({ player, chatId, lastMsg }) => {
           
@@ -516,19 +527,21 @@ export default function Messages() {
                   type="button"
                   onClick={() => onCreateDirectChat(String(player.id))}
                   className={[
-                    "w-full text-left flex items-center gap-3 px-6 py-4 border-b border-border/30 transition-colors",
-                    chatId === activeChatId ? "bg-primary/10" : "hover:bg-muted/40 active:bg-muted/60",
+                    "mb-2 w-full text-left flex items-center gap-3 rounded-xl border px-4 py-3 transition duration-300 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand",
+                    chatId === activeChatId
+                      ? "border-brand/60 bg-brand/10"
+                      : "border-foreground/10 bg-foreground/[0.03] hover:-translate-y-0.5 hover:border-brand/40 active:bg-foreground/[0.06]",
                   ].join(" ")}
                 >
-                  <PlayerAvatar player={player} size="md" />
+                  <PlayerAvatar player={player} size="lg" />
                   <div className="flex-1 min-w-0">
                     <div className="flex items-baseline justify-between gap-3">
-                      <span className={`text-base truncate ${isUnread ? "font-semibold" : "font-medium"}`}>{label}</span>
-                      <span className="text-sm text-muted-foreground shrink-0">{time}</span>
+                      <span className={`font-display text-base tracking-tight truncate ${isUnread ? "font-bold" : "font-semibold"}`}>{label}</span>
+                      <span className={`text-[11px] uppercase tracking-widest shrink-0 tabular-nums ${isUnread ? "text-brand" : "text-muted-foreground"}`}>{time}</span>
                     </div>
-                    <div className="flex items-center justify-between gap-2 mt-1">
+                    <div className="flex items-center justify-between gap-2 mt-0.5">
                       <span className={`text-sm truncate ${isUnread ? "text-foreground" : "text-muted-foreground"}`}>{preview}</span>
-                      {isUnread && <span className="w-2.5 h-2.5 rounded-full bg-primary shrink-0" />}
+                      {isUnread && <span className="h-2 w-2 rounded-full bg-brand shadow-[0_0_10px_hsl(var(--brand))] shrink-0" />}
                     </div>
                   </div>
                 </button>
@@ -541,14 +554,14 @@ export default function Messages() {
       {/* ── CONVERSATION PANEL ── */}
       <div
         className={[
-          "flex flex-col flex-1 min-w-0 bg-background overflow-hidden",
+          "flex flex-col flex-1 min-w-0 overflow-hidden",
           inConversation ? "flex" : "hidden md:flex",
         ].join(" ")}
       >
         {!activeChatId ? (
           <div className="flex-1 flex flex-col items-center justify-center text-muted-foreground gap-3 px-6">
-            <div className="w-14 h-14 rounded-full bg-muted flex items-center justify-center">
-              <Pencil className="w-6 h-6 opacity-30" />
+            <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-brand/10 text-brand ring-1 ring-inset ring-brand/20">
+              <Pencil className="w-6 h-6" />
             </div>
             <p className="text-sm text-center">Select a conversation or tap the pencil to start one</p>
           </div>
@@ -556,23 +569,23 @@ export default function Messages() {
           <>
             {/* Conversation header */}
             <div
-              className="shrink-0 flex items-center gap-3 px-4 pb-3 border-b border-border/60 bg-background/90 backdrop-blur-md relative"
+              className="shrink-0 flex min-h-[64px] items-center gap-3 px-4 pb-3 border-b border-foreground/10 bg-background/80 backdrop-blur-xl backdrop-saturate-150 relative"
               style={safeTop}
             >
               <button
                 onClick={() => setActiveChatId(null)}
-                className="md:hidden flex items-center gap-0.5 text-primary text-sm font-medium -ml-1 px-1 py-1 rounded-md hover:bg-primary/10 shrink-0 transition-colors"
+                className="md:hidden relative z-10 flex h-10 w-10 items-center justify-center rounded-full border border-foreground/10 bg-foreground/[0.03] text-muted-foreground transition-colors hover:border-brand/40 hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand shrink-0"
               >
-                <ArrowLeft className="w-5 h-5" />
+                <ArrowLeft className="w-4 h-4" />
               </button>
-              <div className="absolute left-1/2 top-1/2 transform -translate-x-1/2 -translate-y-1/2 pointer-events-none w-full flex justify-center">
-                <span className="font-semibold text-sm max-w-[70%] truncate text-center pointer-events-auto">{activeChatLabel}</span>
+              <div className="absolute left-1/2 top-1/2 transform -translate-x-1/2 -translate-y-1/2 pointer-events-none w-full flex justify-center" style={{ marginTop: "calc((max(env(safe-area-inset-top), 12px) - 12px) / 2)" }}>
+                <span className="font-display font-semibold tracking-tight text-base max-w-[60%] truncate text-center pointer-events-auto">{activeChatLabel}</span>
               </div>
             </div>
 
             {/* Messages scroll area */}
             <div
-              className="flex-1 min-h-0 px-4 pt-0 flex flex-col border-t border-border/60"
+              className="flex-1 min-h-0 px-4 pt-0 flex flex-col"
               style={{ paddingBottom: 'calc(56px + env(safe-area-inset-bottom))' }}
             >
               {messagesLoading ? (
@@ -585,7 +598,7 @@ export default function Messages() {
                   </svg>
                 </div>
               ) : messages.length === 0 ? (
-                <div className="text-center text-sm text-muted-foreground mt-10">No messages yet. Say hi!</div>
+                <div className="mx-auto mt-10 rounded-full border border-foreground/10 bg-foreground/[0.03] px-4 py-2 text-center text-sm text-muted-foreground">No messages yet. Say hi!</div>
               ) : (
                 <div className="flex-1 flex flex-col gap-0 justify-end overflow-y-auto">
                   {messages.map((m, idx) => {
@@ -600,7 +613,7 @@ export default function Messages() {
                     return (
                       <div key={m.id} className={isFirstInGroup && idx > 0 ? "mt-2" : "mt-1"}>
                         {showTime && (
-                          <div className="text-center text-xs text-muted-foreground my-4 font-medium">
+                          <div className="text-center text-[11px] uppercase tracking-widest text-muted-foreground my-4">
                             {groupTime(m.created_at)}
                           </div>
                         )}
@@ -615,17 +628,18 @@ export default function Messages() {
                           {!mine && !isLastInGroup && <div className="w-6 shrink-0" />}
                           <div
                             className={[
-                              "max-w-[95%] sm:max-w-[85%] inline-flex items-center px-6 py-3 text-base leading-normal rounded-xl",
+                              "max-w-[85%] min-w-0 inline-flex px-4 py-2.5 text-base leading-normal rounded-2xl",
                               isPayment
-                                ? "bg-yellow-500/20 text-foreground border border-yellow-500/30"
+                                ? "flex-col items-start bg-amber-500/10 text-foreground ring-1 ring-inset ring-amber-500/25"
                                 : mine
-                                ? "bg-primary text-primary-foreground"
-                                : "bg-muted text-foreground",
+                                ? "items-center bg-primary text-primary-foreground shadow-[inset_0_1px_0_0_hsl(var(--primary-foreground)/0.12)]"
+                                : "items-center border border-foreground/10 bg-foreground/[0.04] text-foreground",
+                              mine && isLastInGroup ? "rounded-br-md" : "",
+                              !mine && isLastInGroup ? "rounded-bl-md" : "",
                             ].join(" ")}
-                            style={{ paddingLeft: 20, paddingRight: 20 }}
                           >
                             {isPayment && (
-                              <div className="text-sm font-medium opacity-60 mb-0.5">💸 Payment note</div>
+                              <div className="text-[11px] uppercase tracking-widest text-muted-foreground mb-0.5">💸 Payment note</div>
                             )}
                             <span className="whitespace-pre-wrap break-words">{m.body}</span>
                           </div>
@@ -640,10 +654,11 @@ export default function Messages() {
 
             {/* Input bar */}
             <div
-              className="flex-shrink-0 w-full flex items-center gap-2 px-4 pt-1 bg-background"
+              className="flex-shrink-0 w-full px-3 pt-2"
               style={safeBottom}
             >
-              <div className="flex-1 flex items-center bg-muted/50 border border-border/60 rounded-full px-4 py-2 min-h-[40px]">
+              <div className="flex w-full items-center gap-2 rounded-full border border-foreground/10 bg-background/90 p-1.5 pl-2 backdrop-blur-xl backdrop-saturate-150 shadow-[0_24px_60px_-20px_rgb(0_0_0/0.75),inset_0_1px_0_0_hsl(var(--foreground)/0.06)] transition-colors focus-within:border-brand/40">
+              <div className="flex-1 min-w-0 flex items-center px-3 min-h-[40px]">
                 <input
                   ref={inputRef}
                   value={draft}
@@ -659,14 +674,16 @@ export default function Messages() {
               <button
                 onClick={onSend}
                 disabled={!(draft || "").trim()}
-                className="w-9 h-9 rounded-full bg-primary flex items-center justify-center shrink-0 disabled:opacity-25 transition-opacity"
+                className="w-10 h-10 rounded-full bg-primary flex items-center justify-center shrink-0 disabled:opacity-25 transition-opacity focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand"
                 aria-label="Send"
               >
                 <ArrowUp className="w-4 h-4 text-primary-foreground" />
               </button>
+              </div>
             </div>
           </>
         )}
+      </div>
       </div>
     </div>
   );

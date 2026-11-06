@@ -211,28 +211,28 @@ export default function SipsLockOverlay({
                 <button
                   type="button"
                   onClick={(e) => { e.stopPropagation(); triggerCloseFan(); }}
-                  className="p-1.5 rounded-full"
-                  style={{ color: 'hsl(var(--foreground) / 0.7)', background: 'hsl(var(--background) / 0.6)' }}
+                  className="flex h-10 w-10 items-center justify-center rounded-full border border-foreground/10 bg-background/80 text-muted-foreground backdrop-blur-xl shadow-[inset_0_1px_0_0_hsl(var(--foreground)/0.06)] transition hover:border-brand/40 hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand"
                   aria-label="Collapse"
                 >
                   <ChevronDown className="w-5 h-5" />
                 </button>
               </div>
 
-              <div className="flex items-center justify-between">
-                <div className="flex-1 min-w-0">
-                  <div className="text-left text-xs font-medium whitespace-nowrap truncate" style={{ color: 'hsl(var(--foreground) / 0.85)' }}>
-                    {totalSips} total sip{totalSips !== 1 ? 's' : ''} · {displayedBatches.length} round{displayedBatches.length !== 1 ? 's' : ''}
-                  </div>
+              <div className="flex items-center justify-between gap-3">
+                <div className="min-w-0 flex-1">
+                  <span className="inline-flex max-w-full items-center gap-2 truncate rounded-full border border-foreground/10 bg-background/80 px-3 py-1 text-[11px] uppercase tracking-widest text-muted-foreground backdrop-blur-xl">
+                    <span className="h-1.5 w-1.5 flex-shrink-0 rounded-full bg-brand shadow-[0_0_10px_hsl(var(--brand))]" />
+                    <span className="truncate">
+                      {totalSips} total sip{totalSips !== 1 ? 's' : ''} · {displayedBatches.length} round{displayedBatches.length !== 1 ? 's' : ''}
+                    </span>
+                  </span>
                 </div>
-                <div className="flex-1" />
-                <div className="flex-1 flex justify-end">
+                <div className="flex flex-shrink-0 justify-end">
                   <button
                     type="button"
                     onClick={handleClearAllAnimated}
-                    className="text-xs font-medium transition-colors"
+                    className="h-10 rounded-full border border-foreground/10 bg-background/80 px-4 text-xs font-medium text-muted-foreground backdrop-blur-xl shadow-[inset_0_1px_0_0_hsl(var(--foreground)/0.06)] transition hover:border-destructive/40 hover:text-destructive focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand"
                     aria-label="Clear all pending sips"
-                    style={{ background: 'transparent', border: 'none', padding: 6, cursor: 'pointer', color: 'hsl(var(--foreground) / 0.85)'}}
                   >
                     Clear all
                   </button>
@@ -249,13 +249,12 @@ export default function SipsLockOverlay({
               return (
                 <div
                   key={batch.id}
-                  className="w-full max-w-lg mx-auto rounded-2xl px-4 py-3 flex items-center gap-3"
+                  className={`w-full max-w-lg mx-auto rounded-2xl border px-4 py-3 flex items-center gap-3 bg-background/90 backdrop-blur-xl backdrop-saturate-150 ${
+                    isActive
+                      ? 'border-brand/30 shadow-[0_24px_60px_-20px_rgb(0_0_0/0.75),inset_0_1px_0_0_hsl(var(--foreground)/0.06)]'
+                      : 'border-foreground/10 shadow-[inset_0_1px_0_0_hsl(var(--foreground)/0.06)]'
+                  }`}
                   style={{
-                    background: 'hsl(var(--background))',
-                    backdropFilter: 'blur(24px)',
-                    WebkitBackdropFilter: 'blur(24px)',
-                    border: '1px solid hsl(var(--foreground) / 0.18)',
-                    boxShadow: isActive ? '0 4px 20px rgba(0,0,0,0.18)' : 'none',
                     opacity: closing && !isActive ? 0 : (isActive ? 1 : 0.6),
                     animation: dismissingId === batch.id
                       ? 'sips-dismiss 0.26s cubic-bezier(0.4,0,1,1) forwards'
@@ -268,19 +267,21 @@ export default function SipsLockOverlay({
                     touchAction: 'none',
                   }}
                 >
-                  <Lock
-                    className="w-4 h-4 flex-shrink-0"
-                    style={{ color: `hsl(var(--foreground) / ${isActive ? '0.7' : '0.4'})` }}
-                  />
+                  <span
+                    className={`flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-xl ring-1 ring-inset ${
+                      isActive
+                        ? 'bg-brand/10 text-brand ring-brand/20'
+                        : 'bg-foreground/[0.06] text-muted-foreground ring-foreground/10'
+                    }`}
+                  >
+                    <Lock className="w-4 h-4" />
+                  </span>
                   <div className="flex-1 min-w-0">
-                    <span
-                      className="font-semibold text-sm"
-                      style={{ color: 'hsl(var(--foreground))' }}
-                    >
+                    <span className="font-display font-semibold tracking-tight text-sm text-foreground">
                       {batch.count} sip{batch.count !== 1 ? 's' : ''}{isActive ? ' pending' : ''}
                     </span>
                     {isActive && (
-                      <div className="text-xs leading-tight truncate" style={{ color: 'hsl(var(--foreground) / 0.5)' }}>
+                      <div className="text-xs leading-tight truncate text-muted-foreground">
                         Drink up, then tap done
                       </div>
                     )}
@@ -290,10 +291,8 @@ export default function SipsLockOverlay({
                       type="button"
                       disabled={!!processing}
                       onClick={handleDone}
-                      className="flex-shrink-0 px-4 py-2 rounded-xl text-sm font-semibold"
+                      className="flex-shrink-0 h-10 px-4 rounded-xl text-sm font-semibold bg-primary text-primary-foreground shadow-[inset_0_1px_0_0_hsl(var(--primary-foreground)/0.12)] transition hover:bg-primary/90 active:scale-[0.98] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand"
                       style={{
-                        background: 'hsl(var(--primary))',
-                        color: 'hsl(var(--primary-foreground))',
                         opacity: processing ? 0.7 : 1,
                         cursor: processing ? 'wait' : 'pointer',
                       }}
@@ -322,17 +321,12 @@ export default function SipsLockOverlay({
                   <div
                     key={i}
                     aria-hidden
-                    className="absolute inset-x-0 bottom-0 rounded-2xl"
+                    className="absolute inset-x-0 bottom-0 rounded-2xl border border-foreground/10 bg-background/90 backdrop-blur-xl backdrop-saturate-150 shadow-[0_-2px_32px_rgb(0_0_0/0.35),0_4px_24px_rgb(0_0_0/0.2),inset_0_1px_0_0_hsl(var(--foreground)/0.06)]"
                     style={{
-                      height: '58px',
+                      height: '64px',
                       transform: `translateY(-${lift}px) scale(${scale})`,
                       transformOrigin: 'bottom center',
                       opacity,
-                      background: 'hsl(var(--background))',
-                      backdropFilter: 'blur(24px)',
-                      WebkitBackdropFilter: 'blur(24px)',
-                      border: '1px solid hsl(var(--foreground) / 0.18)',
-                      boxShadow: '0 -2px 32px rgba(0,0,0,0.35), 0 4px 24px rgba(0,0,0,0.2)',
                       zIndex: 10 - i,
                       transition: 'transform 0.3s cubic-bezier(0.34,1.3,0.64,1), opacity 0.3s ease',
                     }}
@@ -342,13 +336,8 @@ export default function SipsLockOverlay({
 
               {/* Front card — tap it (not Done) to open fan */}
               <div
-                className="relative rounded-2xl px-4 py-3 flex items-center gap-3"
+                className="relative rounded-2xl border border-brand/30 bg-background/90 backdrop-blur-xl backdrop-saturate-150 px-4 py-3 flex items-center gap-3 shadow-[0_-2px_32px_rgb(0_0_0/0.35),0_4px_24px_rgb(0_0_0/0.2),inset_0_1px_0_0_hsl(var(--foreground)/0.06)]"
                 style={{
-                  background: 'hsl(var(--background))',
-                  backdropFilter: 'blur(24px)',
-                  WebkitBackdropFilter: 'blur(24px)',
-                  border: '1px solid hsl(var(--foreground) / 0.18)',
-                  boxShadow: '0 -2px 32px rgba(0,0,0,0.35), 0 4px 24px rgba(0,0,0,0.2)',
                   zIndex: 30,
                   cursor: canOpenFan ? 'pointer' : 'default',
                   animation: dismissingId === frontBatch.id
@@ -359,12 +348,14 @@ export default function SipsLockOverlay({
                 }}
                 onClick={() => { if (canOpenFan) setFanned(true); }}
               >
-                <Lock className="w-4 h-4 flex-shrink-0" style={{ color: 'hsl(var(--foreground) / 0.7)' }} />
+                <span className="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-xl bg-brand/10 text-brand ring-1 ring-inset ring-brand/20">
+                  <Lock className="w-4 h-4" />
+                </span>
                 <div className="flex-1 min-w-0">
-                  <div className="font-semibold text-sm leading-tight truncate" style={{ color: 'hsl(var(--foreground))' }}>
+                  <div className="font-display font-semibold tracking-tight text-sm leading-tight truncate text-foreground">
                     {frontBatch.count} sip{frontBatch.count !== 1 ? 's' : ''} pending
                   </div>
-                  <div className="text-xs leading-tight truncate" style={{ color: 'hsl(var(--foreground) / 0.5)' }}>
+                  <div className="mt-0.5 text-xs leading-tight truncate text-muted-foreground">
                     Drink up, then tap done
                   </div>
                 </div>
@@ -373,10 +364,8 @@ export default function SipsLockOverlay({
                   type="button"
                   disabled={!!processing || !!dismissingId}
                   aria-disabled={!!processing}
-                  className="flex-shrink-0 px-4 py-2 rounded-xl text-sm font-semibold"
+                  className="flex-shrink-0 h-10 px-4 rounded-xl text-sm font-semibold bg-primary text-primary-foreground shadow-[inset_0_1px_0_0_hsl(var(--primary-foreground)/0.12)] transition hover:bg-primary/90 active:scale-[0.98] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand"
                   style={{
-                    background: 'hsl(var(--primary))',
-                    color: 'hsl(var(--primary-foreground))',
                     opacity: processing ? 0.7 : 1,
                     cursor: processing ? 'wait' : 'pointer',
                   }}

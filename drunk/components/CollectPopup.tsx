@@ -77,7 +77,14 @@ export default function CollectPopup({
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent>
-        <DialogHeader>
+        <DialogHeader className="items-center sm:items-start">
+          <img
+            src={mode === 'pass_go' ? '/drunkopoly/pass_go.webp' : mode === 'free_parking' ? '/drunkopoly/free_parking.webp' : '/drunkopoly/play_money.webp'}
+            alt=""
+            aria-hidden
+            draggable={false}
+            className="mb-2 h-20 w-auto max-w-[70%] select-none object-contain"
+          />
           <DialogTitle>Collect — {mode === 'bank' ? 'Bank' : mode === 'pass_go' ? 'Pass Go' : 'Free Parking'}</DialogTitle>
           <DialogDescription>
             {mode === 'bank' && 'Collect a custom amount from the bank.'}
@@ -90,13 +97,13 @@ export default function CollectPopup({
           {mode === 'bank' && (
             <div className="space-y-1">
               <div className="flex items-center justify-between">
-                <div className="text-sm font-medium">Amount</div>
+                <div className="text-[11px] font-semibold uppercase tracking-widest text-muted-foreground">Amount</div>
                 {roundedLive > 0 && (
-                  <div className="text-sm text-muted-foreground">${roundedLive.toLocaleString()}</div>
+                  <div className="rounded-full border border-foreground/10 bg-foreground/[0.03] px-3 py-1 text-xs tabular-nums text-muted-foreground">${roundedLive.toLocaleString()}</div>
                 )}
               </div>
               <div className="relative">
-                <span className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground font-medium text-lg select-none pointer-events-none">$</span>
+                <span className="absolute left-4 top-1/2 -translate-y-1/2 font-display text-xl font-semibold text-muted-foreground select-none pointer-events-none">$</span>
                 <Input
                   ref={inputRef}
                   value={rawAmount}
@@ -108,7 +115,7 @@ export default function CollectPopup({
                       setRawAmount(String(roundToFive(Number(rawAmount))));
                     }
                   }}
-                  className="pl-9 text-lg h-12"
+                  className="h-14 pl-9 font-display text-2xl font-semibold tracking-tight md:text-2xl"
                   type="tel"
                   inputMode="numeric"
                   pattern="[0-9]*"
@@ -121,30 +128,33 @@ export default function CollectPopup({
           )}
 
           {mode === 'pass_go' && (
-            <div className="space-y-2">
-              <label className="flex items-center gap-2">
-                <input type="checkbox" checked={doubled} onChange={(e) => setDoubled(e.target.checked)} />
-                <div className="text-sm">Double for landing (collect ${((game?.pass_go_amount || 200) * 2).toLocaleString()})</div>
+            <div className="space-y-3">
+              <div className="rounded-xl border border-foreground/10 bg-foreground/[0.03] p-4 text-center">
+                <div className="text-[11px] uppercase tracking-widest text-muted-foreground">Base</div>
+                <div className="mt-1 bg-gradient-to-b from-foreground to-foreground/60 bg-clip-text font-display text-4xl font-bold tracking-tight text-transparent">${(game?.pass_go_amount || 200).toLocaleString()}</div>
+              </div>
+              <label className={`flex min-h-[48px] cursor-pointer items-center gap-3 rounded-xl border px-3 py-2 transition duration-200 ${doubled ? 'border-brand/60 bg-brand/10 ring-1 ring-inset ring-brand/30' : 'border-foreground/10 bg-foreground/[0.03] hover:border-brand/40'}`}>
+                <input className="h-4 w-4 shrink-0 accent-[hsl(var(--brand))]" type="checkbox" checked={doubled} onChange={(e) => setDoubled(e.target.checked)} />
+                <div className="text-sm">Double for landing (collect <span className="font-semibold tabular-nums text-emerald-500">${((game?.pass_go_amount || 200) * 2).toLocaleString()}</span>)</div>
               </label>
-              <div className="text-sm text-muted-foreground">Base: ${(game?.pass_go_amount || 200).toLocaleString()}</div>
             </div>
           )}
 
           {mode === 'free_parking' && (
-            <div>
-              <div className="text-sm">Free Parking pot:</div>
-              <div className="text-lg font-bold">${(game?.free_parking_balance || 0).toLocaleString()}</div>
+            <div className="rounded-xl border border-foreground/10 bg-foreground/[0.03] p-4 text-center">
+              <div className="text-[11px] uppercase tracking-widest text-muted-foreground">Free Parking pot</div>
+              <div className="mt-1 bg-gradient-to-b from-foreground to-foreground/60 bg-clip-text font-display text-4xl font-bold tracking-tight text-transparent">${(game?.free_parking_balance || 0).toLocaleString()}</div>
             </div>
           )}
         </div>
 
         <DialogFooter>
-          <div className="flex gap-2 w-full justify-end">
-            <Button variant="secondary" onMouseDown={(e) => e.preventDefault()} onClick={() => onOpenChange(false)}>Cancel</Button>
+          <div className="flex w-full flex-col-reverse gap-2 sm:flex-row sm:justify-end">
+            <Button variant="secondary" className="h-11 sm:h-10" onMouseDown={(e) => e.preventDefault()} onClick={() => onOpenChange(false)}>Cancel</Button>
             {gamblingEnabled && (mode === 'free_parking' || (mode === 'pass_go' && doubled)) && (
               <Button
                 variant="outline"
-                className="border-red-500 text-red-500 hover:bg-red-50 dark:hover:bg-red-950"
+                className="h-11 border-destructive/40 bg-destructive/10 text-destructive hover:border-destructive/60 hover:bg-destructive/15 hover:text-destructive sm:h-10"
                 disabled={mode === 'free_parking' && (game?.free_parking_balance || 0) === 0}
                 onMouseDown={(e) => e.preventDefault()}
                 onClick={() => {
@@ -162,7 +172,7 @@ export default function CollectPopup({
             <Button
               onMouseDown={(e) => e.preventDefault()}
               onClick={handleSubmit}
-              className="bg-primary"
+              className="h-11 sm:h-10"
               disabled={
                 (mode === 'bank' && rawAmount.trim() === '') ||
                 (mode === 'free_parking' && (game?.free_parking_balance || 0) === 0)

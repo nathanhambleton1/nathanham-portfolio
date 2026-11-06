@@ -4,12 +4,11 @@ import { TooltipProvider } from "@/components/ui/tooltip";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { BrowserRouter, Routes, Route } from "react-router-dom";
 import { ThemeProvider } from "@/contexts/ThemeContext";
+import SiteLayout from "./components/SiteLayout";
+import Home from "./pages/Home";
 import Index from "./pages/Index";
-import Dev from "./pages/Dev";
 import NotFound from "./pages/NotFound";
 import Drunk from "./pages/Drunk";
-import Athena from "./pages/Athena";
-import TireInspection from "./pages/TireInspection";
 import Travel from "./pages/Travel";
 import Finance from "./pages/Finance";
 
@@ -23,15 +22,14 @@ const App = () => (
         <Sonner />
         <BrowserRouter basename="/">
           <Routes>
-            <Route path="/" element={<Index />} />
+            <Route element={<SiteLayout />}>
+              <Route path="/" element={<Home />} />
+              <Route path="portfolio" element={<Index />} />
+              <Route path="finance/*" element={<Finance />} />
+              <Route path="*" element={<NotFound />} />
+            </Route>
             <Route path="drunk/*" element={<Drunk />} />
-            <Route path="dev" element={<Dev />} />
-            <Route path="athena" element={<Athena />} />
-            <Route path="tires" element={<TireInspection />} />
             <Route path="travel/*" element={<Travel />} />
-            <Route path="finance/*" element={<Finance />} />
-            {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
-            <Route path="*" element={<NotFound />} />
           </Routes>
         </BrowserRouter>
       </TooltipProvider>

@@ -4,10 +4,8 @@ import JailPopup from "../components/JailPopup";
 import BankruptPopup from "../components/BankruptPopup";
 import BankruptStatus from "../components/BankruptStatus";
 import SipsLockOverlay from "../components/SipsLockOverlay";
-import PropertiesPopup from "../components/PropertiesPopup";
-import RankingsPopup from "../components/RankingsPopup";
 import SipLeaderboardPopup from "../components/SipLeaderboardPopup";
-import { UserPlus, DollarSign, Users, Percent, Crown, PiggyBank, Clock, Copy, Settings, QrCode, ChevronDown, ChevronLeft, Info, Eye, EyeOff, Building2, MessagesSquare } from "lucide-react";
+import { UserPlus, DollarSign, Users, Percent, Crown, PiggyBank, Clock, Copy, Settings, QrCode, ChevronDown, ChevronLeft, ChevronRight, Info, Eye, EyeOff, Building2, MessagesSquare, LogOut } from "lucide-react";
 import { QRCodeSVG } from "qrcode.react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "../components/ui/dialog";
 import CollectPopup from "../components/CollectPopup";
@@ -19,7 +17,10 @@ import TradeLockOverlay from "../components/TradeLockOverlay";
 import JailLockOverlay from "../components/JailLockOverlay";
 import ActivityLog from "../components/ActivityLog";
 import PlayerAvatar from "../components/PlayerAvatar";
-import { ThemeSelector } from "../../src/components/ThemeSelector";
+import { ColorBand, DeedFan } from "../components/BoardArt";
+import { Board, BoardSpace, BoardLine, WideSpace } from "../components/BoardSpace";
+import { LiveDot } from "../components/LiveDot";
+import { cn } from "../lib/utils";
 import {
   Card,
   CardHeader,
@@ -60,12 +61,87 @@ import {
   trackWentToJail
 } from "../lib/playerStatsTracking";
 
+// Every drunk_users column except `password` (anon is not allowed to read it).
+const DRUNK_USER_COLUMNS = 'id, username, first_name, last_name, avatar_url, bio, wins, losses, created_at, total_sips';
+
 // Initialize Supabase client
-const supabaseUrl = 'https://kcyrvubzhsphpxfsewii.supabase.co';
+const supabaseUrl ='https://kcyrvubzhsphpxfsewii.supabase.co';
 const supabaseAnonKey = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImtjeXJ2dWJ6aHNwaHB4ZnNld2lpIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjMxODAwMTcsImV4cCI6MjA3ODc1NjAxN30.8psClrpif-F1DWj67u2tErnU8-4ZYjw5LvEfRK3oHkI';
 const supabase = createClient(supabaseUrl, supabaseAnonKey);
 
 type Screen = "join-create" | "enter-name" | "confirm-settings" | "select-existing-player" | "home" | "auth" | "profile";
+
+// ---- Presentational helpers (home-page visual language) ----
+const BACK_PILL_CLASS =
+  "inline-flex min-h-[40px] items-center gap-2 rounded-full border border-foreground/10 bg-foreground/[0.03] px-4 py-2 text-sm text-muted-foreground transition-colors hover:border-brand/40 hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand";
+
+const SECTION_LABEL_CLASS = "text-xs font-semibold uppercase tracking-[0.2em] text-muted-foreground";
+const META_LABEL_CLASS = "text-[11px] uppercase tracking-widest text-muted-foreground";
+const INNER_ROW_CLASS = "rounded-xl border border-foreground/10 bg-foreground/[0.03]";
+
+// Game art (transparent cut-outs in /public/drunkopoly).
+const ART = {
+  bank: "/drunkopoly/bank.webp",
+  money: "/drunkopoly/play_money.webp",
+  players: "/drunkopoly/players.webp",
+  tax: "/drunkopoly/luxury_tax.webp",
+  passGo: "/drunkopoly/pass_go.webp",
+  freeParking: "/drunkopoly/free_parking.webp",
+  tradeTimer: "/drunkopoly/trade_timer.webp",
+  police: "/drunkopoly/police.webp",
+  sips: "/drunkopoly/sips.webp",
+} as const;
+
+const SectionLabel = ({ children, className = "" }: { children: React.ReactNode; className?: string }) => (
+  <div className={`${SECTION_LABEL_CLASS} ${className}`}>
+    {children}
+  </div>
+);
+
+const LobbyHero = ({
+  onBack,
+  backLabel,
+  eyebrow,
+  title,
+}: {
+  onBack?: () => void;
+  backLabel?: string;
+  eyebrow: React.ReactNode;
+  title: React.ReactNode;
+}) => (
+  <div className="w-full max-w-md">
+    {onBack && (
+      <button
+        type="button"
+        onClick={onBack}
+        className={`${BACK_PILL_CLASS} motion-safe:animate-rise`}
+      >
+        <ChevronLeft className="h-4 w-4" />
+        {backLabel ?? 'Back'}
+      </button>
+    )}
+    <p
+      className={`${onBack ? 'mt-8' : ''} flex items-center gap-2 text-xs uppercase tracking-[0.2em] text-muted-foreground motion-safe:animate-rise`}
+      style={{ animationDelay: '70ms' }}
+    >
+      <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-foreground/50" />
+      {eyebrow}
+    </p>
+    <h1
+      className="mt-3 pb-2 font-display text-4xl font-bold leading-[0.95] tracking-tight text-foreground sm:text-5xl motion-safe:animate-rise"
+      style={{ animationDelay: '140ms' }}
+    >
+      {title}
+    </h1>
+  </div>
+);
+
+/** Decorative property-colour accent at the top of lobby cards. */
+const CardBand = () => (
+  <div aria-hidden className="pointer-events-none px-6 pt-5">
+    <ColorBand className="h-1 opacity-80" />
+  </div>
+);
 
 const Drunkopoly = () => {
   const STORAGE_KEY_CODE = "drunkopoly:gameCode";
@@ -105,8 +181,6 @@ const Drunkopoly = () => {
   const [tradeTimerModalOpen, setTradeTimerModalOpen] = useState(false);
   const [tradeTimerSelected, setTradeTimerSelected] = useState<number>(60);
   const [jailModalOpen, setJailModalOpen] = useState(false);
-  const [propertiesModalOpen, setPropertiesModalOpen] = useState(false);
-  const [rankingsModalOpen, setRankingsModalOpen] = useState(false);
   const [sipLeaderboardOpen, setSipLeaderboardOpen] = useState(false);
   const [payProcessing, setPayProcessing] = useState(false);
   const [cardProcessing, setCardProcessing] = useState(false);
@@ -151,6 +225,30 @@ const Drunkopoly = () => {
     }
   });
 
+  // Header morph: full-width bar at the top of the page, floating island once scrolled.
+  const [headerScrolled, setHeaderScrolled] = useState(false);
+  useEffect(() => {
+    const onScroll = () => setHeaderScrolled(window.scrollY > 24);
+    onScroll();
+    window.addEventListener('scroll', onScroll, { passive: true });
+    return () => window.removeEventListener('scroll', onScroll);
+  }, []);
+
+  // When the big balance card scrolls up under the header, dock a compact copy
+  // of the balance into the island so it's always visible.
+  const [balanceCardEl, setBalanceCardEl] = useState<HTMLDivElement | null>(null);
+  const [balanceDocked, setBalanceDocked] = useState(false);
+  useEffect(() => {
+    if (!balanceCardEl) { setBalanceDocked(false); return; }
+    const io = new IntersectionObserver(
+      ([entry]) => setBalanceDocked(!entry.isIntersecting && entry.boundingClientRect.top < 80),
+      // Top margin matches the island's height so it docks as the number slides beneath it.
+      { rootMargin: '-72px 0px 0px 0px', threshold: 0 },
+    );
+    io.observe(balanceCardEl);
+    return () => io.disconnect();
+  }, [balanceCardEl]);
+
   useEffect(() => {
     if (typeof window === 'undefined') return;
     const onResize = () => setIsNarrow(window.innerWidth < 400);
@@ -188,7 +286,13 @@ const Drunkopoly = () => {
       const raw = typeof window !== 'undefined' ? localStorage.getItem('drunkopoly:authUser') : null;
       if (raw) {
         const parsed = JSON.parse(raw);
-        if (parsed && parsed.username) return parsed;
+        if (parsed && parsed.username) {
+          if ('password' in parsed) {
+            delete parsed.password;
+            localStorage.setItem('drunkopoly:authUser', JSON.stringify(parsed));
+          }
+          return parsed;
+        }
       }
     } catch (e) {}
     return null;
@@ -412,6 +516,11 @@ const Drunkopoly = () => {
 
   const persistAuthUser = (u: any | null) => {
     try {
+      if (u && 'password' in u) {
+        // never keep the password around client-side (older sessions cached it)
+        const { password: _pw, ...rest } = u;
+        u = rest;
+      }
       if (!u) {
         localStorage.removeItem('drunkopoly:authUser');
         setCurrentUser(null);
@@ -464,31 +573,29 @@ const Drunkopoly = () => {
     if (authAvatarFile) {
       try { avatar_url = await uploadAvatar(authAvatarFile, authUsername); } catch (e) { /* avatar upload optional */ }
     }
-    const payload = {
-      username: authUsername,
-      password: authPassword,
-      first_name: authFirstName,
-      last_name: authLastName || null,
-      avatar_url,
-      wins: 0,
-      losses: 0,
-    };
-    const { data, error } = await supabase.from('drunk_users').insert([payload]).select().limit(1).single();
-    if (error) throw error;
+    // Password is hashed server-side; the client never reads it back.
+    const { data, error } = await supabase.rpc('drunk_sign_up', {
+      p_username: authUsername,
+      p_password: authPassword,
+      p_first_name: authFirstName,
+      p_last_name: authLastName || null,
+      p_avatar_url: avatar_url,
+    });
+    if (error) throw new Error(error.message);
     persistAuthUser(data);
     return data;
   };
 
   const signInUser = async () => {
     if (!authUsername || !authPassword) throw new Error('Please provide username and password');
-    // First check whether the username exists so we can give a clearer error message
-    const { data: usersByName, error: nameErr } = await supabase.from('drunk_users').select('*').eq('username', authUsername).limit(1);
-    if (nameErr) throw nameErr;
-    if (!usersByName || usersByName.length === 0) throw new Error('Account not found');
-    const user = usersByName[0];
-    if ((user.password || '') !== authPassword) throw new Error('Incorrect password');
-    persistAuthUser(user);
-    return user;
+    // Verified server-side; raises 'Account not found' / 'Incorrect password'
+    const { data, error } = await supabase.rpc('drunk_sign_in', {
+      p_username: authUsername,
+      p_password: authPassword,
+    });
+    if (error) throw new Error(error.message);
+    persistAuthUser(data);
+    return data;
   };
 
   const updateUserProfile = async (opts: { firstName: string; lastName: string; avatarFile?: File | null }) => {
@@ -502,7 +609,7 @@ const Drunkopoly = () => {
       last_name: opts.lastName || null,
       avatar_url,
     };
-    const { data, error } = await supabase.from('drunk_users').update(updates).eq('id', currentUser.id).select().limit(1).single();
+    const { data, error } = await supabase.from('drunk_users').update(updates).eq('id', currentUser.id).select(DRUNK_USER_COLUMNS).limit(1).single();
     if (error) throw error;
     persistAuthUser(data);
     return data;
@@ -1234,37 +1341,6 @@ const Drunkopoly = () => {
           mode: 'players',
           description: `${player.name} declared bankruptcy`
         });
-      }
-
-      // Transfer or clear properties
-      try {
-        const { data: ownedProps, error: ownedErr } = await supabase
-          .from('property_ownership')
-          .select('*')
-          .eq('game_id', game.id)
-          .eq('player_id', player.id);
-
-        if (ownedErr) throw ownedErr;
-
-        if (ownedProps && ownedProps.length) {
-          for (const p of ownedProps) {
-            try {
-              if (toBank) {
-                // Return properties to bank — delete ownership record so they become unowned
-                await supabase.from('property_ownership').delete().eq('id', p.id);
-              } else {
-                await supabase
-                  .from('property_ownership')
-                  .update({ player_id: recipientId, houses: 0, updated_at: new Date().toISOString() })
-                  .eq('id', p.id);
-              }
-            } catch (uErr) {
-              console.warn('Failed to transfer property', p.id, uErr);
-            }
-          }
-        }
-      } catch (propErr) {
-        console.warn('Property transfer during bankruptcy failed:', propErr);
       }
 
       // Mark player as bankrupt
@@ -2509,13 +2585,32 @@ const Drunkopoly = () => {
   // Step 1: Join/Create Game
   if (screen === "join-create") {
     return (
-      <div className="min-h-screen bg-gradient-bg flex items-center justify-center px-4">
-        <Card className="w-full max-w-md">
+      <div className="min-h-screen overflow-x-hidden bg-gradient-bg flex flex-col items-center justify-center px-4 py-10">
+        <div className="relative w-full max-w-md">
+          <button
+            type="button"
+            onClick={() => navigate('/drunk')}
+            className={`relative ${BACK_PILL_CLASS} motion-safe:animate-rise`}
+          >
+            <ChevronLeft className="h-4 w-4" />
+            Games
+          </button>
+          <h1
+            className="mt-8 pb-2 font-display text-5xl font-bold leading-[0.95] tracking-tight text-foreground sm:text-6xl motion-safe:animate-rise"
+            style={{ animationDelay: '140ms' }}
+          >
+            Drunkopoly
+          </h1>
+          <ColorBand className="mt-4 h-1 max-w-[16rem] motion-safe:animate-rise" style={{ animationDelay: '175ms' }} />
+        </div>
+        <Card className="mt-8 w-full max-w-md motion-safe:animate-rise" style={{ animationDelay: '210ms' }}>
           <CardHeader>
             <div className="flex items-start justify-between gap-2">
               <div className="flex-1">
-                <CardTitle className="text-3xl">Drunkopoly</CardTitle>
-                <CardDescription className="mt-1">
+                <h2 className="text-xs font-semibold uppercase tracking-[0.2em] text-muted-foreground">
+                  Play
+                </h2>
+                <CardDescription className="mt-2">
                   Join an existing game or create a new one to get started.
                 </CardDescription>
               </div>
@@ -2529,7 +2624,7 @@ const Drunkopoly = () => {
                     setProfileAvatarFile(null);
                     setProfileAvatarPreview(null);
                     // Refresh user record so stats (total_sips, wins, losses) are current
-                    supabase.from('drunk_users').select('*').eq('id', currentUser.id).limit(1).single()
+                    supabase.from('drunk_users').select(DRUNK_USER_COLUMNS).eq('id', currentUser.id).limit(1).single()
                       .then(({ data }) => { if (data) persistAuthUser(data); })
                       .catch(() => {});
                     setScreen('profile');
@@ -2540,12 +2635,12 @@ const Drunkopoly = () => {
                     setScreen('auth');
                   }
                 }}
-                className="shrink-0 mt-0.5 rounded-full focus:outline-none focus-visible:ring-2 focus-visible:ring-primary"
+                className="shrink-0 -m-1 p-1 rounded-full focus:outline-none focus-visible:ring-2 focus-visible:ring-brand"
               >
                 {currentUser ? (
                   <PlayerAvatar player={currentUser} size="md" />
                 ) : (
-                  <div className="w-8 h-8 rounded-full bg-muted flex items-center justify-center text-muted-foreground hover:bg-muted/80 transition-colors">
+                  <div className="w-9 h-9 rounded-full border border-foreground/10 bg-foreground/[0.03] flex items-center justify-center text-muted-foreground transition-colors hover:border-brand/40 hover:text-foreground">
                     <Users className="w-4 h-4" />
                   </div>
                 )}
@@ -2605,9 +2700,9 @@ const Drunkopoly = () => {
                 </Button>
               </form>
               <div className="flex items-center gap-2">
-                <div className="flex-1 border-t border-border" />
-                <span className="text-muted-foreground text-xs">or</span>
-                <div className="flex-1 border-t border-border" />
+                <div className="flex-1 border-t border-foreground/10" />
+                <span className="text-[11px] uppercase tracking-widest text-muted-foreground">or</span>
+                <div className="flex-1 border-t border-foreground/10" />
               </div>
               <Button
                 className="w-full py-4 text-lg font-semibold shadow-md"
@@ -2621,10 +2716,10 @@ const Drunkopoly = () => {
               </Button>
               {recentGames && recentGames.length > 0 && (
                 <div className="mt-6">
-                  <div className="text-sm text-muted-foreground mb-2">Recent games</div>
-                  <div className="flex gap-2">
+                  <div className="mb-3 text-[11px] uppercase tracking-widest text-muted-foreground">Recent games</div>
+                  <div className="flex flex-wrap gap-2">
                     {recentGames.map((c) => (
-                      <Button key={c} variant="outline" className="px-3" onClick={() => handleRecentClick(c)}>
+                      <Button key={c} variant="outline" className="rounded-full border-foreground/10 bg-foreground/[0.03] px-4 font-mono hover:border-brand/40" onClick={() => handleRecentClick(c)}>
                         {c}
                       </Button>
                     ))}
@@ -2641,23 +2736,24 @@ const Drunkopoly = () => {
   // Auth screen — standalone sign-in / sign-up for users who aren't logged in
   if (screen === 'auth') {
     return (
-      <div className="min-h-screen bg-gradient-bg flex items-center justify-center px-4">
-        <Card className="w-full max-w-md">
-          <CardHeader>
-            <div className="mb-2">
-              <Button variant="ghost" size="sm" className="px-0" onClick={() => setScreen('join-create')} aria-label="Back">
-                <ChevronLeft className="h-5 w-5" />
-              </Button>
-            </div>
-            <div className="flex border-b border-border mb-4 pt-1">
+      <div className="min-h-screen bg-gradient-bg flex flex-col items-center justify-center px-4 py-10">
+        <LobbyHero
+          onBack={() => setScreen('join-create')}
+          eyebrow="Drunkopoly account"
+          title={standaloneAuthMode === 'signin' ? 'Welcome back' : 'Join the table'}
+        />
+        <Card className="mt-8 w-full max-w-md motion-safe:animate-rise" style={{ animationDelay: '210ms' }}>
+          <CardBand />
+          <CardHeader className="pb-4">
+            <div className="flex gap-1 rounded-xl border border-foreground/10 bg-foreground/[0.03] p-1">
               <button
                 type="button"
-                className={`flex-1 pb-3 text-sm font-medium transition-colors ${standaloneAuthMode === 'signin' ? 'border-b-2 border-primary text-foreground' : 'text-muted-foreground'}`}
+                className={`flex-1 min-h-[40px] rounded-lg text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand ${standaloneAuthMode === 'signin' ? 'bg-foreground/[0.08] text-foreground shadow-[inset_0_1px_0_0_hsl(var(--foreground)/0.08)]' : 'text-muted-foreground hover:text-foreground'}`}
                 onClick={() => setStandaloneAuthMode('signin')}
               >Sign In</button>
               <button
                 type="button"
-                className={`flex-1 pb-3 text-sm font-medium transition-colors ${standaloneAuthMode === 'signup' ? 'border-b-2 border-primary text-foreground' : 'text-muted-foreground'}`}
+                className={`flex-1 min-h-[40px] rounded-lg text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand ${standaloneAuthMode === 'signup' ? 'bg-foreground/[0.08] text-foreground shadow-[inset_0_1px_0_0_hsl(var(--foreground)/0.08)]' : 'text-muted-foreground hover:text-foreground'}`}
                 onClick={() => setStandaloneAuthMode('signup')}
               >Create Account</button>
             </div>
@@ -2685,10 +2781,10 @@ const Drunkopoly = () => {
                       } finally { setLoading(false); }
                     }}
                   >{loading ? 'Please wait…' : 'Sign In'}</Button>
-                  {error && <div className="text-destructive text-sm">{error}</div>}
+                  {error && <div className="rounded-xl bg-destructive/10 px-3 py-2 text-sm text-destructive ring-1 ring-inset ring-destructive/20">{error}</div>}
                   <div className="text-center text-sm text-muted-foreground pt-1">
                     No account?{' '}
-                    <button type="button" className="text-primary underline" onClick={() => { setError(null); setStandaloneAuthMode('signup'); }}>
+                    <button type="button" className="font-medium text-brand underline-offset-4 hover:underline" onClick={() => { setError(null); setStandaloneAuthMode('signup'); }}>
                       Create one
                     </button>
                   </div>
@@ -2700,10 +2796,10 @@ const Drunkopoly = () => {
                   <Input placeholder="First name" value={authFirstName} onChange={(e) => setAuthFirstName(e.target.value)} />
                   <Input placeholder="Last name (optional)" value={authLastName} onChange={(e) => setAuthLastName(e.target.value)} />
                   <div>
-                    <label className="text-xs text-muted-foreground mb-1 block">Profile picture (optional)</label>
+                    <label className={`${META_LABEL_CLASS} mb-2 block`}>Profile picture (optional)</label>
                     <div className="flex items-center gap-3">
                       {authAvatarPreview && (
-                        <img src={authAvatarPreview} alt="Preview" className="w-10 h-10 rounded-full object-cover shrink-0" />
+                        <img src={authAvatarPreview} alt="Preview" className="w-10 h-10 rounded-full object-cover shrink-0 ring-1 ring-foreground/10" />
                       )}
                       <Input
                         type="file"
@@ -2735,10 +2831,10 @@ const Drunkopoly = () => {
                       } finally { setLoading(false); }
                     }}
                   >{loading ? 'Please wait…' : 'Create Account'}</Button>
-                  {error && <div className="text-destructive text-sm">{error}</div>}
+                  {error && <div className="rounded-xl bg-destructive/10 px-3 py-2 text-sm text-destructive ring-1 ring-inset ring-destructive/20">{error}</div>}
                   <div className="text-center text-sm text-muted-foreground pt-1">
                     Already have an account?{' '}
-                    <button type="button" className="text-primary underline" onClick={() => { setError(null); setStandaloneAuthMode('signin'); }}>
+                    <button type="button" className="font-medium text-brand underline-offset-4 hover:underline" onClick={() => { setError(null); setStandaloneAuthMode('signin'); }}>
                       Sign in
                     </button>
                   </div>
@@ -2754,27 +2850,28 @@ const Drunkopoly = () => {
   // Profile screen — manage name, avatar, view stats
   if (screen === 'profile' && currentUser) {
     return (
-      <div className="min-h-screen bg-gradient-bg flex items-center justify-center px-4">
-        <Card className="w-full max-w-md">
+      <div className="min-h-screen bg-gradient-bg flex flex-col items-center justify-center px-4 py-10">
+        <LobbyHero
+          onBack={() => setScreen('join-create')}
+          eyebrow={`@${currentUser.username}`}
+          title="Profile"
+        />
+        <Card className="mt-8 w-full max-w-md motion-safe:animate-rise" style={{ animationDelay: '210ms' }}>
+          <CardBand />
           <CardHeader>
-            <div className="mb-2">
-              <Button variant="ghost" size="sm" className="px-0" onClick={() => setScreen('join-create')} aria-label="Back">
-                <ChevronLeft className="h-5 w-5" />
-              </Button>
-            </div>
-            <CardTitle className="text-2xl">Profile</CardTitle>
-            <CardDescription>Manage your account details.</CardDescription>
+            <SectionLabel>Account</SectionLabel>
+            <CardDescription className="mt-2">Manage your account details.</CardDescription>
           </CardHeader>
           <CardContent>
-            <div className="space-y-8">
+            <div className="space-y-6">
               {/* Avatar */}
-              <div className="flex flex-col items-center gap-4">
+              <div className="flex flex-col items-center gap-3">
                 {profileAvatarPreview ? (
-                  <img src={profileAvatarPreview} alt="Preview" className="w-20 h-20 rounded-full object-cover" />
+                  <img src={profileAvatarPreview} alt="Preview" className="w-20 h-20 rounded-full object-cover ring-2 ring-brand/30" />
                 ) : (
                   <PlayerAvatar player={{ name: currentUser.first_name || currentUser.username, avatar_url: currentUser.avatar_url }} size="xl" />
                 )}
-                <label className="cursor-pointer text-sm text-primary underline">
+                <label className="inline-flex min-h-[40px] cursor-pointer items-center rounded-full border border-foreground/10 bg-foreground/[0.03] px-4 text-xs text-muted-foreground transition-colors hover:border-brand/40 hover:text-foreground focus-within:ring-2 focus-within:ring-brand">
                   Change photo
                   <input
                     type="file"
@@ -2790,57 +2887,60 @@ const Drunkopoly = () => {
               </div>
 
               {/* Read-only username */}
-              <div className="mb-4">
-                <label className="text-xs text-muted-foreground block mb-1">Username</label>
-                <div className="px-3 py-2 rounded-md border border-input bg-muted/40 text-sm text-muted-foreground select-all">
+              <div>
+                <label className={`${META_LABEL_CLASS} block mb-2`}>Username</label>
+                <div className={`${INNER_ROW_CLASS} px-3 py-2.5 font-mono text-sm text-muted-foreground select-all`}>
                   {currentUser.username}
                 </div>
               </div>
 
               {/* Editable name fields */}
-              <div className="grid grid-cols-2 gap-4 mb-6">
+              <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <label className="text-xs text-muted-foreground block mb-1">First name</label>
+                  <label className={`${META_LABEL_CLASS} block mb-2`}>First name</label>
                   <Input value={profileFirstName} onChange={(e) => setProfileFirstName(e.target.value)} placeholder="First name" />
                 </div>
                 <div>
-                  <label className="text-xs text-muted-foreground block mb-1">Last name</label>
+                  <label className={`${META_LABEL_CLASS} block mb-2`}>Last name</label>
                   <Input value={profileLastName} onChange={(e) => setProfileLastName(e.target.value)} placeholder="Last name" />
                 </div>
               </div>
 
               {/* Stats */}
-              <div className="rounded-lg bg-muted/40 border border-border mb-6 overflow-hidden">
-                <div className="flex gap-4 p-4">
-                  <div className="flex-1 text-center">
-                    <div className="text-2xl font-bold text-primary">{currentUser.wins ?? 0}</div>
-                    <div className="text-xs text-muted-foreground mt-0.5">Wins</div>
-                  </div>
-                  <div className="w-px bg-border" />
-                  <div className="flex-1 text-center">
-                    <div className="text-2xl font-bold">{currentUser.losses ?? 0}</div>
-                    <div className="text-xs text-muted-foreground mt-0.5">Losses</div>
-                  </div>
-                  <div className="w-px bg-border" />
-                  <div className="flex-1 text-center">
-                    <div className="text-2xl font-bold">
-                      {(currentUser.wins ?? 0) + (currentUser.losses ?? 0) > 0
-                        ? Math.round(((currentUser.wins ?? 0) / ((currentUser.wins ?? 0) + (currentUser.losses ?? 0))) * 100)
-                        : 0}%
+              <div>
+                <SectionLabel className="mb-3">Record</SectionLabel>
+                <div className={`${INNER_ROW_CLASS} overflow-hidden`}>
+                  <div className="flex gap-3 p-4">
+                    <div className="flex-1 text-center">
+                      <div className="font-display text-2xl font-bold tracking-tight text-brand">{currentUser.wins ?? 0}</div>
+                      <div className={`${META_LABEL_CLASS} mt-1`}>Wins</div>
                     </div>
-                    <div className="text-xs text-muted-foreground mt-0.5">Win rate</div>
+                    <div className="w-px bg-foreground/10" />
+                    <div className="flex-1 text-center">
+                      <div className="font-display text-2xl font-bold tracking-tight">{currentUser.losses ?? 0}</div>
+                      <div className={`${META_LABEL_CLASS} mt-1`}>Losses</div>
+                    </div>
+                    <div className="w-px bg-foreground/10" />
+                    <div className="flex-1 text-center">
+                      <div className="font-display text-2xl font-bold tracking-tight">
+                        {(currentUser.wins ?? 0) + (currentUser.losses ?? 0) > 0
+                          ? Math.round(((currentUser.wins ?? 0) / ((currentUser.wins ?? 0) + (currentUser.losses ?? 0))) * 100)
+                          : 0}%
+                      </div>
+                      <div className={`${META_LABEL_CLASS} mt-1`}>Win rate</div>
+                    </div>
                   </div>
-                </div>
-                <div className="h-px bg-border" />
-                <div className="flex items-center justify-center gap-2 py-3 px-4">
-                  <div className="text-2xl font-bold text-amber-500">{(currentUser.total_sips ?? 0).toLocaleString()}</div>
-                  <div className="text-xs text-muted-foreground">Total sips all time</div>
+                  <div className="h-px bg-foreground/10" />
+                  <div className="flex items-center justify-center gap-2 py-3 px-4">
+                    <div className="font-display text-2xl font-bold tracking-tight text-amber-500">{(currentUser.total_sips ?? 0).toLocaleString()}</div>
+                    <div className={META_LABEL_CLASS}>Total sips all time</div>
+                  </div>
                 </div>
               </div>
 
               {/* Save */}
               <Button
-                className="w-full mt-6"
+                className="w-full"
                 disabled={profileSaving}
                 onClick={async () => {
                   setProfileSaving(true);
@@ -2858,7 +2958,7 @@ const Drunkopoly = () => {
               {/* Sign out */}
               <Button
                 variant="ghost"
-                className="w-full mt-3 text-destructive hover:text-destructive"
+                className="w-full -mt-3 text-destructive hover:bg-destructive/10 hover:text-destructive"
                 onClick={() => {
                   persistAuthUser(null);
                   toast({ title: 'Signed out' });
@@ -2875,21 +2975,26 @@ const Drunkopoly = () => {
   // Step 2: Enter Name
   if (screen === 'select-existing-player' && recentPlayers) {
     return (
-      <div className="min-h-screen bg-gradient-bg flex items-center justify-center px-4">
-        <Card className="w-full max-w-md">
+      <div className="min-h-screen bg-gradient-bg flex flex-col items-center justify-center px-4 py-10">
+        <LobbyHero
+          eyebrow={<>Game <span className="font-mono text-foreground">{gameCode}</span></>}
+          title="Who are you?"
+        />
+        <Card className="mt-8 w-full max-w-md motion-safe:animate-rise" style={{ animationDelay: '210ms' }}>
+          <CardBand />
           <CardHeader>
-            <CardTitle className="text-2xl mb-2">Select Your Name</CardTitle>
-            <CardDescription>Choose which player you are in game {gameCode}.</CardDescription>
+            <SectionLabel>Select your name</SectionLabel>
+            <CardDescription className="mt-2">Choose which player you are in game {gameCode}.</CardDescription>
           </CardHeader>
           <CardContent>
-            <div className="flex flex-col gap-3">
+            <div className="flex flex-col gap-2">
               {recentPlayers.map((p: any) => (
-                <Button key={p.id} className="w-full text-left" onClick={() => signInAsExistingPlayer(p)}>
+                <Button key={p.id} variant="outline" className="h-12 w-full justify-start px-4 font-display text-base font-semibold tracking-tight" onClick={() => signInAsExistingPlayer(p)}>
                   {p.name}
                 </Button>
               ))}
-              <div className="pt-4">
-                <Button variant="secondary" className="w-full" onClick={() => setScreen('enter-name')}>Not me / Use different name</Button>
+              <div className="mt-4 border-t border-foreground/10 pt-4">
+                <Button variant="ghost" className="w-full" onClick={() => setScreen('enter-name')}>Not me / Use different name</Button>
               </div>
             </div>
           </CardContent>
@@ -2899,35 +3004,49 @@ const Drunkopoly = () => {
   }
   if (screen === "enter-name") {
     return (
-      <div className="min-h-screen bg-gradient-bg flex items-center justify-center px-4">
-        <Card className="w-full max-w-md">
+      <div className="min-h-screen bg-gradient-bg flex flex-col items-center justify-center px-4 py-10">
+        <div className="w-full max-w-md">
+          <Button
+            variant="ghost"
+            className={`${BACK_PILL_CLASS} h-auto motion-safe:animate-rise`}
+            onClick={() => {
+              // If user is in sign-in/signup mode, treat Back as closing that mode.
+              if (accountMode === 'signin' || accountMode === 'signup') {
+                setAccountMode('none');
+                return;
+              }
+              // Otherwise go back to join/create screen and clear create mode.
+              setScreen('join-create');
+              setMode(null);
+            }}
+            aria-label="Back to games"
+          >
+            <ChevronLeft className="h-4 w-4" />
+            Back
+          </Button>
+          <p
+            className="mt-8 flex items-center gap-2 text-xs uppercase tracking-[0.2em] text-muted-foreground motion-safe:animate-rise"
+            style={{ animationDelay: '70ms' }}
+          >
+            <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-foreground/50" />
+            {mode === "create" ? 'New game · you host' : <>Joining <span className="font-mono text-foreground">{gameCode}</span></>}
+          </p>
+          <h1
+            className="mt-3 pb-2 font-display text-4xl font-bold leading-[0.95] tracking-tight text-foreground sm:text-5xl motion-safe:animate-rise"
+            style={{ animationDelay: '140ms' }}
+          >
+            {accountMode === 'signin' ? 'Sign in' : accountMode === 'signup' ? 'New account' : 'Who’s playing?'}
+          </h1>
+        </div>
+        <Card className="mt-8 w-full max-w-md motion-safe:animate-rise" style={{ animationDelay: '210ms' }}>
+          <CardBand />
           <CardHeader>
             <div className="flex items-start justify-between w-full">
               <div>
-                <div className="mb-2">
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    className="px-0"
-                    onClick={() => {
-                      // If user is in sign-in/signup mode, treat Back as closing that mode.
-                      if (accountMode === 'signin' || accountMode === 'signup') {
-                        setAccountMode('none');
-                        return;
-                      }
-                      // Otherwise go back to join/create screen and clear create mode.
-                      setScreen('join-create');
-                      setMode(null);
-                    }}
-                    aria-label="Back to games"
-                  >
-                    <ChevronLeft className="h-5 w-5" />
-                  </Button>
-                </div>
-                <CardTitle className="text-2xl mb-2">
+                <SectionLabel>
                   {accountMode === 'signin' ? 'Sign In' : accountMode === 'signup' ? 'Create Account' : currentUser ? 'Confirm Your Name' : 'Enter Your Name'}
-                </CardTitle>
-                <CardDescription>
+                </SectionLabel>
+                <CardDescription className="mt-2">
                   {accountMode === 'signin' ? 'Enter your username and password to sign in.' : accountMode === 'signup' ? 'Create an account to save your profile and stats.' : currentUser ? `Signed in as ${(currentUser.first_name || currentUser.username)} — press Back to change.` : (mode === "create" ? "Create a new game and become the host." : `Joining game: ${gameCode}`)}
                 </CardDescription>
               </div>
@@ -2984,11 +3103,11 @@ const Drunkopoly = () => {
               )}
               {/* Signed-in banner: only show when not in signin/signup mode */}
               {currentUser && accountMode === 'none' ? (
-                <div className="flex flex-col sm:flex-row items-start sm:items-center gap-3 p-3 bg-muted/40 rounded-md mt-3">
+                <div className="flex flex-col sm:flex-row items-start sm:items-center gap-3 p-3 rounded-xl border border-foreground/10 bg-foreground/[0.03] shadow-[inset_0_1px_0_0_hsl(var(--foreground)/0.06)]">
                   <PlayerAvatar player={currentUser} size="md" />
                   <div className="flex-1">
-                    <div className="font-medium">Signed in as {(currentUser.first_name || currentUser.username)}{currentUser.last_name ? ` ${currentUser.last_name}` : ''}</div>
-                    <div className="text-xs text-muted-foreground">{currentUser.username}</div>
+                    <div className="font-display font-semibold tracking-tight">Signed in as {(currentUser.first_name || currentUser.username)}{currentUser.last_name ? ` ${currentUser.last_name}` : ''}</div>
+                    <div className="font-mono text-xs text-muted-foreground">{currentUser.username}</div>
                   </div>
                   {/* actions moved below: continue + sign out shown in the main action area */}
                 </div>
@@ -2999,7 +3118,7 @@ const Drunkopoly = () => {
                       <>
                         <Button
                           className={`w-full sm:flex-1 justify-center py-2`}
-                          variant={'ghost'}
+                          variant={'outline'}
                           onClick={() => setAccountMode('signin')}
                         >
                           <Users className="mr-2 h-4 w-4" />
@@ -3008,7 +3127,7 @@ const Drunkopoly = () => {
 
                         <Button
                           className={`w-full sm:flex-1 justify-center py-2`}
-                          variant={'ghost'}
+                          variant={'outline'}
                           onClick={() => setAccountMode('signup')}
                         >
                           <UserPlus className="mr-2 h-4 w-4" />
@@ -3037,7 +3156,7 @@ const Drunkopoly = () => {
                           } catch (e: any) {
                             toast({ title: 'Sign in failed', description: e.message || 'Unable to sign in' });
                           } finally { setLoading(false); }
-                        }}>Sign In & Join</Button>
+                        }} className="w-full">Sign In & Join</Button>
                       </div>
                       
                     </div>
@@ -3050,10 +3169,10 @@ const Drunkopoly = () => {
                       <Input placeholder="First name" value={authFirstName} onChange={(e) => setAuthFirstName(e.target.value)} />
                       <Input placeholder="Last name" value={authLastName} onChange={(e) => setAuthLastName(e.target.value)} />
                       <div>
-                        <label className="text-xs text-muted-foreground mb-1 block">Profile picture (optional)</label>
+                        <label className={`${META_LABEL_CLASS} mb-2 block`}>Profile picture (optional)</label>
                         <div className="flex items-center gap-3">
                           {authAvatarPreview && (
-                            <img src={authAvatarPreview} alt="Preview" className="w-10 h-10 rounded-full object-cover shrink-0" />
+                            <img src={authAvatarPreview} alt="Preview" className="w-10 h-10 rounded-full object-cover shrink-0 ring-1 ring-foreground/10" />
                           )}
                           <Input
                             type="file"
@@ -3092,7 +3211,7 @@ const Drunkopoly = () => {
                           } catch (e: any) {
                             toast({ title: 'Create failed', description: e.message || 'Unable to create account' });
                           } finally { setLoading(false); }
-                        }}>Create & Join</Button>
+                        }} className="w-full">Create & Join</Button>
                       </div>
                       
                     </div>
@@ -3129,9 +3248,9 @@ const Drunkopoly = () => {
                     </Button>
                   )
                 )}
-                {error && accountMode === 'none' && <div className="text-destructive text-sm">{error}</div>}
+                {error && accountMode === 'none' && <div className="rounded-xl bg-destructive/10 px-3 py-2 text-sm text-destructive ring-1 ring-inset ring-destructive/20">{error}</div>}
                 {accountMode === 'none' && !(currentUser) && name.length > 10 && (
-                  <div className="text-destructive text-sm">Name must be 10 characters or less.</div>
+                  <div className="rounded-xl bg-destructive/10 px-3 py-2 text-sm text-destructive ring-1 ring-inset ring-destructive/20">Name must be 10 characters or less.</div>
                 )}
               </div>
             </form>
@@ -3148,16 +3267,31 @@ const Drunkopoly = () => {
     const canCreate = isNonNegativeInteger(tempInitialBalance) && isNonNegativeInteger(tempPassGoAmount) && isNonNegativeInteger(tempFreeParkingBalance);
 
     return (
-      <div className="min-h-screen bg-gradient-bg flex items-center justify-center px-4">
-        <Card className="w-full max-w-md">
+      <div className="min-h-screen bg-gradient-bg flex flex-col items-center justify-center px-4 py-10">
+        <div className="w-full max-w-md">
+          <Button variant="ghost" className={`${BACK_PILL_CLASS} h-auto motion-safe:animate-rise`} onClick={() => { setScreen('enter-name'); }} aria-label="Back to name">
+            <ChevronLeft className="h-4 w-4" />
+            Back
+          </Button>
+          <p
+            className="mt-8 flex items-center gap-2 text-xs uppercase tracking-[0.2em] text-muted-foreground motion-safe:animate-rise"
+            style={{ animationDelay: '70ms' }}
+          >
+            <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-foreground/50" />
+            New game · house rules
+          </p>
+          <h1
+            className="mt-3 pb-2 font-display text-4xl font-bold leading-[0.95] tracking-tight text-foreground sm:text-5xl motion-safe:animate-rise"
+            style={{ animationDelay: '140ms' }}
+          >
+            Set the table
+          </h1>
+        </div>
+        <Card className="mt-8 w-full max-w-md motion-safe:animate-rise" style={{ animationDelay: '210ms' }}>
+          <CardBand />
           <CardHeader>
-            <div className="mb-2">
-              <Button variant="ghost" size="sm" className="px-0" onClick={() => { setScreen('enter-name'); }} aria-label="Back to name">
-                <ChevronLeft className="h-5 w-5" />
-              </Button>
-            </div>
-            <CardTitle className="text-2xl mb-2">Confirm Game Settings</CardTitle>
-            <CardDescription>Set starting balances and game options before creating the game.</CardDescription>
+            <SectionLabel>Confirm Game Settings</SectionLabel>
+            <CardDescription className="mt-2">Set starting balances and game options before creating the game.</CardDescription>
           </CardHeader>
           <CardContent>
             <form
@@ -3241,8 +3375,9 @@ const Drunkopoly = () => {
                 }
               }}
             >
+              <SectionLabel>Money</SectionLabel>
               <div className="grid grid-cols-1 gap-3">
-                <label className="text-sm text-muted-foreground">Starting Balance</label>
+                <label className={META_LABEL_CLASS}>Starting Balance</label>
                 <Input
                   type="number"
                   min={0}
@@ -3253,7 +3388,7 @@ const Drunkopoly = () => {
                   }}
                 />
 
-                <label className="text-sm text-muted-foreground">Pass Go Amount</label>
+                <label className={`${META_LABEL_CLASS} mt-1`}>Pass Go Amount</label>
                 <Input
                   type="number"
                   min={0}
@@ -3264,7 +3399,7 @@ const Drunkopoly = () => {
                   }}
                 />
 
-                <label className="text-sm text-muted-foreground">Free Parking Starting Pot</label>
+                <label className={`${META_LABEL_CLASS} mt-1`}>Free Parking Starting Pot</label>
                 <Input
                   type="number"
                   min={0}
@@ -3274,41 +3409,44 @@ const Drunkopoly = () => {
                     if (v === '' || /^[0-9]*$/.test(v)) setTempFreeParkingBalance(v);
                   }}
                 />
+              </div>
 
-                <div className="flex items-center justify-between py-2 px-3 rounded-lg bg-muted/30 mt-2">
+              <SectionLabel className="pt-2">Rules</SectionLabel>
+              <div className="grid grid-cols-1 gap-2">
+                <div className="flex min-h-[56px] items-center justify-between gap-3 py-2.5 px-3 rounded-xl border border-foreground/10 bg-foreground/[0.03]">
                   <div className="flex-1">
-                    <div className="font-medium text-sm">Show Player Balances</div>
-                    <div className="text-xs text-muted-foreground">Allow players to see each other's money</div>
+                    <div className="font-display font-semibold text-sm tracking-tight">Show Player Balances</div>
+                    <div className="text-xs text-muted-foreground mt-0.5">Allow players to see each other's money</div>
                   </div>
                   <Switch
                     checked={tempShowBalances}
                     onCheckedChange={(checked) => setTempShowBalances(checked)}
                   />
                 </div>
-                <div className="flex items-center justify-between py-2 px-3 rounded-lg bg-muted/30 mt-2">
+                <div className="flex min-h-[56px] items-center justify-between gap-3 py-2.5 px-3 rounded-xl border border-foreground/10 bg-foreground/[0.03]">
                   <div className="flex-1">
-                    <div className="font-medium text-sm">Play With Sips</div>
-                    <div className="text-xs text-muted-foreground">Enable sip counters and Give Sips features</div>
+                    <div className="font-display font-semibold text-sm tracking-tight">Play With Sips</div>
+                    <div className="text-xs text-muted-foreground mt-0.5">Enable sip counters and Give Sips features</div>
                   </div>
                   <Switch
                     checked={tempSipsEnabled}
                     onCheckedChange={(checked) => setTempSipsEnabled(checked)}
                   />
                 </div>
-                <div className="flex items-center justify-between py-2 px-3 rounded-lg bg-muted/30 mt-2">
+                <div className="flex min-h-[56px] items-center justify-between gap-3 py-2.5 px-3 rounded-xl border border-foreground/10 bg-foreground/[0.03]">
                   <div className="flex-1">
-                    <div className="font-medium text-sm">Gambling</div>
-                    <div className="text-xs text-muted-foreground">Lets players gamble Pass Go or Free Parking on a roulette spin</div>
+                    <div className="font-display font-semibold text-sm tracking-tight">Gambling</div>
+                    <div className="text-xs text-muted-foreground mt-0.5">Lets players gamble Pass Go or Free Parking on a roulette spin</div>
                   </div>
                   <Switch
                     checked={tempGamblingEnabled}
                     onCheckedChange={(checked) => setTempGamblingEnabled(checked)}
                   />
                 </div>
-                <div className="flex items-center justify-between py-2 px-3 rounded-lg bg-muted/30 mt-2">
+                <div className="flex min-h-[56px] items-center justify-between gap-3 py-2.5 px-3 rounded-xl border border-foreground/10 bg-foreground/[0.03]">
                   <div className="flex-1">
-                    <div className="font-medium text-sm">Expansion Pack</div>
-                    <div className="text-xs text-muted-foreground">When enabled, all payments to the bank go into Free Parking</div>
+                    <div className="font-display font-semibold text-sm tracking-tight">Expansion Pack</div>
+                    <div className="text-xs text-muted-foreground mt-0.5">When enabled, all payments to the bank go into Free Parking</div>
                   </div>
                   <Switch
                     checked={tempExpansionEnabled}
@@ -3317,10 +3455,10 @@ const Drunkopoly = () => {
                 </div>
               </div>
 
-              <div className="flex gap-2 mt-4">
-                <Button type="submit" className="flex-1" disabled={!canCreate || loading}>{loading ? 'Creating...' : 'Create Game'}</Button>
+              <div className="flex gap-2 pt-2">
+                <Button type="submit" size="lg" className="flex-1 text-base font-semibold" disabled={!canCreate || loading}>{loading ? 'Creating...' : 'Create Game'}</Button>
               </div>
-              {error && <div className="text-destructive text-sm mt-2">{error}</div>}
+              {error && <div className="rounded-xl bg-destructive/10 px-3 py-2 text-sm text-destructive ring-1 ring-inset ring-destructive/20">{error}</div>}
             </form>
           </CardContent>
         </Card>
@@ -3329,6 +3467,15 @@ const Drunkopoly = () => {
   }
 
   // Step 3: Home (main game screen)
+  const headerIsland = headerScrolled || balanceDocked;
+  const showDockedBalance = balanceDocked && !player?.is_bankrupt;
+  const passGoAmount = Number(game?.pass_go_amount ?? 200);
+  const tradeTimerSecs = Number(game?.trade_timer_seconds ?? 60);
+  const tradeTimerLabel = tradeTimerSecs >= 60 && tradeTimerSecs % 60 === 0 ? `${tradeTimerSecs / 60} min` : `${tradeTimerSecs} sec`;
+  const openTradeTimer = () => {
+    setTradeTimerSelected(tradeTimerSecs);
+    setTradeTimerModalOpen(true);
+  };
   return (
     <div className="min-h-screen bg-gradient-bg flex flex-col" style={sipsOverlayOpen ? { paddingBottom: `${110 + Math.min(sipBatches.length - 1, 2) * 10}px` } : undefined}>
       <Toaster />
@@ -3343,25 +3490,44 @@ const Drunkopoly = () => {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
-      {/* Top bar */}
-      <div className="flex items-center justify-between px-6 py-4 z-50">
-        <div className="flex items-center gap-2">
+      {/* Top bar: full-width at the top, floating island once scrolled (mirrors SiteHeader). */}
+      <header
+        className={cn(
+          "fixed inset-x-0 top-0 z-50 transition-[padding] duration-500 ease-[cubic-bezier(0.2,0.8,0.2,1)]",
+          headerIsland ? "px-3 pt-3 sm:px-6" : "px-0 pt-0",
+        )}
+      >
+        <div
+          className={cn(
+            "mx-auto overflow-hidden border transition-all duration-500 ease-[cubic-bezier(0.2,0.8,0.2,1)]",
+            headerIsland
+              ? "max-w-3xl rounded-2xl border-foreground/10 bg-background/55 shadow-[0_10px_40px_-12px_rgb(0_0_0/0.55),inset_0_1px_0_0_hsl(var(--foreground)/0.06)] backdrop-blur-xl backdrop-saturate-150"
+              : "max-w-5xl rounded-none border-transparent bg-transparent",
+          )}
+        >
+        <div
+          className={cn(
+            "flex items-center justify-between gap-2 transition-all duration-500",
+            headerIsland ? "py-2 pl-3 pr-2" : "py-3 pl-4 pr-3 sm:pl-6 sm:pr-5",
+          )}
+        >
+        <div className="flex min-w-0 items-center gap-2">
             <div
-              className="px-3 py-1 rounded-md flex items-center gap-3"
-              style={{ backgroundColor: 'hsl(var(--background))', color: 'hsl(var(--foreground))' }}
+              className="flex min-w-0 items-center gap-2.5"
             >
-              <div className="font-semibold text-lg">{player?.name ?? name}</div>
+              <LiveDot />
+              <div className="truncate font-display font-semibold text-lg tracking-tight">{player?.name ?? name}</div>
               {(game?.sips_enabled ?? true) && (
                 <div
-                  className="text-sm opacity-90 cursor-pointer hover:opacity-100 hover:underline"
+                  className="relative flex h-8 shrink-0 cursor-pointer items-center gap-1 whitespace-nowrap rounded-full border border-foreground/10 bg-foreground/[0.03] px-2.5 text-xs after:absolute after:-inset-1 after:content-[''] text-muted-foreground transition-colors hover:border-brand/40 hover:text-foreground"
                   onClick={() => setSipLeaderboardOpen(true)}
                 >
-                  {(player?.total_sips ?? 0)} sips
+                  <span className="font-board font-semibold tabular-nums text-foreground">{(player?.total_sips ?? 0)}</span> sips
                 </div>
               )}
             </div>
           </div>
-          <div className="flex items-center gap-2">
+          <div className="flex shrink-0 items-center gap-1.5">
           {!isNarrow && (
             <Button variant="ghost" size="sm" onClick={() => navigate('/drunk/drunkopoly/rules')}>Rules</Button>
           )}
@@ -3401,31 +3567,76 @@ const Drunkopoly = () => {
             hasCommissionerAccess={hasCommissionerAccess}
           />
         </div>
-      </div>
+        </div>
 
-      <div className="flex-1 flex flex-col items-center justify-center px-4 sm:px-6 lg:px-8">
+        {/* Docked balance: expands out of the island's bottom edge once the big card scrolls away */}
+        <div
+          aria-hidden={!showDockedBalance}
+          className={cn(
+            "grid transition-[grid-template-rows,opacity] duration-500 ease-[cubic-bezier(0.2,0.8,0.2,1)]",
+            showDockedBalance ? "grid-rows-[1fr] opacity-100" : "grid-rows-[0fr] opacity-0",
+          )}
+        >
+          <div className="min-h-0 overflow-hidden">
+            <button
+              type="button"
+              tabIndex={showDockedBalance ? 0 : -1}
+              onClick={() => balanceCardEl?.scrollIntoView({ behavior: 'smooth', block: 'center' })}
+              className="flex w-full items-center justify-between gap-3 border-t border-foreground/10 py-2 pl-3 pr-4 text-left"
+            >
+              <span className="flex items-center gap-2 text-[11px] uppercase tracking-widest text-muted-foreground">
+                <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-foreground/50" />
+                Balance
+              </span>
+              <span className="font-display text-xl font-bold tracking-tight">
+                <AnimatedNumber
+                  compact
+                  value={player?.balance ?? game?.initial_balance ?? 1500}
+                  soundEnabled={false}
+                  maskIfGameHidden={!((game && game.show_balances) ?? true)}
+                  gameCode={game?.code ?? null}
+                />
+              </span>
+            </button>
+          </div>
+        </div>
+        </div>
+      </header>
+      {/* Spacer for the fixed header */}
+      <div aria-hidden className="h-[4.25rem] shrink-0" />
+      {/* Decorative property-colour strip under the header */}
+      <ColorBand className="pointer-events-none mx-auto h-0.5 w-full max-w-[12rem] opacity-60" />
+
+      <div className="flex flex-col items-center w-full max-w-md sm:max-w-xl mx-auto px-4 pt-6 pb-8 sm:px-6">
         {player?.is_bankrupt ? (
           /* Ghost Mode UI for bankrupt players */
           <>
-            <div className="mb-8 text-center">
-              <div className="text-2xl font-bold text-muted-foreground mb-4">
+            <div className="mb-8 w-full text-center">
+              <p className="flex items-center justify-center gap-2 text-xs uppercase tracking-[0.2em] text-muted-foreground motion-safe:animate-rise">
+                <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-destructive" />
+                Ghost mode
+              </p>
+              <div
+                className="mt-3 pb-1 font-display text-4xl font-bold tracking-tight text-foreground sm:text-5xl motion-safe:animate-rise"
+                style={{ animationDelay: '70ms' }}
+              >
                 You are bankrupt
               </div>
-              <div className="text-sm text-muted-foreground max-w-md">
+              <div className="mx-auto mt-3 text-sm text-muted-foreground max-w-sm motion-safe:animate-rise" style={{ animationDelay: '140ms' }}>
                 You can monitor the game and use actions like trade timers and jail but you cannot participate in payments.
               </div>
             </div>
 
             {/* Show all players' balances (override show_balances setting for ghosts) */}
-            <Section title="Player Balances" className="mt-8">
-              <div className="grid grid-cols-1 gap-2 w-64">
+            <Section title="Player Balances" className="mt-2">
+              <div className="grid grid-cols-1 gap-2 w-full">
                 {playersList
                   .filter((p: any) => !p.is_bankrupt)
                   .sort((a: any, b: any) => (b.balance ?? 0) - (a.balance ?? 0))
                   .map((p: any) => (
-                    <div key={p.id} className="flex items-center justify-between p-3 border rounded bg-card w-full">
-                      <div className="font-medium">{p.name}</div>
-                      <div className="text-lg font-bold text-primary">${(p.balance ?? 0).toLocaleString()}</div>
+                    <div key={p.id} className="flex items-center justify-between gap-3 rounded-xl border border-foreground/10 bg-foreground/[0.03] px-4 py-3 shadow-[inset_0_1px_0_0_hsl(var(--foreground)/0.06)] w-full">
+                      <div className="truncate font-display font-semibold tracking-tight">{p.name}</div>
+                      <div className="shrink-0 font-display text-lg font-bold tabular-nums tracking-tight">${(p.balance ?? 0).toLocaleString()}</div>
                     </div>
                   ))}
               </div>
@@ -3433,64 +3644,17 @@ const Drunkopoly = () => {
 
             {/* Ghost mode can still give sips if enabled */}
             {(game?.sips_enabled ?? true) && (
-              <Section title="Sips" className="mt-8">
-                <div className="grid grid-cols-1 gap-4 w-64">
-                  <Button variant="secondary" className="py-6" onClick={() => setSipModalOpen(true)}>
-                    <UserPlus className="h-5 w-5" />
-                    Give Sips
-                  </Button>
-                </div>
-              </Section>
+              <Board className="mt-8">
+                <WideSpace band="yellow" art={ART.sips} title="Give Sips" value="Hand out drinks to other players" onClick={() => setSipModalOpen(true)} />
+              </Board>
             )}
 
             {/* Ghost mode can still use actions */}
-            <Section title="Actions" className="mt-8">
-              <div className="grid grid-cols-1 gap-4 w-64">
-                <Button
-                  variant="secondary"
-                  className="w-full py-6"
-                  onClick={() => {
-                    setTradeTimerSelected(Number(game?.trade_timer_seconds ?? 60));
-                    setTradeTimerModalOpen(true);
-                  }}
-                >
-                  <Clock className="h-5 w-5" />
-                  Trade Timer
-                </Button>
-                <Button
-                  variant="secondary"
-                  className="w-full py-6"
-                  onClick={() => setJailModalOpen(true)}
-                >
-                  <Users className="h-5 w-5" />
-                  Jail
-                </Button>
-                <Button
-                  variant="secondary"
-                  className="w-full py-6"
-                  onClick={() => setPropertiesModalOpen(true)}
-                >
-                  <Building2 className="h-5 w-5" />
-                  Properties
-                </Button>
-                <Button
-                  variant="secondary"
-                  className="w-full py-6"
-                  onClick={() => setRankingsModalOpen(true)}
-                >
-                  <Crown className="h-5 w-5" />
-                  Rankings
-                </Button>
-                <Button
-                  variant="secondary"
-                  className="w-full py-6"
-                  onClick={() => setBankruptStatusOpen(true)}
-                >
-                  <Info className="h-5 w-5" />
-                  View Stats
-                </Button>
-              </div>
-            </Section>
+            <Board title="Actions" className="mt-6">
+              <BoardSpace art={ART.tradeTimer} label="Trade Timer" showLabel={false} value={tradeTimerLabel} onClick={openTradeTimer} />
+              <BoardSpace art={ART.police} label="Jail" value="Send a player" onClick={() => setJailModalOpen(true)} />
+              <BoardSpace icon={<Info />} label="Stats" value="Your game" onClick={() => setBankruptStatusOpen(true)} />
+            </Board>
             <BankruptStatus
               open={bankruptStatusOpen}
               onOpenChange={setBankruptStatusOpen}
@@ -3501,157 +3665,67 @@ const Drunkopoly = () => {
         ) : (
           /* Normal UI for active players */
           <>
-            <div className="mb-8 flex flex-col items-center">
-              <div className="text-muted-foreground text-lg mb-2 text-center">
-                Current Balance
-              </div>
-              <MoneyOrbitals
-                transactionMeta={transactionMeta}
-              >
-                <div className="text-6xl font-extrabold text-primary text-center px-8 py-4">
-                  <AnimatedNumber
-                    value={player?.balance ?? game?.initial_balance ?? 1500}
-                    soundEnabled={soundEnabled}
-                    maskIfGameHidden={!((game && game.show_balances) ?? true)}
-                    gameCode={game?.code ?? null}
-                  />
+            {/* Balance, set like a title deed: inverted header strip inside a double rule */}
+            <div ref={setBalanceCardEl} className="relative mb-6 w-full rounded-[6px] border-2 border-foreground/70 bg-background p-1.5 motion-safe:animate-rise">
+              <div className="border border-foreground/25">
+                <div className="bg-foreground py-1.5 text-center font-board text-[12px] font-semibold uppercase leading-none tracking-[0.32em] text-background">
+                  Current Balance
                 </div>
-              </MoneyOrbitals>
+                <div className="flex justify-center px-4 py-1">
+                  <MoneyOrbitals transactionMeta={transactionMeta}>
+                    <div className="px-6 py-2 text-center font-board text-6xl font-semibold tabular-nums tracking-tight sm:text-7xl">
+                      <AnimatedNumber
+                        value={player?.balance ?? game?.initial_balance ?? 1500}
+                        soundEnabled={soundEnabled}
+                        maskIfGameHidden={!((game && game.show_balances) ?? true)}
+                        gameCode={game?.code ?? null}
+                      />
+                    </div>
+                  </MoneyOrbitals>
+                </div>
+              </div>
             </div>
 
-            {/* SIP section (hidden when sips_enabled is false) */}
+            {/* Sips (hidden when sips_enabled is false) */}
             {(game?.sips_enabled ?? true) && (
-              <Section title="Sips">
-                <div className="grid grid-cols-1 gap-4 w-64">
-                  <Button variant="secondary" className="py-6" onClick={() => setSipModalOpen(true)}>
-                    <UserPlus className="h-5 w-5" />
-                    Give Sips
-                  </Button>
-                </div>
-              </Section>
+              <Board className="mb-6 motion-safe:animate-rise" style={{ animationDelay: '60ms' }}>
+                <WideSpace band="yellow" art={ART.sips} title="Give Sips" value="Hand out drinks to other players" onClick={() => setSipModalOpen(true)} />
+              </Board>
             )}
 
-            {/* Pay section */}
-            <Section title="Pay" className={"mt-8"}>
-              <div className="grid grid-cols-1 gap-4 w-64">
-                <Button
-                  variant="secondary"
-                  className="w-full py-6"
-                  onClick={() => {
-                    setPayMode("bank");
-                    setPayModalOpen(true);
-                  }}
-                >
-                  <DollarSign className="h-5 w-5" />
-                  Bank
-                </Button>
-                <Button
-                  variant="secondary"
-                  className="w-full py-6"
-                  onClick={() => {
-                    setPayMode("players");
-                    setPayModalOpen(true);
-                  }}
-                >
-                  <Users className="h-5 w-5" />
-                  Players
-                </Button>
-                <Button
-                  variant="secondary"
-                  className="w-full py-6"
-                  onClick={() => {
-                    setPayMode("tax");
-                    setPayModalOpen(true);
-                  }}
-                >
-                  <Percent className="h-5 w-5" />
-                  Tax
-                </Button>
-              </div>
-            </Section>
-            
-            
+            <Board title="Pay" note="Money out" className="motion-safe:animate-rise" style={{ animationDelay: '120ms' }}>
+              <BoardSpace band="red" art={ART.bank} label="Pay Bank" showLabel={false} value="Property & fees" onClick={() => { setPayMode("bank"); setPayModalOpen(true); }} />
+              <BoardSpace band="red" art={ART.players} label="Pay Players" showLabel={false} value="Rent & deals" onClick={() => { setPayMode("players"); setPayModalOpen(true); }} />
+              <BoardSpace band="red" art={ART.tax} label="Tax" value="To Parking" onClick={() => { setPayMode("tax"); setPayModalOpen(true); }} />
+            </Board>
 
-            {/* Collect section */}
-            <Section title="Collect" className="mt-8">
-              <div className="grid grid-cols-1 gap-4 w-64">
-                <Button variant="secondary" className="w-full py-6" onClick={() => { setCollectMode('bank'); setCollectModalOpen(true); }}>
-                  <DollarSign className="h-5 w-5" />
-                  Bank
-                </Button>
-                <Button variant="secondary" className="w-full py-6" onClick={() => { setCollectMode('pass_go'); setCollectModalOpen(true); }}>
-                  <Crown className="h-5 w-5" />
-                  Pass Go
-                </Button>
-                <Button 
-                  variant="secondary" 
-                  className="w-full py-6" 
-                  onClick={() => { 
-                    setCollectMode('free_parking'); 
-                    setCollectModalOpen(true); 
-                  }}
-                >
-                  <PiggyBank className="h-5 w-5" />
-                  Free Parking
-                </Button>
-              </div>
-            </Section>
-            
-            {/* Actions section (trade timer) */}
-            <Section title="Actions" className="mt-8">
-              <div className="grid grid-cols-1 gap-4 w-64">
-                <Button
-                  variant="secondary"
-                  className="w-full py-6"
-                  onClick={() => {
-                    setTradeTimerSelected(Number(game?.trade_timer_seconds ?? 60));
-                    setTradeTimerModalOpen(true);
-                  }}
-                >
-                  <Clock className="h-5 w-5" />
-                  Trade Timer
-                </Button>
-                <Button
-                  variant="secondary"
-                  className="w-full py-6"
-                  onClick={() => setJailModalOpen(true)}
-                >
-                  <Users className="h-5 w-5" />
-                  Jail
-                </Button>
-                <Button
-                  variant="secondary"
-                  className="w-full py-6"
-                  onClick={() => setPropertiesModalOpen(true)}
-                >
-                  <Building2 className="h-5 w-5" />
-                  Properties
-                </Button>
-                <Button
-                  variant="secondary"
-                  className="w-full py-6"
-                  onClick={() => setRankingsModalOpen(true)}
-                >
-                  <Crown className="h-5 w-5" />
-                  Rankings
-                </Button>
-                {!player?.is_bankrupt && (
-                  <Button
-                    variant="secondary"
-                    className="w-full py-6 border-2 border-red-500 text-foreground shadow-sm"
-                    style={{ borderColor: '#ef4444' }}
-                    onClick={() => setBankruptModalOpen(true)}
-                  >
-                    <DollarSign className="h-5 w-5" />
-                    Declare Bankruptcy
-                  </Button>
-                )}
-              </div>
-            </Section>
+            <Board title="Collect" note="Money in" className="mt-6 motion-safe:animate-rise" style={{ animationDelay: '180ms' }}>
+              <BoardSpace band="green" art={ART.money} label="Bank" value="Sales & payouts" onClick={() => { setCollectMode('bank'); setCollectModalOpen(true); }} />
+              <BoardSpace
+                band="green"
+                art={ART.passGo}
+                label="Pass Go"
+                showLabel={false}
+                value={`+$${passGoAmount.toLocaleString()}`}
+                onClick={() => { setCollectMode('pass_go'); setCollectModalOpen(true); }}
+              />
+              <BoardSpace
+                band="green"
+                art={ART.freeParking}
+                label="Free Parking"
+                showLabel={false}
+                value={`Pot $${Number(freeParkingPot || 0).toLocaleString()}`}
+                onClick={() => { setCollectMode('free_parking'); setCollectModalOpen(true); }}
+              />
+            </Board>
+
+            <Board title="Actions" cols={2} className="mt-6 motion-safe:animate-rise" style={{ animationDelay: '240ms' }}>
+              <BoardSpace art={ART.tradeTimer} label="Trade Timer" showLabel={false} value={tradeTimerLabel} className="aspect-[5/4]" onClick={openTradeTimer} />
+              <BoardSpace art={ART.police} label="Jail" value="Send a player" className="aspect-[5/4]" onClick={() => setJailModalOpen(true)} />
+              <BoardLine tone="danger" onClick={() => setBankruptModalOpen(true)}>Declare Bankruptcy</BoardLine>
+            </Board>
           </>
         )}
-        
-        
 
         <PayPopup
           open={payModalOpen}
@@ -3797,8 +3871,9 @@ const Drunkopoly = () => {
 
         <Dialog open={tradeTimerModalOpen} onOpenChange={(v) => setTradeTimerModalOpen(v)}>
           <DialogContent>
-            <div className="px-4">
-              <DialogHeader>
+            <div>
+              <DialogHeader className="items-center sm:items-start">
+                <img src={ART.tradeTimer} alt="" aria-hidden draggable={false} className="mb-2 h-20 w-auto max-w-[70%] select-none object-contain" />
                 <DialogTitle>Trade Timer</DialogTitle>
               </DialogHeader>
               <div className="py-2">
@@ -3846,20 +3921,6 @@ const Drunkopoly = () => {
           showBalances={game?.show_balances ?? true}
           onSubmit={handleBankrupt}
           gameId={game?.id}
-        />
-
-        <PropertiesPopup
-          open={propertiesModalOpen}
-          onOpenChange={(v) => setPropertiesModalOpen(v)}
-          gameCode={gameCode}
-          players={playersList}
-        />
-
-        <RankingsPopup
-          open={rankingsModalOpen}
-          onOpenChange={(v) => setRankingsModalOpen(v)}
-          gameCode={gameCode}
-          players={playersList}
         />
 
         <SipLeaderboardPopup
@@ -4063,20 +4124,25 @@ const Drunkopoly = () => {
 
         {/* Win overlay — shown when this player is the last one standing */}
         {gameWon && (
-          <div className="fixed inset-0 z-[100001] pointer-events-auto overflow-auto" style={{ backgroundColor: 'hsl(var(--background))' }}>
+          <div className="fixed inset-0 z-[100001] pointer-events-auto overflow-auto bg-background">
             <div className="min-h-screen flex items-center justify-center px-6 py-12">
               <div className="max-w-sm w-full text-center">
-                <div className="text-6xl mb-4">🏆</div>
-                <h1 className="text-4xl font-extrabold mb-2" style={{ color: 'hsl(var(--primary))' }}>You Won!</h1>
-                <p className="text-lg mb-1" style={{ color: 'hsl(var(--foreground))' }}>
+                <DeedFan className="pointer-events-none mx-auto mb-6 h-28 w-32 motion-safe:animate-rise" />
+                <p className="flex items-center justify-center gap-2 text-xs uppercase tracking-[0.2em] text-muted-foreground motion-safe:animate-rise" style={{ animationDelay: '70ms' }}>
+                  <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-foreground/50" />
+                  <span aria-hidden>🏆</span> Last one standing
+                </p>
+                <h1 className="mt-3 mb-3 pb-1 font-display text-5xl font-bold tracking-tight text-foreground motion-safe:animate-rise" style={{ animationDelay: '140ms' }}>You Won!</h1>
+                <p className="text-lg mb-1 text-foreground">
                   Everyone else has gone bankrupt.
                 </p>
-                <p className="text-muted-foreground mb-8">
-                  Final balance: <span className="font-semibold text-foreground">${(player?.balance ?? 0).toLocaleString()}</span>
-                </p>
+                <ColorBand className="pointer-events-none mx-auto my-5 h-1 max-w-[12rem]" />
+                <div className="mb-8 rounded-2xl border border-foreground/10 bg-foreground/[0.03] px-4 py-4 shadow-[inset_0_1px_0_0_hsl(var(--foreground)/0.06)]">
+                  <div className="text-[11px] uppercase tracking-widest text-muted-foreground">Final balance</div>
+                  <div className="mt-1 font-display text-4xl font-bold tracking-tight tabular-nums text-foreground">${(player?.balance ?? 0).toLocaleString()}</div>
+                </div>
                 <button
-                  className="w-full px-4 py-3 rounded text-lg font-semibold"
-                  style={{ background: 'hsl(var(--primary))', color: 'hsl(var(--primary-foreground))' }}
+                  className="w-full min-h-[48px] px-4 py-3 rounded-xl bg-primary text-primary-foreground text-lg font-semibold shadow-[inset_0_1px_0_0_hsl(var(--primary-foreground)/0.12)] transition hover:bg-primary/90 active:scale-[0.98] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand focus-visible:ring-offset-2 focus-visible:ring-offset-background"
                   onClick={() => { winDismissedRef.current = true; setGameWon(false); }}
                 >
                   Continue
@@ -4230,8 +4296,13 @@ function Section({
   className?: string;
 }) {
   return (
-    <div className={`w-full flex flex-col items-center ${className}`}>
-      <div className="text-xl font-bold mb-4 text-foreground">{title}</div>
+    <div className={`w-full flex flex-col ${className}`}>
+      <div className="mb-3 flex items-center gap-3">
+        <div className="font-board text-[13px] font-semibold uppercase tracking-[0.22em] text-foreground">
+          {title}
+        </div>
+        <div aria-hidden className="h-px flex-1 bg-foreground/10" />
+      </div>
       {children}
     </div>
   );
@@ -4405,7 +4476,9 @@ function MoneyOrbitals({
 }
 // ─────────────────────────────────────────────────────────────────────────────
 
-function AnimatedNumber({ value, soundEnabled = true, maskIfGameHidden = false, gameCode, }: { value: number; soundEnabled?: boolean; maskIfGameHidden?: boolean; gameCode?: string | null }) {
+const BALANCE_VISIBILITY_EVENT = 'drunkopoly:balance-visibility';
+
+function AnimatedNumber({ value, soundEnabled = true, maskIfGameHidden = false, gameCode, compact = false }: { value: number; soundEnabled?: boolean; maskIfGameHidden?: boolean; gameCode?: string | null; compact?: boolean }) {
   const [display, setDisplay] = useState<number>(value ?? 0);
   const prevRef = useRef<number>(value ?? 0);
   const audioRef = useRef<HTMLAudioElement | null>(null);
@@ -4426,6 +4499,17 @@ function AnimatedNumber({ value, soundEnabled = true, maskIfGameHidden = false, 
       return false;
     }
   });
+
+  // Keep every instance (big balance card + compact header copy) in sync when
+  // the user toggles their local balance visibility.
+  useEffect(() => {
+    const onVis = (e: Event) => {
+      const detail = (e as CustomEvent<{ key: string; shown: boolean }>).detail;
+      if (detail?.key === storageKey) setLocalShown(detail.shown);
+    };
+    window.addEventListener(BALANCE_VISIBILITY_EVENT, onVis);
+    return () => window.removeEventListener(BALANCE_VISIBILITY_EVENT, onVis);
+  }, [storageKey]);
 
   // initialize audio once
   useEffect(() => {
@@ -4462,7 +4546,7 @@ function AnimatedNumber({ value, soundEnabled = true, maskIfGameHidden = false, 
 
     // If increase: play sound now and delay animation so audio starts
     const delayMs = 500;
-    if (end > start && soundEnabled) {
+    if (end > start && soundEnabled && !compact) {
       try {
         const a = audioRef.current;
         if (a) {
@@ -4528,13 +4612,13 @@ function AnimatedNumber({ value, soundEnabled = true, maskIfGameHidden = false, 
     transform: 'translateY(4px) scale(1.02) rotate(2deg)'
   };
 
-  const styleToUse = bump === 'up' ? upStyle : bump === 'down' ? downStyle : baseStyle;
+  const styleToUse = compact ? baseStyle : bump === 'up' ? upStyle : bump === 'down' ? downStyle : baseStyle;
   // Use either the internal bump state OR the external flash prop
   // to determine color so external flashes (from payments) always reflect
   // increase/decrease visually even if the internal animation timing differs.
   const isUp = bump === 'up';
   const isDown = bump === 'down';
-  const colorClass = isUp ? 'text-green-400' : isDown ? 'text-destructive' : 'text-primary';
+  const colorClass = isUp ? 'text-green-400' : isDown ? 'text-destructive' : 'text-foreground';
 
   // Inline hex color to ensure it overrides any inherited text color
   const colorHex = isUp ? '#34D399' /* green-400 */ : isDown ? '#EF4444' /* red-500 */ : undefined;
@@ -4547,20 +4631,21 @@ function AnimatedNumber({ value, soundEnabled = true, maskIfGameHidden = false, 
         className={`inline-flex items-baseline gap-1`} 
         style={{
           transition: 'filter 220ms ease, opacity 220ms',
-          filter: isMasked ? 'blur(14px) saturate(.85)' : 'none',
+          filter: isMasked ? `blur(${compact ? 6 : 14}px) saturate(.85)` : 'none',
         }}
       >
-        <span className={`text-2xl align-baseline ${colorClass}`} style={{ ...styleToUse, color: colorHex }}>{"$"}</span>
-        <span className={`align-baseline ${colorClass}`} style={{ ...styleToUse, fontVariantNumeric: 'tabular-nums', color: colorHex }}>{formatted}</span>
+        <span className={`${compact ? 'text-[0.7em]' : 'text-2xl'} align-baseline ${colorClass} ${!isUp && !isDown ? 'opacity-70' : ''}`} style={{ ...styleToUse, color: colorHex }}>{"$"}</span>
+        <span className={`${compact ? '' : 'pb-1'} align-baseline ${colorClass}`} style={{ ...styleToUse, fontVariantNumeric: 'tabular-nums', color: colorHex }}>{formatted}</span>
       </div>
 
-      {maskIfGameHidden ? (
+      {maskIfGameHidden && !compact ? (
         <button
           onClick={(e) => {
             e.stopPropagation();
             try {
               const next = !localShown;
               setLocalShown(next);
+              window.dispatchEvent(new CustomEvent(BALANCE_VISIBILITY_EVENT, { detail: { key: storageKey, shown: next } }));
               if (typeof window !== 'undefined') localStorage.setItem(storageKey, String(next));
             } catch (err) {
               // ignore storage errors
@@ -4569,8 +4654,7 @@ function AnimatedNumber({ value, soundEnabled = true, maskIfGameHidden = false, 
           aria-pressed={localShown}
           aria-label={localShown ? 'Hide balance' : 'Show balance'}
           title={localShown ? 'Hide balance' : 'Show balance'}
-          className="drunk-eye-toggle inline-flex items-center justify-center -ml-4 mt-8 w-9 h-9 rounded-full border border-border text-foreground bg-transparent transition-transform duration-150 hover:-translate-y-1 focus:outline-none focus:ring-2"
-          style={{ boxShadow: 'var(--shadow-card)' }}
+          className="drunk-eye-toggle inline-flex items-center justify-center -ml-4 mt-8 w-10 h-10 rounded-full border border-foreground/10 bg-background/60 text-muted-foreground backdrop-blur-xl shadow-[0_10px_30px_-12px_rgb(0_0_0/0.6),inset_0_1px_0_0_hsl(var(--foreground)/0.06)] transition duration-150 hover:-translate-y-1 hover:border-brand/40 hover:text-foreground focus:outline-none focus-visible:ring-2 focus-visible:ring-brand"
         >
           {localShown ? (
             <Eye className="w-4 h-4" />
@@ -4753,42 +4837,43 @@ function GameCodePopover({ code, onLogout, players, currentPlayer, game, onRemov
       <PopoverTrigger asChild>
         <Button
           variant="outline"
-          className="font-mono px-4 py-2 text-base font-bold uppercase tracking-widest"
+          className="h-10 font-mono px-3 text-sm font-bold uppercase tracking-widest text-foreground"
         >
           {code}
         </Button>
       </PopoverTrigger>
-      <PopoverContent align="end" className="w-56">
-        <div className="flex flex-col gap-2">
-          <Button variant="secondary" className="w-full mt-1" onClick={() => setQrCodeOpen(true)}>
-            <QrCode size={16} />
+      <PopoverContent align="end" className="w-60 p-2">
+        <div className="px-2 pt-1 pb-2 text-[11px] uppercase tracking-widest text-muted-foreground">
+          Game <span className="font-mono text-foreground">{code}</span>
+        </div>
+        <div className="flex flex-col gap-0.5">
+          <Button variant="ghost" className="w-full h-11 justify-start gap-3 px-2 text-foreground" onClick={() => setQrCodeOpen(true)}>
+            <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-brand/10 text-brand ring-1 ring-inset ring-brand/20"><QrCode size={16} /></span>
             QR Code
           </Button>
-          <Button variant="secondary" className="w-full mt-1" onClick={handleCopyInvite}>
-            <Copy size={16} />
+          <Button variant="ghost" className="w-full h-11 justify-start gap-3 px-2 text-foreground" onClick={handleCopyInvite}>
+            <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-brand/10 text-brand ring-1 ring-inset ring-brand/20"><Copy size={16} /></span>
             Invite Link
           </Button>
-          <Button variant="secondary" className="w-full mt-1" onClick={() => { setQrCodeOpen(false); setSettingsOpen(false); onLogout && /* no-op */ null; navigate('/drunk/drunkopoly/rules'); }}>
-            <Info size={16} />
-            Rules
-          </Button>
           <Button
-            variant="secondary"
-            className="w-full mt-1"
+            variant="ghost"
+            className="w-full h-11 justify-start gap-3 px-2 text-foreground"
             onClick={() => {
               setQrCodeOpen(false);
               setSettingsOpen(false);
               navigate('/drunk/drunkopoly/messages');
             }}
           >
-            <MessagesSquare size={16} />
+            <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-brand/10 text-brand ring-1 ring-inset ring-brand/20"><MessagesSquare size={16} /></span>
             Messages
           </Button>
-          <Button variant="secondary" className="w-full mt-1" onClick={() => setSettingsOpen(true)}>
-            <Settings size={16} />
+          <Button variant="ghost" className="w-full h-11 justify-start gap-3 px-2 text-foreground" onClick={() => setSettingsOpen(true)}>
+            <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-brand/10 text-brand ring-1 ring-inset ring-brand/20"><Settings size={16} /></span>
             Settings
           </Button>
-          <Button variant="destructive" className="w-full mt-1 ring-2 ring-red-500/10 shadow-sm shadow-red-500/20" onClick={onLogout}>
+          <div aria-hidden className="my-1 h-px bg-foreground/10" />
+          <Button variant="ghost" className="w-full h-11 justify-start gap-3 px-2 text-destructive hover:bg-destructive/10 hover:text-destructive" onClick={onLogout}>
+            <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-destructive/10 text-destructive ring-1 ring-inset ring-destructive/20"><LogOut size={16} /></span>
             Leave Game
           </Button>
         </div>
@@ -4800,7 +4885,7 @@ function GameCodePopover({ code, onLogout, players, currentPlayer, game, onRemov
           <DialogTitle>Invite QR Code</DialogTitle>
         </DialogHeader>
         <div className="flex flex-col items-center justify-center py-6">
-          <div className="bg-white p-4 rounded-lg">
+          <div className="bg-white p-3 rounded-2xl shadow-[0_24px_60px_-20px_rgb(0_0_0/0.75)] ring-1 ring-foreground/10">
             <QRCodeSVG 
               value={`${window.location.origin}${window.location.pathname}?invite=${encodeURIComponent(code)}`} 
               size={256}
@@ -4808,10 +4893,10 @@ function GameCodePopover({ code, onLogout, players, currentPlayer, game, onRemov
               includeMargin={true}
             />
           </div>
-          <p className="text-center text-sm text-muted-foreground mt-4">
+          <p className="text-center text-[11px] uppercase tracking-widest text-muted-foreground mt-5">
             Scan this code to join the game
           </p>
-          <p className="text-center font-mono font-bold text-lg mt-2">
+          <p className="text-center font-mono font-bold text-2xl tracking-[0.2em] mt-2">
             {code}
           </p>
         </div>
@@ -4831,30 +4916,28 @@ function GameCodePopover({ code, onLogout, players, currentPlayer, game, onRemov
             <button
               type="button"
               onClick={() => setSettingsOpenSection((v) => (v === 'game' ? null : 'game'))}
-              className="w-full flex items-center justify-between gap-3 p-3 rounded bg-muted/30 hover:bg-muted/40"
+              className="w-full min-h-[56px] flex items-center justify-between gap-3 p-3 rounded-xl border border-foreground/10 bg-foreground/[0.03] shadow-[inset_0_1px_0_0_hsl(var(--foreground)/0.06)] transition-colors hover:border-brand/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand"
               aria-expanded={settingsOpenSection === 'game'}
             >
               <div className="flex items-center gap-3">
                 <div className="text-left">
-                  <div className="font-medium">Game Settings</div>
+                  <div className="font-display font-semibold tracking-tight">Game Settings</div>
                   <div className="text-sm text-muted-foreground">App-wide game options</div>
                 </div>
               </div>
               <ChevronDown
-                className="w-5 h-5 transform-gpu"
+                className="w-5 h-5 shrink-0 text-muted-foreground transform-gpu"
                 style={{ transform: settingsOpenSection === 'game' ? 'rotate(180deg)' : 'rotate(0deg)', transition: 'transform 200ms ease-in-out', willChange: 'transform' }}
               />
             </button>
 
             {settingsOpenSection === 'game' && (
               <div className="mt-3 px-0">
-                <div className="rounded bg-muted/30 border border-muted p-3 space-y-2">
-                  {/* Always-visible items: Theme and App Sounds */}
-                  <ThemeSelector />
+                <div className="rounded-xl border border-foreground/10 bg-foreground/[0.02] p-3 space-y-2">
 
-                  <div className="flex items-center justify-between py-2 px-3 rounded-lg bg-muted/10">
+                  <div className="flex min-h-[56px] items-center justify-between gap-3 py-2.5 px-3 rounded-xl border border-foreground/10 bg-foreground/[0.03]">
                     <div className="flex-1">
-                      <div className="font-medium text-sm">App Sounds</div>
+                      <div className="font-display font-semibold text-sm tracking-tight">App Sounds</div>
                       <div className="text-xs text-muted-foreground">Play sounds for money changes</div>
                     </div>
                     <Switch
@@ -4866,9 +4949,9 @@ function GameCodePopover({ code, onLogout, players, currentPlayer, game, onRemov
                   {/* Additional game-level settings visible only to the commissioner */}
                   {currentPlayer?.is_commissioner && (
                     <>
-                      <div className="flex items-center justify-between py-2 px-3 rounded-lg bg-muted/10">
+                      <div className="flex min-h-[56px] items-center justify-between gap-3 py-2.5 px-3 rounded-xl border border-foreground/10 bg-foreground/[0.03]">
                         <div className="flex-1">
-                          <div className="font-medium text-sm">Show Player Balances</div>
+                          <div className="font-display font-semibold text-sm tracking-tight">Show Player Balances</div>
                           <div className="text-xs text-muted-foreground">Allow players to see each other's money</div>
                         </div>
                         <Switch
@@ -4876,9 +4959,9 @@ function GameCodePopover({ code, onLogout, players, currentPlayer, game, onRemov
                           onCheckedChange={(checked) => { if (onToggleShowBalances) onToggleShowBalances(checked); }}
                         />
                       </div>
-                      <div className="flex items-center justify-between py-2 px-3 rounded-lg bg-muted/10">
+                      <div className="flex min-h-[56px] items-center justify-between gap-3 py-2.5 px-3 rounded-xl border border-foreground/10 bg-foreground/[0.03]">
                         <div className="flex-1">
-                          <div className="font-medium text-sm">Play With Sips</div>
+                          <div className="font-display font-semibold text-sm tracking-tight">Play With Sips</div>
                           <div className="text-xs text-muted-foreground">Enable sip counters and Give Sips features</div>
                         </div>
                         <Switch
@@ -4886,9 +4969,9 @@ function GameCodePopover({ code, onLogout, players, currentPlayer, game, onRemov
                           onCheckedChange={(checked) => { if (onToggleSipsEnabled) onToggleSipsEnabled(checked); }}
                         />
                       </div>
-                      <div className="flex items-center justify-between py-2 px-3 rounded-lg bg-muted/10">
+                      <div className="flex min-h-[56px] items-center justify-between gap-3 py-2.5 px-3 rounded-xl border border-foreground/10 bg-foreground/[0.03]">
                         <div className="flex-1">
-                          <div className="font-medium text-sm">Gambling</div>
+                          <div className="font-display font-semibold text-sm tracking-tight">Gambling</div>
                           <div className="text-xs text-muted-foreground">Lets players gamble Pass Go or Free Parking on a roulette spin</div>
                         </div>
                         <Switch
@@ -4896,9 +4979,9 @@ function GameCodePopover({ code, onLogout, players, currentPlayer, game, onRemov
                           onCheckedChange={(checked) => { if (onToggleGambling) onToggleGambling(checked); }}
                         />
                       </div>
-                      <div className="flex items-center justify-between py-2 px-3 rounded-lg bg-muted/10">
+                      <div className="flex min-h-[56px] items-center justify-between gap-3 py-2.5 px-3 rounded-xl border border-foreground/10 bg-foreground/[0.03]">
                         <div className="flex-1">
-                          <div className="font-medium text-sm">Expansion Pack</div>
+                          <div className="font-display font-semibold text-sm tracking-tight">Expansion Pack</div>
                           <div className="text-xs text-muted-foreground">Route payments to the bank into Free Parking</div>
                         </div>
                         <Switch
@@ -4933,24 +5016,24 @@ function GameCodePopover({ code, onLogout, players, currentPlayer, game, onRemov
             <button
               type="button"
               onClick={() => setSettingsOpenSection((v) => (v === 'players' ? null : 'players'))}
-              className="w-full flex items-center justify-between gap-3 p-3 rounded bg-muted/30 hover:bg-muted/40"
+              className="w-full min-h-[56px] flex items-center justify-between gap-3 p-3 rounded-xl border border-foreground/10 bg-foreground/[0.03] shadow-[inset_0_1px_0_0_hsl(var(--foreground)/0.06)] transition-colors hover:border-brand/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand"
               aria-expanded={settingsOpenSection === 'players'}
             >
               <div className="flex items-center gap-3">
                 <div className="text-left">
-                  <div className="font-medium">Players</div>
+                  <div className="font-display font-semibold tracking-tight">Players</div>
                   <div className="text-sm text-muted-foreground">Manage players in this game</div>
                 </div>
               </div>
               <ChevronDown
-                className="w-5 h-5 transform-gpu"
+                className="w-5 h-5 shrink-0 text-muted-foreground transform-gpu"
                 style={{ transform: settingsOpenSection === 'players' ? 'rotate(180deg)' : 'rotate(0deg)', transition: 'transform 200ms ease-in-out', willChange: 'transform' }}
               />
             </button>
 
             {settingsOpenSection === 'players' && (
               <div className="mt-3 px-0">
-                <div className="rounded bg-muted/30 border border-muted p-3 space-y-2">
+                <div className="rounded-xl border border-foreground/10 bg-foreground/[0.02] p-3 space-y-2">
                   <div className="space-y-2">
                     {(players && players.length > 0) ? (
                       players.map((p: any) => {
@@ -4960,16 +5043,16 @@ function GameCodePopover({ code, onLogout, players, currentPlayer, game, onRemov
                           const canRemove = !!(currentPlayer && currentPlayer.is_commissioner) && !isCommissioner && !isSelf;
                         const canSeeBalance = showBalances;
                         return (
-                          <div key={p.id} className="flex items-center gap-3 py-2 px-2 border rounded">
+                          <div key={p.id} className="flex items-center gap-3 py-2 px-3 rounded-xl border border-foreground/10 bg-foreground/[0.03]">
                             <PlayerAvatar player={p} size="md" />
-                            <div className="flex-1">
-                              <div className="font-medium">{p.name}{isCommissioner ? ' • Commissioner' : isSelf ? ' • You' : ''}</div>
+                            <div className="flex-1 min-w-0">
+                              <div className="truncate font-display font-semibold tracking-tight">{p.name}{isCommissioner ? ' • Commissioner' : isSelf ? ' • You' : ''}</div>
                               {canSeeBalance && (
-                                <div className="text-sm text-muted-foreground">Balance: ${Number(p.balance || 0).toLocaleString()}</div>
+                                <div className="text-xs text-muted-foreground tabular-nums">Balance: ${Number(p.balance || 0).toLocaleString()}</div>
                               )}
                             </div>
                             <div>
-                              <Button size="sm" variant="destructive" disabled={!canRemove} onClick={() => requestRemove(p.id, p.name)}>
+                              <Button size="sm" variant="outline" className="border-destructive/30 text-destructive hover:border-destructive/60 hover:bg-destructive/10 hover:text-destructive" disabled={!canRemove} onClick={() => requestRemove(p.id, p.name)}>
                                 Remove
                               </Button>
                             </div>
@@ -5028,10 +5111,10 @@ function GameCodePopover({ code, onLogout, players, currentPlayer, game, onRemov
         </DialogHeader>
 
         <div className="space-y-4">
-          <div className="rounded border border-muted bg-muted/20 p-3 space-y-2">
-            <div className="text-sm font-medium">Target Player</div>
+          <div className="rounded-xl border border-foreground/10 bg-foreground/[0.03] p-4 space-y-3">
+            <div className="text-xs font-semibold uppercase tracking-[0.2em] text-muted-foreground">Target Player</div>
             <select
-              className="w-full h-10 px-3 rounded border border-input bg-background text-foreground"
+              className="w-full h-10 px-3 rounded-xl border border-foreground/10 bg-background text-foreground text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand"
               value={commSelectedPlayerId}
               onChange={(e) => setCommSelectedPlayerId(e.target.value)}
             >
@@ -5043,8 +5126,8 @@ function GameCodePopover({ code, onLogout, players, currentPlayer, game, onRemov
             </select>
           </div>
 
-          <div className="rounded border border-muted bg-muted/20 p-3 space-y-3">
-            <div className="text-sm font-medium">Adjust Balance</div>
+          <div className="rounded-xl border border-foreground/10 bg-foreground/[0.03] p-4 space-y-3">
+            <div className="text-xs font-semibold uppercase tracking-[0.2em] text-muted-foreground">Adjust Balance</div>
             <div className="flex items-center gap-2">
               <Button
                 type="button"
@@ -5064,7 +5147,7 @@ function GameCodePopover({ code, onLogout, players, currentPlayer, game, onRemov
               </Button>
             </div>
             <div className="flex items-center gap-2">
-              <Button size="sm" variant="secondary" onClick={() => {
+              <Button size="sm" variant="secondary" className="h-10 shrink-0 font-mono" onClick={() => {
                 setCommBalanceValue((prev) => {
                   if (!prev) return '-';
                   return String(prev).startsWith('-') ? String(prev).slice(1) : `-${prev}`;
@@ -5086,8 +5169,8 @@ function GameCodePopover({ code, onLogout, players, currentPlayer, game, onRemov
             </div>
           </div>
 
-          <div className="rounded border border-muted bg-muted/20 p-3 space-y-3">
-            <div className="text-sm font-medium">Set Pending Sips</div>
+          <div className="rounded-xl border border-foreground/10 bg-foreground/[0.03] p-4 space-y-3">
+            <div className="text-xs font-semibold uppercase tracking-[0.2em] text-muted-foreground">Set Pending Sips</div>
             <Input
               inputMode="numeric"
               value={commPendingSipsValue}
@@ -5119,7 +5202,7 @@ function GameCodePopover({ code, onLogout, players, currentPlayer, game, onRemov
         </AlertDialogHeader>
         <AlertDialogFooter>
           <AlertDialogCancel>Cancel</AlertDialogCancel>
-          <AlertDialogAction onClick={handleConfirmRemove} className="bg-destructive">Remove</AlertDialogAction>
+          <AlertDialogAction onClick={handleConfirmRemove} className="bg-destructive text-destructive-foreground hover:bg-destructive/90">Remove</AlertDialogAction>
         </AlertDialogFooter>
       </AlertDialogContent>
     </AlertDialog>
@@ -5141,11 +5224,11 @@ const BlockedPaymentDialog: React.FC<BlockedPaymentDialogProps> = ({
 }) => (
   <Dialog open={!!blockedPaymentMessage} onOpenChange={(v: boolean) => { if (!v) setBlockedPaymentMessage(null); }}>
     <DialogContent>
-      <div className="px-4">
+      <div>
         <DialogHeader>
           <DialogTitle>Payment Blocked</DialogTitle>
         </DialogHeader>
-        <div className="mb-4">{blockedPaymentMessage}</div>
+        <div className="my-4 rounded-xl bg-destructive/10 px-4 py-3 text-sm text-foreground ring-1 ring-inset ring-destructive/20">{blockedPaymentMessage}</div>
         <DialogFooter>
           <Button onClick={() => setBlockedPaymentMessage(null)}>OK</Button>
         </DialogFooter>

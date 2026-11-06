@@ -23,6 +23,7 @@ import {
   AlertDialogAction,
   AlertDialogCancel,
 } from "./ui/alert-dialog";
+import { Check, Landmark, Skull } from "lucide-react";
 
 type Player = { id: string; name: string; balance?: number };
 
@@ -104,37 +105,41 @@ export default function BankruptPopup({
       <Dialog open={open} onOpenChange={onOpenChange}>
         <DialogPortal>
           <DialogOverlay />
-          <DialogPrimitive.Content className="fixed left-1/2 top-1/2 z-50 mx-4 w-full max-w-md -translate-x-1/2 -translate-y-1/2 border bg-background p-6 shadow-lg sm:rounded-lg md:w-full">
-            <DialogHeader>
+          <DialogPrimitive.Content className="fixed left-1/2 top-1/2 z-[1000001] w-[calc(100%-2rem)] max-w-md -translate-x-1/2 -translate-y-1/2 rounded-2xl border border-foreground/10 bg-background/90 p-6 shadow-[0_24px_60px_-20px_rgb(0_0_0/0.75),inset_0_1px_0_0_hsl(var(--foreground)/0.06)] backdrop-blur-xl backdrop-saturate-150">
+            <DialogHeader className="items-center sm:items-start">
+              <div className="mb-2 flex h-11 w-11 items-center justify-center rounded-xl bg-destructive/10 text-destructive ring-1 ring-inset ring-destructive/20">
+                <Skull className="h-5 w-5" />
+              </div>
               <DialogTitle>Declare Bankruptcy</DialogTitle>
               <DialogDescription>
                 You're about to declare bankruptcy and enter ghost mode. All of your money (${currentBalance.toLocaleString()}) will be transferred to a player or the bank. This action cannot be undone.
               </DialogDescription>
             </DialogHeader>
 
-            <div className="mt-6 space-y-3">
-              <div className="text-sm font-medium mb-2">Select who receives your money:</div>
+            <div className="mt-6 space-y-2">
+              <div className="text-[11px] font-semibold uppercase tracking-widest text-muted-foreground">Select who receives your money</div>
 
-              <div className="space-y-2 max-h-[400px] overflow-y-auto">
+              <div className="max-h-[min(400px,45vh)] space-y-2 overflow-y-auto overscroll-contain">
                 {/* Bank option — always available */}
                 <div
                   onClick={() => setSelectedId(BANK_SENTINEL)}
-                  className={`p-3 rounded-lg border-2 transition-all cursor-pointer ${
+                  className={`min-h-[48px] cursor-pointer rounded-xl border p-3 transition duration-200 ${
                     selectedId === BANK_SENTINEL
-                      ? "border-primary bg-primary/10"
-                      : "border-border hover:border-primary/50 hover:bg-muted/50"
+                      ? "border-brand/60 bg-brand/10 ring-1 ring-inset ring-brand/30"
+                      : "border-foreground/10 bg-foreground/[0.03] hover:border-brand/40"
                   }`}
                 >
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <div className="font-medium">Bank</div>
-                      <div className="text-sm text-muted-foreground">Money is returned to the bank</div>
+                  <div className="flex items-center justify-between gap-3">
+                    <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-foreground/[0.06] text-muted-foreground">
+                      <Landmark className="h-4 w-4" />
+                    </div>
+                    <div className="min-w-0 flex-1">
+                      <div className="text-sm font-medium">Bank</div>
+                      <div className="text-xs text-muted-foreground">Money is returned to the bank</div>
                     </div>
                     {selectedId === BANK_SENTINEL && (
-                      <div className="h-5 w-5 rounded-full bg-primary flex items-center justify-center">
-                        <svg className="h-3 w-3 text-primary-foreground" fill="none" strokeLinecap="round" strokeLinejoin="round" strokeWidth="3" viewBox="0 0 24 24" stroke="currentColor">
-                          <polyline points="20 6 9 17 4 12" />
-                        </svg>
+                      <div className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-brand text-background">
+                        <Check className="h-3 w-3" strokeWidth={3} />
                       </div>
                     )}
                   </div>
@@ -144,26 +149,24 @@ export default function BankruptPopup({
                   <div
                     key={p.id}
                     onClick={() => setSelectedId(p.id)}
-                    className={`p-3 rounded-lg border-2 transition-all cursor-pointer ${
+                    className={`min-h-[48px] cursor-pointer rounded-xl border p-3 transition duration-200 ${
                       selectedId === p.id
-                        ? "border-primary bg-primary/10"
-                        : "border-border hover:border-primary/50 hover:bg-muted/50"
+                        ? "border-brand/60 bg-brand/10 ring-1 ring-inset ring-brand/30"
+                        : "border-foreground/10 bg-foreground/[0.03] hover:border-brand/40"
                     }`}
                   >
-                    <div className="flex items-center justify-between">
-                      <div>
-                        <div className="font-medium">{p.name}</div>
+                    <div className="flex items-center justify-between gap-3">
+                      <div className="min-w-0 flex-1">
+                        <div className="truncate text-sm font-medium">{p.name}</div>
                         {showBalances && (
-                          <div className="text-sm text-muted-foreground">
+                          <div className="text-xs tabular-nums text-muted-foreground">
                             Current: ${(p.balance ?? 0).toLocaleString()}
                           </div>
                         )}
                       </div>
                       {selectedId === p.id && (
-                        <div className="h-5 w-5 rounded-full bg-primary flex items-center justify-center">
-                          <svg className="h-3 w-3 text-primary-foreground" fill="none" strokeLinecap="round" strokeLinejoin="round" strokeWidth="3" viewBox="0 0 24 24" stroke="currentColor">
-                            <polyline points="20 6 9 17 4 12" />
-                          </svg>
+                        <div className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-brand text-background">
+                          <Check className="h-3 w-3" strokeWidth={3} />
                         </div>
                       )}
                     </div>
@@ -173,15 +176,15 @@ export default function BankruptPopup({
             </div>
             {/* Game stats moved to the BankruptStatus component (shown after declaring bankruptcy) */}
 
-            <DialogFooter className="mt-6 flex gap-3 w-full justify-end">
-              <Button variant="outline" onClick={() => onOpenChange(false)}>
+            <DialogFooter className="mt-6 w-full gap-2 sm:space-x-0">
+              <Button variant="outline" className="h-11 sm:h-10" onClick={() => onOpenChange(false)}>
                 Cancel
               </Button>
               <Button
                 variant="destructive"
                 onClick={handleSubmit}
                 disabled={!selectedId}
-                className="px-4 py-2 ring-2 ring-red-500/10 shadow-sm shadow-red-500/20"
+                className="h-11 sm:h-10"
               >
                 Declare Bankruptcy
               </Button>
@@ -196,14 +199,14 @@ export default function BankruptPopup({
             <AlertDialogTitle>Are you sure?</AlertDialogTitle>
             <AlertDialogDescription className="space-y-2">
               <p>This will: {isBank ? `Return all $${currentBalance.toLocaleString()} to the bank` : `Transfer all $${currentBalance.toLocaleString()} to ${selectedPlayer?.name}`}, put you in ghost mode (spectator), and prevent you from participating in payments.</p>
-                <p className="font-semibold text-destructive mt-4 text-white">This action cannot be undone!</p>
+                <p className="mt-4 rounded-xl bg-destructive/10 px-3 py-2 font-semibold text-destructive ring-1 ring-inset ring-destructive/20">This action cannot be undone!</p>
 
               {/* Stats moved to main bankruptcy dialog */}
             </AlertDialogDescription>
           </AlertDialogHeader>
-          <AlertDialogFooter className="flex gap-3 w-full justify-end">
-            <AlertDialogCancel>Cancel</AlertDialogCancel>
-            <AlertDialogAction onClick={handleConfirm} className="px-4 py-2 bg-destructive hover:bg-destructive/90 text-white">
+          <AlertDialogFooter className="w-full gap-2 sm:space-x-0">
+            <AlertDialogCancel className="mt-0 h-11 sm:h-10">Cancel</AlertDialogCancel>
+            <AlertDialogAction onClick={handleConfirm} className="h-11 bg-destructive text-destructive-foreground hover:bg-destructive/90 sm:h-10">
               Yes, I'm Bankrupt
             </AlertDialogAction>
           </AlertDialogFooter>

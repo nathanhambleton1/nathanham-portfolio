@@ -140,13 +140,14 @@ export function WheelSVG({ rotation, phase }: { rotation: number; phase: string 
         ))}
         <circle cx={cx} cy={cy} r={innerR} fill="none" stroke="hsl(var(--border))" strokeWidth="1.5" />
         <circle cx={cx} cy={cy} r={20} fill="hsl(var(--card))" stroke="hsl(var(--border))" strokeWidth="2" />
-        <circle cx={cx} cy={cy} r={10} fill="hsl(var(--primary))" />
-        <circle cx={cx} cy={cy} r={5} fill="hsl(var(--primary-foreground) / 0.3)" />
+        <circle cx={cx} cy={cy} r={10} fill="hsl(var(--brand))" />
+        <circle cx={cx} cy={cy} r={5} fill="hsl(var(--background) / 0.35)" />
       </g>
       {/* Static pointer */}
       <polygon
         points={`${cx},${cy - outerR - 2} ${cx - 6},${cy - outerR + 10} ${cx + 6},${cy - outerR + 10}`}
-        fill="hsl(var(--primary))"
+        fill="hsl(var(--brand))"
+        style={{ filter: 'drop-shadow(0 0 4px hsl(var(--brand) / 0.6))' }}
       />
     </svg>
   );
@@ -183,10 +184,10 @@ function BettingTable({
   };
   const isResult = (n: number) => resultNum != null && n === resultNum;
 
-  const cellBase = 'flex items-center justify-center text-xs font-bold select-none border border-border transition-all duration-100';
+  const cellBase = 'flex items-center justify-center text-xs font-bold select-none border border-foreground/10 transition-all duration-100';
 
   return (
-    <div className="w-full rounded-lg border border-border overflow-hidden bg-card">
+    <div className="w-full rounded-xl border border-foreground/10 overflow-hidden bg-foreground/[0.03] shadow-[inset_0_1px_0_0_hsl(var(--foreground)/0.06)]">
       {/* Number-bets-not-allowed banner */}
       <div
         className={`overflow-hidden transition-all duration-300 ${showNumberAlert ? 'max-h-10 opacity-100' : 'max-h-0 opacity-0'}`}
@@ -199,12 +200,12 @@ function BettingTable({
       {/* 0 and 00 — display only, not bettable */}
       <div className="flex gap-px p-px">
         {[0, 37].map(n => {
-          const res = isResult(n) ? 'ring-4 ring-primary animate-pulse' : '';
+          const res = isResult(n) ? 'ring-4 ring-brand animate-pulse' : '';
           return (
             <button
               key={n}
               type="button"
-              className={`${cellBase} flex-1 bg-muted/50 text-muted-foreground/60 py-1.5 cursor-not-allowed opacity-60 ${res}`}
+              className={`${cellBase} flex-1 bg-foreground/[0.06] text-muted-foreground/60 py-1.5 cursor-not-allowed opacity-60 ${res}`}
               onClick={() => !disabled && setShowNumberAlert(true)}
             >
               {numLabel(n)}
@@ -221,7 +222,7 @@ function BettingTable({
             const bg = color === 'red'
               ? 'bg-red-700/40 text-white/50'
               : 'bg-neutral-800/40 text-white/50';
-            const res = isResult(n) ? 'ring-4 ring-primary animate-pulse' : '';
+            const res = isResult(n) ? 'ring-4 ring-brand animate-pulse' : '';
             return (
               <button
                 key={`${ri}-${n}`}
@@ -247,18 +248,18 @@ function BettingTable({
           { lbl: 'ODD',   bet: { kind: 'odd' }   as Bet },
           { lbl: '19–36', bet: { kind: 'high' }  as Bet },
         ] as const).map(({ lbl, bet }) => {
-          const sel = isSel(bet) ? 'ring-2 ring-primary scale-105' : '';
+          const sel = isSel(bet) ? 'ring-2 ring-inset ring-brand scale-105 shadow-[0_0_16px_hsl(var(--brand)/0.45)]' : '';
           const bg = lbl === 'RED'
             ? 'bg-red-700 hover:bg-red-600 text-white'
             : lbl === 'BLACK'
             ? 'bg-neutral-800 hover:bg-neutral-700 text-white'
-            : 'bg-muted hover:bg-accent text-foreground';
+            : 'bg-foreground/[0.06] hover:bg-foreground/10 text-foreground';
           return (
             <button
               key={lbl}
               type="button"
               disabled={disabled}
-              className={`${cellBase} py-1.5 text-center text-xs ${bg} ${sel} ${!disabled ? 'cursor-pointer' : 'cursor-default'}`}
+              className={`${cellBase} min-h-[40px] py-1.5 text-center text-[11px] tracking-wide ${bg} ${sel} ${!disabled ? 'cursor-pointer' : 'cursor-default'}`}
               onClick={() => !disabled && handleValidBetSelect(bet)}
             >
               {lbl}
@@ -326,18 +327,19 @@ export default function RoulettePopup({
   return (
     <Dialog open={open} onOpenChange={v => { if (phase === 'spinning') return; onOpenChange(v); }}>
       <DialogContent
-        className="p-0 border border-border overflow-y-auto max-w-md w-full bg-background"
+        className="p-0 overflow-y-auto max-w-md"
         style={{ maxHeight: '92dvh' }}
       >
         {/* Header — sticky so it stays visible while body scrolls */}
-        <div className="sticky top-0 z-10 px-4 pt-4 pb-3 border-b border-border bg-background">
+        <div className="sticky top-0 z-10 px-4 pt-4 pb-3 border-b border-foreground/10 bg-background/80 backdrop-blur-xl">
           <div className="text-center">
-            <div className="text-lg font-bold text-foreground">Roulette</div>
-            <div className="text-sm text-muted-foreground">
+            <div className="text-[11px] font-semibold uppercase tracking-[0.2em] text-muted-foreground"><span className="text-brand">//</span> Gamble</div>
+            <div className="mt-0.5 font-display text-xl font-semibold tracking-tight text-foreground">Roulette</div>
+            <div className="mt-1 text-sm text-muted-foreground">
               Wagering{' '}
-              <span className="font-semibold text-foreground">${amount.toLocaleString()}</span>
+              <span className="font-display font-semibold tabular-nums text-foreground">${amount.toLocaleString()}</span>
               {selected && (
-                <span className="ml-2 text-primary">
+                <span className="ml-2 text-brand">
                   · Win ${winAmt.toLocaleString()} ({payout(selected) - 1}:1)
                 </span>
               )}
@@ -360,20 +362,20 @@ export default function RoulettePopup({
               <p className="text-muted-foreground text-sm">Select a bet below</p>
             )}
             {phase === 'bet' && selected && (
-              <p className="text-foreground font-semibold text-sm">
+              <p className="inline-flex flex-wrap items-center justify-center gap-x-1 rounded-full border border-foreground/10 bg-foreground/[0.03] px-3 py-1 text-xs font-medium text-muted-foreground">
                 Bet:{' '}
-                <span className={selected.kind === 'red' ? 'text-red-400' : selected.kind === 'black' ? 'text-muted-foreground' : 'text-foreground'}>
+                <span className={`font-semibold ${selected.kind === 'red' ? 'text-red-400' : 'text-foreground'}`}>
                   {betLabel(selected)}
                 </span>
                 {' '}· Win ${winAmt.toLocaleString()} or lose nothing
               </p>
             )}
             {phase === 'spinning' && (
-              <p className="text-primary animate-pulse font-semibold text-sm">Spinning...</p>
+              <p className="text-brand animate-pulse font-semibold text-sm">Spinning...</p>
             )}
             {phase === 'result' && resultNum != null && (
               <div>
-                <div className={`text-xl font-bold ${won ? 'text-primary' : 'text-destructive'}`}>
+                <div className={`font-display text-2xl font-bold tracking-tight ${won ? 'text-emerald-500' : 'text-destructive'}`}>
                   {won ? 'You Won!' : 'You Lost!'}
                 </div>
                 <div className="text-sm mt-0.5 text-muted-foreground">
@@ -403,18 +405,18 @@ export default function RoulettePopup({
         </div>
 
         {/* Footer — sticky so it stays visible while body scrolls */}
-        <div className="sticky bottom-0 z-10 px-4 py-3 border-t border-border bg-background">
+        <div className="sticky bottom-0 z-10 px-4 py-3 border-t border-foreground/10 bg-background/80 backdrop-blur-xl">
           {phase === 'bet' && (
             <div className="flex gap-2">
               <Button
                 variant="outline"
-                className="flex-1"
+                className="h-11 flex-1"
                 onClick={() => onOpenChange(false)}
               >
                 Cancel
               </Button>
               <Button
-                className="flex-1 font-bold"
+                className="h-11 flex-1 font-semibold"
                 disabled={!selected}
                 onClick={handleSpin}
               >
@@ -424,7 +426,7 @@ export default function RoulettePopup({
           )}
           {phase === 'result' && (
             <Button
-              className="w-full font-bold"
+              className="h-11 w-full font-semibold"
               variant={won ? 'default' : 'outline'}
               onClick={handleConfirm}
             >

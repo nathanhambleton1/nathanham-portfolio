@@ -294,7 +294,7 @@ function Restore({ action }: { action: ReturnType<typeof useAction> }) {
   };
 
   return (
-    <div style={{ marginTop: 18, paddingTop: 16, borderTop: "1px solid #ecece8" }}>
+    <div style={{ marginTop: 18, paddingTop: 16, borderTop: "1px solid hsl(var(--foreground) / 0.06)" }}>
       <SectionHead title="Restore from a backup" caption="Replaces everything currently stored" />
       <Field label="NexaFi backup (.json)">
         <input ref={fileRef} type="file" accept=".json,application/json" onChange={chooseFile} />

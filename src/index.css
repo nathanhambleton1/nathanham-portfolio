@@ -397,3 +397,18 @@
     animation: scroll-brands 30s linear infinite;
   }
 }
+/* Brand accent: one highlight color per theme (used by the home page). */
+@layer base {
+  :root,
+  .theme-dark {
+    --brand: 189 94% 55%;
+  }
+  .theme-light {
+    --brand: 192 85% 34%;
+  }
+  .theme-red,
+  .theme-blue,
+  .theme-green {
+    --brand: var(--primary);
+  }
+}

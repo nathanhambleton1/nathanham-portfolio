@@ -14,18 +14,7 @@ export default function Finance() {
   return (
     <Suspense
       fallback={
-        <div
-          style={{
-            display: "grid",
-            placeItems: "center",
-            minHeight: "100vh",
-            background: "#f4f4f1",
-            color: "#777871",
-            font: "14px Inter, ui-sans-serif, system-ui, sans-serif",
-          }}
-        >
-          Loading…
-        </div>
+        <div className="grid min-h-[60vh] place-items-center text-sm text-muted-foreground">Loading…</div>
       }
     >
       <FinanceApp />

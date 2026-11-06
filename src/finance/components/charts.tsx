@@ -1,14 +1,9 @@
 // Charts, ported from nexafi/charts.py (Plotly) to Recharts.
 //
-// The palette is NexaFi's own and is kept exactly: charcoal, gold, and three
-// supporting greys. Two deliberate changes from the Python:
+// Colours come from the site theme (see the constants below), so charts
+// follow the theme picker. One deliberate change from the Python:
 //
-//  1. SLOT ORDER. The original order put #8f8e87 next to #b99345, a pair only
-//     ΔE 10.4 apart for normal vision — effectively indistinguishable as
-//     neighbouring slices. Reordering the same five colours so no weak pair is
-//     adjacent lifts the worst neighbouring pair to ΔE 18.5 (17.5 under
-//     protanopia). Same colours, same look, legible slices.
-//  2. LABELS, NOT JUST HOVER. Plotly used textinfo="none", so slice identity
+//  LABELS, NOT JUST HOVER. Plotly used textinfo="none", so slice identity
 //     was carried by colour alone and only a hover revealed it. Gold and pale
 //     gold sit below 3:1 against the card, so each series is now named in a
 //     legend with its value. Nothing is identifiable by colour alone, and the
@@ -23,13 +18,22 @@ import type { ReactNode } from "react";
 import { fmtCompact, fmtMoney, type Decimal } from "../lib/money";
 import { fmtMonthShort, type ISODate } from "../lib/dates";
 
-export const GOLD = "#b99345";
-export const CHARCOAL = "#20211f";
-const GRID = "#ecece8";
-const INK_MUTED = "#777871";
+// Theme-driven: every colour resolves from the site's CSS variables, so the
+// charts follow the theme picker along with the rest of the page. ("GOLD" is
+// the brand accent now; the name is kept so callers did not need to change.)
+export const GOLD = "hsl(var(--brand))";
+export const CHARCOAL = "hsl(var(--foreground) / 0.8)";
+const GRID = "hsl(var(--foreground) / 0.08)";
+const INK_MUTED = "hsl(var(--muted-foreground))";
 
-/** Validated slot order — see the note at the top of this file. */
-export const CATEGORICAL = ["#20211f", "#b99345", "#5f625d", "#d6c393", "#8f8e87"];
+/** Brand first, then alternating foreground/brand tints so neighbours contrast. */
+export const CATEGORICAL = [
+  "hsl(var(--brand))",
+  "hsl(var(--foreground) / 0.85)",
+  "hsl(var(--brand) / 0.45)",
+  "hsl(var(--foreground) / 0.4)",
+  "hsl(var(--foreground) / 0.18)",
+];
 
 const AXIS = {
   stroke: INK_MUTED,
@@ -39,10 +43,11 @@ const AXIS = {
 } as const;
 
 const TOOLTIP_STYLE = {
-  backgroundColor: CHARCOAL,
-  border: "none",
-  borderRadius: 8,
-  color: "white",
+  backgroundColor: "hsl(var(--background) / 0.9)",
+  border: "1px solid hsl(var(--foreground) / 0.1)",
+  borderRadius: 12,
+  backdropFilter: "blur(16px)",
+  color: "hsl(var(--foreground))",
   fontSize: 12,
   padding: "8px 10px",
 } as const;
@@ -50,10 +55,10 @@ const TOOLTIP_STYLE = {
 function tooltipProps(formatter: (value: number) => string) {
   return {
     contentStyle: TOOLTIP_STYLE,
-    itemStyle: { color: "white" },
-    labelStyle: { color: "#bdbdb7", marginBottom: 4 },
+    itemStyle: { color: "hsl(var(--foreground))" },
+    labelStyle: { color: "hsl(var(--muted-foreground))", marginBottom: 4 },
     formatter: (value: number | string) => formatter(Number(value)),
-    cursor: { fill: "rgba(32,33,31,.05)" },
+    cursor: { fill: "hsl(var(--foreground) / 0.04)" },
   };
 }
 
@@ -107,7 +112,7 @@ export function SpendingDonut({ rows }: { rows: CategoryRow[] }) {
             outerRadius="100%"
             paddingAngle={1}
             // A surface-coloured ring is the 2px gap between segments.
-            stroke="#ffffff"
+            stroke="hsl(var(--background))"
             strokeWidth={3}
             isAnimationActive={false}
           >
@@ -230,7 +235,7 @@ export function NetWorthChart({ points }: { points: SnapshotPoint[] }) {
           strokeWidth={2}
           fill="url(#fin-networth-fill)"
           dot={false}
-          activeDot={{ r: 5, stroke: "white", strokeWidth: 2 }}
+          activeDot={{ r: 5, stroke: "hsl(var(--background))", strokeWidth: 2 }}
           isAnimationActive={false}
         />
       </AreaChart>
@@ -260,8 +265,8 @@ export function CashChart({ points }: { points: SnapshotPoint[] }) {
           dataKey="Liquid cash"
           stroke={CHARCOAL}
           strokeWidth={2}
-          dot={{ r: 4, fill: GOLD, stroke: "white", strokeWidth: 2 }}
-          activeDot={{ r: 6, stroke: "white", strokeWidth: 2 }}
+          dot={{ r: 4, fill: GOLD, stroke: "hsl(var(--background))", strokeWidth: 2 }}
+          activeDot={{ r: 6, stroke: "hsl(var(--background))", strokeWidth: 2 }}
           isAnimationActive={false}
         />
       </LineChart>
@@ -311,8 +316,8 @@ export function InvestmentValueChart({ points }: { points: InvestmentPoint[] }) 
           dataKey="Market value"
           stroke={GOLD}
           strokeWidth={2}
-          dot={{ r: 4, fill: GOLD, stroke: "white", strokeWidth: 2 }}
-          activeDot={{ r: 6, stroke: "white", strokeWidth: 2 }}
+          dot={{ r: 4, fill: GOLD, stroke: "hsl(var(--background))", strokeWidth: 2 }}
+          activeDot={{ r: 6, stroke: "hsl(var(--background))", strokeWidth: 2 }}
           isAnimationActive={false}
         />
         <Line
@@ -322,7 +327,7 @@ export function InvestmentValueChart({ points }: { points: InvestmentPoint[] }) 
           strokeWidth={2}
           strokeDasharray="4 3"
           dot={false}
-          activeDot={{ r: 5, stroke: "white", strokeWidth: 2 }}
+          activeDot={{ r: 5, stroke: "hsl(var(--background))", strokeWidth: 2 }}
           isAnimationActive={false}
         />
       </LineChart>

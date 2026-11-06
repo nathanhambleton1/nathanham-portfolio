@@ -21,7 +21,6 @@ import { createClient } from '@supabase/supabase-js';
 import { useNavigate } from "react-router-dom";
 import { toast } from "../components/ui/use-toast";
 import { Toaster } from "../components/ui/toaster";
-import { ThemeSelector } from "../../src/components/ThemeSelector";
 import JoinCreateScreen from "../components/blackjack/JoinCreateScreen";
 import EnterNameScreen from "../components/blackjack/EnterNameScreen";
 import ConfirmSettingsScreen from "../components/blackjack/ConfirmSettingsScreen";
@@ -3070,7 +3069,6 @@ const Blackjack = () => {
                 {settingsOpenSection === 'game' && (
                   <div className="mt-3 px-0">
                     <div className="rounded bg-muted/30 border border-muted p-3 space-y-2">
-                      <ThemeSelector />
 
                       <div className="flex items-center justify-between py-2 px-3 rounded-lg bg-muted/10">
                         <div className="flex-1">
