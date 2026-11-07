@@ -5,7 +5,7 @@ import BankruptPopup from "../components/BankruptPopup";
 import BankruptStatus from "../components/BankruptStatus";
 import SipsLockOverlay from "../components/SipsLockOverlay";
 import SipLeaderboardPopup from "../components/SipLeaderboardPopup";
-import { UserPlus, DollarSign, Users, Percent, Crown, PiggyBank, Clock, Copy, Settings, QrCode, ChevronDown, ChevronLeft, ChevronRight, Info, Eye, EyeOff, Building2, MessagesSquare, LogOut } from "lucide-react";
+import { UserPlus, DollarSign, Users, Percent, Crown, PiggyBank, Clock, Copy, Settings, QrCode, ChevronDown, ChevronLeft, ChevronRight, Info, Eye, EyeOff, Building2, MessagesSquare, LogOut, UserRound } from "lucide-react";
 import { QRCodeSVG } from "qrcode.react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "../components/ui/dialog";
 import CollectPopup from "../components/CollectPopup";
@@ -16,10 +16,13 @@ import TradeTimerControl from "../components/TradeTimerControl";
 import TradeLockOverlay from "../components/TradeLockOverlay";
 import JailLockOverlay from "../components/JailLockOverlay";
 import ActivityLog from "../components/ActivityLog";
+import RestoringGame from "../components/RestoringGame";
+import { PLAYER_SELECT, withLiveAvatars } from "../lib/playerAvatars";
 import PlayerAvatar from "../components/PlayerAvatar";
 import { ColorBand, DeedFan } from "../components/BoardArt";
 import { Board, BoardSpace, BoardLine, WideSpace } from "../components/BoardSpace";
 import { LiveDot } from "../components/LiveDot";
+import HallOfFame from "../components/HallOfFame";
 import { cn } from "../lib/utils";
 import {
   Card,
@@ -44,10 +47,15 @@ import {
   AlertDialogAction,
   AlertDialogCancel,
 } from "../components/ui/alert-dialog";
-import { createClient } from '@supabase/supabase-js';
-import { useNavigate } from "react-router-dom";
+import { drunkSupabase as supabase } from "../lib/drunkSupabase";
+import { useDrunkAccount, patchProfile, signOutAccount } from "../lib/drunkAccount";
+import AccountShell, { HeroLogo } from "../components/account/AccountShell";
+import AccountFlow from "../components/account/AccountFlow";
+import ProfilePanel from "../components/account/ProfilePanel";
+import ProfileStats from "../components/account/ProfileStats";
+import { useLocation, useNavigate } from "react-router-dom";
 import { toast } from "../components/ui/use-toast";
-import { Toaster } from "../components/ui/toaster";
+import { drunkAlert } from "../lib/drunkNotify";
 import useLockBodyScroll from "../hooks/use-lock-body-scroll";
 import {
   initializePlayerStats,
@@ -61,13 +69,8 @@ import {
   trackWentToJail
 } from "../lib/playerStatsTracking";
 
-// Every drunk_users column except `password` (anon is not allowed to read it).
+// Every public drunk_users column (phone/password/auth link are never readable).
 const DRUNK_USER_COLUMNS = 'id, username, first_name, last_name, avatar_url, bio, wins, losses, created_at, total_sips';
-
-// Initialize Supabase client
-const supabaseUrl ='https://kcyrvubzhsphpxfsewii.supabase.co';
-const supabaseAnonKey = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImtjeXJ2dWJ6aHNwaHB4ZnNld2lpIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjMxODAwMTcsImV4cCI6MjA3ODc1NjAxN30.8psClrpif-F1DWj67u2tErnU8-4ZYjw5LvEfRK3oHkI';
-const supabase = createClient(supabaseUrl, supabaseAnonKey);
 
 type Screen = "join-create" | "enter-name" | "confirm-settings" | "select-existing-player" | "home" | "auth" | "profile";
 
@@ -149,13 +152,28 @@ const Drunkopoly = () => {
   const STORAGE_KEY_RECENT = "drunkopoly:recentGames";
   const STORAGE_KEY_SOUND = "drunkopoly:soundEnabled";
 
-  const [screen, setScreen] = useState<Screen>("join-create");
+  // Other Drunkopoly pages (e.g. a player's stats) can open the profile via router state.
+  const location = useLocation();
+  const [screen, setScreen] = useState<Screen>(() =>
+    (location.state as { screen?: Screen } | null)?.screen === 'profile' ? 'profile' : 'join-create',
+  );
   const [gameCode, setGameCode] = useState("");
   const [name, setName] = useState("");
   const [mode, setMode] = useState<"join" | "create" | null>(null);
 
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // True while a saved session (code + name in localStorage) is being restored on
+  // mount. Decided synchronously so the first paint is the loader, not the join
+  // screen. Invite links skip restoring (the invite effect clears the session).
+  const [restoring, setRestoring] = useState<boolean>(() => {
+    try {
+      if (typeof window === 'undefined') return false;
+      const params = new URLSearchParams(window.location.search);
+      if (params.get('invite') || params.get('code')) return false;
+      return !!(localStorage.getItem(STORAGE_KEY_CODE) && localStorage.getItem(STORAGE_KEY_NAME));
+    } catch { return false; }
+  });
   // temporary settings used when creating a new game (strings so inputs can be cleared)
   const [tempInitialBalance, setTempInitialBalance] = useState<string>("1500");
   const [tempPassGoAmount, setTempPassGoAmount] = useState<string>("200");
@@ -263,40 +281,19 @@ const Drunkopoly = () => {
     try { return Number(localStorage.getItem('drunkopoly:commUnlockedUntil') || 0); } catch { return 0; }
   });
 
-  // Simple account state (stored in `drunk_users` table in Supabase)
-  const [accountMode, setAccountMode] = useState<'none'|'signin'|'signup'>('none');
-  const [authUsername, setAuthUsername] = useState('');
-  const [authPassword, setAuthPassword] = useState('');
-  const [authFirstName, setAuthFirstName] = useState('');
-  const [authLastName, setAuthLastName] = useState('');
-  // removed bio input; keep state only if needed later
-  const [authBio, setAuthBio] = useState('');
-  const [authAvatarFile, setAuthAvatarFile] = useState<File | null>(null);
-  const [authAvatarPreview, setAuthAvatarPreview] = useState<string | null>(null);
-  // standalone auth screen mode (used on the dedicated auth screen)
-  const [standaloneAuthMode, setStandaloneAuthMode] = useState<'signin' | 'signup'>('signin');
-  // profile edit state
-  const [profileFirstName, setProfileFirstName] = useState('');
-  const [profileLastName, setProfileLastName] = useState('');
-  const [profileAvatarFile, setProfileAvatarFile] = useState<File | null>(null);
-  const [profileAvatarPreview, setProfileAvatarPreview] = useState<string | null>(null);
-  const [profileSaving, setProfileSaving] = useState(false);
-  const [currentUser, setCurrentUser] = useState<any|null>(() => {
-    try {
-      const raw = typeof window !== 'undefined' ? localStorage.getItem('drunkopoly:authUser') : null;
-      if (raw) {
-        const parsed = JSON.parse(raw);
-        if (parsed && parsed.username) {
-          if ('password' in parsed) {
-            delete parsed.password;
-            localStorage.setItem('drunkopoly:authUser', JSON.stringify(parsed));
-          }
-          return parsed;
-        }
-      }
-    } catch (e) {}
-    return null;
+  // Account (phone number + password, Supabase Auth). See lib/drunkAccount.ts.
+  const account = useDrunkAccount();
+  const currentUser = account.profile;
+  // Guests skip the account gate for this browser session only.
+  const [guestMode, setGuestModeState] = useState<boolean>(() => {
+    try { return sessionStorage.getItem('drunkopoly:guest') === '1'; } catch { return false; }
   });
+  const setGuestMode = (v: boolean) => {
+    setGuestModeState(v);
+    try { if (v) sessionStorage.setItem('drunkopoly:guest', '1'); else sessionStorage.removeItem('drunkopoly:guest'); } catch { /* ignore */ }
+  };
+  // In-game profile / sign-in dialog
+  const [accountDialogOpen, setAccountDialogOpen] = useState(false);
 
   // NOTE: This is NOT a secret. Vite env vars are bundled into the client.
   // Real security must be enforced server-side (Supabase RLS / policies).
@@ -469,7 +466,7 @@ const Drunkopoly = () => {
       // mark online and sync avatar
       const onlineUpdate: any = { is_online: true, last_seen_at: new Date().toISOString() };
       if (currentUser?.avatar_url) onlineUpdate.avatar_url = currentUser.avatar_url;
-      if (currentUser?.id) onlineUpdate.user_id = currentUser.id;
+      if (currentUser?.id && (!p.user_id || p.user_id === currentUser.id)) onlineUpdate.user_id = currentUser.id;
       await supabase.from('players').update(onlineUpdate).eq('id', p.id);
       if (currentUser?.avatar_url) p = { ...p, avatar_url: currentUser.avatar_url };
 
@@ -514,105 +511,10 @@ const Drunkopoly = () => {
     }
   }, []);
 
+  // Stats writes elsewhere patch the cached profile; null signs out.
   const persistAuthUser = (u: any | null) => {
-    try {
-      if (u && 'password' in u) {
-        // never keep the password around client-side (older sessions cached it)
-        const { password: _pw, ...rest } = u;
-        u = rest;
-      }
-      if (!u) {
-        localStorage.removeItem('drunkopoly:authUser');
-        setCurrentUser(null);
-        return;
-      }
-      localStorage.setItem('drunkopoly:authUser', JSON.stringify(u));
-      setCurrentUser(u);
-    } catch (e) { /* ignore */ }
-  };
-
-  const compressImageToBlob = (file: File, maxDim = 128, quality = 0.65): Promise<Blob> =>
-    new Promise((resolve, reject) => {
-      const img = new Image();
-      const url = URL.createObjectURL(file);
-      img.onload = () => {
-        URL.revokeObjectURL(url);
-        // Crop to a centered square then resize to maxDim (or smaller if image is smaller)
-        const srcSide = Math.min(img.width, img.height);
-        const sx = Math.round((img.width - srcSide) / 2);
-        const sy = Math.round((img.height - srcSide) / 2);
-        const outSide = Math.min(maxDim, srcSide);
-        const canvas = document.createElement('canvas');
-        canvas.width = outSide;
-        canvas.height = outSide;
-        const ctx = canvas.getContext('2d');
-        if (!ctx) { reject(new Error('No canvas context')); return; }
-        // draw the centered square portion of the source image into the output square canvas
-        ctx.drawImage(img, sx, sy, srcSide, srcSide, 0, 0, outSide, outSide);
-        canvas.toBlob((blob) => {
-          if (!blob) { reject(new Error('Compression failed')); return; }
-          resolve(blob);
-        }, 'image/jpeg', quality);
-      };
-      img.onerror = () => { URL.revokeObjectURL(url); reject(new Error('Image load failed')); };
-      img.src = url;
-    });
-
-  const uploadAvatar = async (file: File, username: string): Promise<string> => {
-    const blob = await compressImageToBlob(file);
-    const path = `${username.toLowerCase().replace(/[^a-z0-9]/g, '_')}_${Date.now()}.jpg`;
-    const { error } = await supabase.storage.from('avatars').upload(path, blob, { contentType: 'image/jpeg', upsert: true });
-    if (error) throw error;
-    const { data } = supabase.storage.from('avatars').getPublicUrl(path);
-    return data.publicUrl;
-  };
-
-  const signUpUser = async () => {
-    if (!authUsername || !authPassword || !authFirstName) throw new Error('Provide username, password and first name');
-    let avatar_url: string | null = null;
-    if (authAvatarFile) {
-      try { avatar_url = await uploadAvatar(authAvatarFile, authUsername); } catch (e) { /* avatar upload optional */ }
-    }
-    // Password is hashed server-side; the client never reads it back.
-    const { data, error } = await supabase.rpc('drunk_sign_up', {
-      p_username: authUsername,
-      p_password: authPassword,
-      p_first_name: authFirstName,
-      p_last_name: authLastName || null,
-      p_avatar_url: avatar_url,
-    });
-    if (error) throw new Error(error.message);
-    persistAuthUser(data);
-    return data;
-  };
-
-  const signInUser = async () => {
-    if (!authUsername || !authPassword) throw new Error('Please provide username and password');
-    // Verified server-side; raises 'Account not found' / 'Incorrect password'
-    const { data, error } = await supabase.rpc('drunk_sign_in', {
-      p_username: authUsername,
-      p_password: authPassword,
-    });
-    if (error) throw new Error(error.message);
-    persistAuthUser(data);
-    return data;
-  };
-
-  const updateUserProfile = async (opts: { firstName: string; lastName: string; avatarFile?: File | null }) => {
-    if (!currentUser?.id) throw new Error('Not signed in');
-    let avatar_url = currentUser.avatar_url ?? null;
-    if (opts.avatarFile) {
-      avatar_url = await uploadAvatar(opts.avatarFile, currentUser.username);
-    }
-    const updates: any = {
-      first_name: opts.firstName || currentUser.first_name,
-      last_name: opts.lastName || null,
-      avatar_url,
-    };
-    const { data, error } = await supabase.from('drunk_users').update(updates).eq('id', currentUser.id).select(DRUNK_USER_COLUMNS).limit(1).single();
-    if (error) throw error;
-    persistAuthUser(data);
-    return data;
+    if (!u) { void signOutAccount(); return; }
+    patchProfile(u);
   };
 
   // Generate unique game code
@@ -655,12 +557,12 @@ const Drunkopoly = () => {
       // Then get players for that game
       const { data: players, error: pErr } = await supabase
         .from('players')
-        .select('*')
+        .select(PLAYER_SELECT)
         .eq('game_id', game.id)
         .order('created_at', { ascending: true });
       
       if (pErr) throw pErr;
-      return players || [];
+      return withLiveAvatars(players);
     } catch (err) {
       console.error('Get players error:', err);
       return [];
@@ -701,7 +603,7 @@ const Drunkopoly = () => {
       newOrExistingPlayer = existingPlayers[0];
       const rejoinUpdate: any = { is_online: true, last_seen_at: new Date().toISOString() };
       if (currentUser?.avatar_url) rejoinUpdate.avatar_url = currentUser.avatar_url;
-      if (currentUser?.id) rejoinUpdate.user_id = currentUser.id;
+      if (currentUser?.id && (!newOrExistingPlayer.user_id || newOrExistingPlayer.user_id === currentUser.id)) rejoinUpdate.user_id = currentUser.id;
       await supabase.from('players').update(rejoinUpdate).eq('id', newOrExistingPlayer.id);
       if (currentUser?.avatar_url) newOrExistingPlayer = { ...newOrExistingPlayer, avatar_url: currentUser.avatar_url };
     } else {
@@ -1263,7 +1165,7 @@ const Drunkopoly = () => {
       } catch (e) {}
     } catch (err: any) {
       console.error('Collect error:', err);
-      alert(err.message || 'Failed to collect');
+      drunkAlert(err.message || 'Failed to collect');
       throw err;
     }
   };
@@ -1406,7 +1308,7 @@ const Drunkopoly = () => {
           description: err?.message || 'Failed to declare bankruptcy' 
         });
       } catch (e) {
-        alert(err?.message || 'Failed to declare bankruptcy');
+        drunkAlert(err?.message || 'Failed to declare bankruptcy');
       }
       throw err;
     }
@@ -1764,7 +1666,7 @@ const Drunkopoly = () => {
       }
     } catch (err: any) {
       console.error('Start trade timer failed', err);
-      alert(err.message || 'Failed to start timer');
+      drunkAlert(err.message || 'Failed to start timer');
     }
   };
 
@@ -1898,7 +1800,7 @@ const Drunkopoly = () => {
       if (updatedPlayer) setPlayer(updatedPlayer);
     } catch (err: any) {
       console.error('Send to jail failed', err);
-      alert(err.message || 'Failed to send to jail');
+      drunkAlert(err.message || 'Failed to send to jail');
     } finally {
     }
   };
@@ -1911,7 +1813,7 @@ const Drunkopoly = () => {
         toast({ title: 'Insufficient funds', description: "You don't have $50 to pay to get out of jail.", variant: 'destructive' });
       } catch (e) {
         // fallback
-        alert('Insufficient funds to pay $50 to get out of jail');
+        drunkAlert("You don't have $50 to pay your way out of jail.", 'Insufficient funds');
       }
       setInsufficientFundsFlash(true);
       window.setTimeout(() => setInsufficientFundsFlash(false), 900);
@@ -1938,7 +1840,7 @@ const Drunkopoly = () => {
       if (updatedPlayer) setPlayer(updatedPlayer);
     } catch (err: any) {
       console.error('Pay to get out failed', err);
-      alert(err.message || 'Failed to pay to get out of jail');
+      drunkAlert(err.message || 'Failed to pay to get out of jail');
     } finally {
       setPayProcessing(false);
     }
@@ -1972,7 +1874,7 @@ const Drunkopoly = () => {
       } catch (e) { /* ignore logging errors */ }
     } catch (err: any) {
       console.error('Use card failed', err);
-      alert(err.message || 'Failed to use card');
+      drunkAlert(err.message || 'Failed to use card');
       // revert optimistic state
       setPlayer(prevPlayer);
       setPlayersList((prev) => (prev || []).map((p) => (p.id === prevPlayer.id ? prevPlayer : p)));
@@ -2020,7 +1922,7 @@ const Drunkopoly = () => {
       }
     } catch (err: any) {
       console.error('Stop trade timer failed', err);
-      alert(err.message || 'Failed to stop timer');
+      drunkAlert(err.message || 'Failed to stop timer');
     }
   };
 
@@ -2029,6 +1931,7 @@ const Drunkopoly = () => {
     const savedCode = typeof window !== "undefined" ? localStorage.getItem(STORAGE_KEY_CODE) : null;
     const savedName = typeof window !== "undefined" ? localStorage.getItem(STORAGE_KEY_NAME) : null;
     
+    if (!restoring) return;
     if (savedCode && savedName) {
       (async () => {
         setLoading(true);
@@ -2064,6 +1967,7 @@ const Drunkopoly = () => {
             player = existingPlayers[0];
             const restoreUpdate: any = { is_online: true, last_seen_at: new Date().toISOString() };
             if (currentUser?.avatar_url) restoreUpdate.avatar_url = currentUser.avatar_url;
+            if (currentUser?.id && (!player.user_id || player.user_id === currentUser.id)) restoreUpdate.user_id = currentUser.id;
             await supabase.from('players').update(restoreUpdate).eq('id', player.id);
             if (currentUser?.avatar_url) player = { ...player, avatar_url: currentUser.avatar_url };
           } else {
@@ -2092,6 +1996,7 @@ const Drunkopoly = () => {
                 balance: game.initial_balance ?? 0,
                 is_commissioner: isFirstPlayer,
                 avatar_url: currentUser?.avatar_url || null,
+                user_id: currentUser?.id || null,
               }])
               .select()
               .single();
@@ -2122,8 +2027,13 @@ const Drunkopoly = () => {
             }]);
           }
 
+          // Load the player list up front so the board renders fully populated
+          // in one go instead of filling in after it appears.
+          const players = await fetchPlayers(game.code);
+
           setGame(game);
           setPlayer(player);
+          setPlayersList(players);
           setGameCode(game.code);
           setName((savedName ?? '').toUpperCase());
           setScreen("home");
@@ -2133,10 +2043,33 @@ const Drunkopoly = () => {
           localStorage.removeItem(STORAGE_KEY_NAME);
         } finally {
           setLoading(false);
+          setRestoring(false);
         }
       })();
+    } else {
+      setRestoring(false);
     }
   }, []);
+
+  // Keep this device's player linked to the signed-in account, so everyone sees
+  // the account's photo even if the player joined before signing in, signed in
+  // mid-game, or changed their photo. Never takes over a player already linked
+  // to a different account.
+  useEffect(() => {
+    if (screen !== 'home' || !player?.id || !currentUser?.id) return;
+    if (player.user_id && player.user_id !== currentUser.id) return;
+    const wantAvatar = currentUser.avatar_url ?? null;
+    if (player.user_id === currentUser.id && (!wantAvatar || player.avatar_url === wantAvatar)) return;
+    const upd: any = { user_id: currentUser.id };
+    if (wantAvatar) upd.avatar_url = wantAvatar;
+    const playerId = player.id;
+    (async () => {
+      const { error } = await supabase.from('players').update(upd).eq('id', playerId);
+      if (error) { console.error('Avatar link failed', error); return; }
+      setPlayer((prev: any) => (prev && prev.id === playerId ? { ...prev, ...upd } : prev));
+      setPlayersList((prev) => prev.map((x: any) => (x.id === playerId ? { ...x, ...upd } : x)));
+    })();
+  }, [screen, player?.id, player?.user_id, player?.avatar_url, currentUser?.id, currentUser?.avatar_url]);
 
   // Fetch players when game changes
   useEffect(() => {
@@ -2473,16 +2406,8 @@ const Drunkopoly = () => {
     };
   }, [screen, game?.id]);
 
-  // Handle logout: fully clear session (localStorage + supabase auth) and reset state
+  // Leaves the game only — the player's account stays signed in.
   const handleLogoutOfGame = async () => {
-    try {
-      if (supabase && supabase.auth && typeof supabase.auth.signOut === 'function') {
-        await supabase.auth.signOut();
-      }
-    } catch (err) {
-      console.warn('Supabase signOut failed:', err);
-    }
-
     if (typeof window !== 'undefined') {
       try {
         localStorage.removeItem(STORAGE_KEY_CODE);
@@ -2582,26 +2507,69 @@ const Drunkopoly = () => {
     }
   };
 
+  // Restoring a saved session after a refresh: show the dice loader until the
+  // game, player and player list are all in hand, then go straight to the board.
+  if (restoring) {
+    return (
+      <RestoringGame
+        gameCode={(() => { try { return localStorage.getItem(STORAGE_KEY_CODE); } catch { return null; } })()}
+        name={(() => { try { return localStorage.getItem(STORAGE_KEY_NAME); } catch { return null; } })()}
+      />
+    );
+  }
+
+  // ---- Accounts --------------------------------------------------------
+  // Lobby/account screens share the Drunkopoly header + footer. Everyone signs
+  // in with their phone number before playing (guests can opt out per visit).
+  const shellProps = {
+    onOpenProfile: () => setScreen('profile'),
+    onSignIn: () => setGuestMode(false),
+    onSignedOut: () => setScreen('join-create'),
+  };
+  const onLobby = screen !== 'home';
+
+  if (onLobby && !account.ready) {
+    return (
+      <AccountShell {...shellProps}>
+        <Clock className="h-6 w-6 animate-spin text-muted-foreground" aria-label="Loading" />
+      </AccountShell>
+    );
+  }
+
+  if (onLobby && !currentUser && !guestMode) {
+    const joining = mode === 'join' && gameCode && screen !== 'join-create';
+    return (
+      <AccountShell
+        {...shellProps}
+        hideAccount
+        back={screen !== 'join-create'
+          ? { label: 'Back', onClick: () => { setScreen('join-create'); setMode(null); } }
+          : { label: 'Games', onClick: () => navigate('/drunk') }}
+      >
+        <AccountFlow
+          logo
+          eyebrow={joining ? <>Joining <span className="font-mono text-foreground">{gameCode}</span></> : 'Drunkopoly account'}
+          onGuest={() => setGuestMode(true)}
+          onDone={({ kind, firstName }) => {
+            const who = firstName ? `, ${firstName}` : '';
+            toast({
+              title: kind === 'signin' ? `Welcome back${who}!` : kind === 'claimed' ? 'Account moved over' : `Welcome${who}!`,
+              description: kind === 'claimed' ? 'Your old stats, wins and photo are now on this number.' : undefined,
+            });
+          }}
+        />
+      </AccountShell>
+    );
+  }
+
   // Step 1: Join/Create Game
   if (screen === "join-create") {
     return (
-      <div className="min-h-screen overflow-x-hidden bg-gradient-bg flex flex-col items-center justify-center px-4 py-10">
+      <AccountShell {...shellProps} back={{ label: 'Games', onClick: () => navigate('/drunk') }}>
         <div className="relative w-full max-w-md">
-          <button
-            type="button"
-            onClick={() => navigate('/drunk')}
-            className={`relative ${BACK_PILL_CLASS} motion-safe:animate-rise`}
-          >
-            <ChevronLeft className="h-4 w-4" />
-            Games
-          </button>
-          <h1
-            className="mt-8 pb-2 font-display text-5xl font-bold leading-[0.95] tracking-tight text-foreground sm:text-6xl motion-safe:animate-rise"
-            style={{ animationDelay: '140ms' }}
-          >
-            Drunkopoly
+          <h1 className="motion-safe:animate-rise" style={{ animationDelay: '140ms' }}>
+            <HeroLogo className="w-full max-w-md" />
           </h1>
-          <ColorBand className="mt-4 h-1 max-w-[16rem] motion-safe:animate-rise" style={{ animationDelay: '175ms' }} />
         </div>
         <Card className="mt-8 w-full max-w-md motion-safe:animate-rise" style={{ animationDelay: '210ms' }}>
           <CardHeader>
@@ -2614,37 +2582,6 @@ const Drunkopoly = () => {
                   Join an existing game or create a new one to get started.
                 </CardDescription>
               </div>
-              <button
-                type="button"
-                aria-label={currentUser ? 'View profile' : 'Sign in'}
-                onClick={() => {
-                  if (currentUser) {
-                    setProfileFirstName(currentUser.first_name || '');
-                    setProfileLastName(currentUser.last_name || '');
-                    setProfileAvatarFile(null);
-                    setProfileAvatarPreview(null);
-                    // Refresh user record so stats (total_sips, wins, losses) are current
-                    supabase.from('drunk_users').select(DRUNK_USER_COLUMNS).eq('id', currentUser.id).limit(1).single()
-                      .then(({ data }) => { if (data) persistAuthUser(data); })
-                      .catch(() => {});
-                    setScreen('profile');
-                  } else {
-                    setStandaloneAuthMode('signin');
-                    setAuthUsername('');
-                    setAuthPassword('');
-                    setScreen('auth');
-                  }
-                }}
-                className="shrink-0 -m-1 p-1 rounded-full focus:outline-none focus-visible:ring-2 focus-visible:ring-brand"
-              >
-                {currentUser ? (
-                  <PlayerAvatar player={currentUser} size="md" />
-                ) : (
-                  <div className="w-9 h-9 rounded-full border border-foreground/10 bg-foreground/[0.03] flex items-center justify-center text-muted-foreground transition-colors hover:border-brand/40 hover:text-foreground">
-                    <Users className="w-4 h-4" />
-                  </div>
-                )}
-              </button>
             </div>
           </CardHeader>
           <CardContent>
@@ -2729,253 +2666,29 @@ const Drunkopoly = () => {
             </div>
           </CardContent>
         </Card>
-      </div>
+        <HallOfFame supabase={supabase} className="mt-14 max-w-md" />
+      </AccountShell>
     );
   }
 
-  // Auth screen — standalone sign-in / sign-up for users who aren't logged in
-  if (screen === 'auth') {
-    return (
-      <div className="min-h-screen bg-gradient-bg flex flex-col items-center justify-center px-4 py-10">
-        <LobbyHero
-          onBack={() => setScreen('join-create')}
-          eyebrow="Drunkopoly account"
-          title={standaloneAuthMode === 'signin' ? 'Welcome back' : 'Join the table'}
-        />
-        <Card className="mt-8 w-full max-w-md motion-safe:animate-rise" style={{ animationDelay: '210ms' }}>
-          <CardBand />
-          <CardHeader className="pb-4">
-            <div className="flex gap-1 rounded-xl border border-foreground/10 bg-foreground/[0.03] p-1">
-              <button
-                type="button"
-                className={`flex-1 min-h-[40px] rounded-lg text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand ${standaloneAuthMode === 'signin' ? 'bg-foreground/[0.08] text-foreground shadow-[inset_0_1px_0_0_hsl(var(--foreground)/0.08)]' : 'text-muted-foreground hover:text-foreground'}`}
-                onClick={() => setStandaloneAuthMode('signin')}
-              >Sign In</button>
-              <button
-                type="button"
-                className={`flex-1 min-h-[40px] rounded-lg text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand ${standaloneAuthMode === 'signup' ? 'bg-foreground/[0.08] text-foreground shadow-[inset_0_1px_0_0_hsl(var(--foreground)/0.08)]' : 'text-muted-foreground hover:text-foreground'}`}
-                onClick={() => setStandaloneAuthMode('signup')}
-              >Create Account</button>
-            </div>
-          </CardHeader>
-          <CardContent>
-            <div className="space-y-3">
-              {standaloneAuthMode === 'signin' ? (
-                <>
-                  <Input placeholder="Username" value={authUsername} onChange={(e) => setAuthUsername(e.target.value)} autoFocus />
-                  <Input placeholder="Password" type="password" value={authPassword} onChange={(e) => setAuthPassword(e.target.value)} />
-                  <Button
-                    className="w-full"
-                    disabled={loading || !authUsername || !authPassword}
-                    onClick={async () => {
-                      setLoading(true);
-                      setError(null);
-                      try {
-                        const u = await signInUser();
-                        setAuthUsername('');
-                        setAuthPassword('');
-                        toast({ title: 'Signed in', description: `Welcome back, ${u.first_name || u.username}!` });
-                        setScreen('join-create');
-                      } catch (e: any) {
-                        setError(e.message || 'Sign in failed');
-                      } finally { setLoading(false); }
-                    }}
-                  >{loading ? 'Please wait…' : 'Sign In'}</Button>
-                  {error && <div className="rounded-xl bg-destructive/10 px-3 py-2 text-sm text-destructive ring-1 ring-inset ring-destructive/20">{error}</div>}
-                  <div className="text-center text-sm text-muted-foreground pt-1">
-                    No account?{' '}
-                    <button type="button" className="font-medium text-brand underline-offset-4 hover:underline" onClick={() => { setError(null); setStandaloneAuthMode('signup'); }}>
-                      Create one
-                    </button>
-                  </div>
-                </>
-              ) : (
-                <>
-                  <Input placeholder="Username" value={authUsername} onChange={(e) => setAuthUsername(e.target.value)} autoFocus />
-                  <Input placeholder="Password" type="password" value={authPassword} onChange={(e) => setAuthPassword(e.target.value)} />
-                  <Input placeholder="First name" value={authFirstName} onChange={(e) => setAuthFirstName(e.target.value)} />
-                  <Input placeholder="Last name (optional)" value={authLastName} onChange={(e) => setAuthLastName(e.target.value)} />
-                  <div>
-                    <label className={`${META_LABEL_CLASS} mb-2 block`}>Profile picture (optional)</label>
-                    <div className="flex items-center gap-3">
-                      {authAvatarPreview && (
-                        <img src={authAvatarPreview} alt="Preview" className="w-10 h-10 rounded-full object-cover shrink-0 ring-1 ring-foreground/10" />
-                      )}
-                      <Input
-                        type="file"
-                        accept="image/*"
-                        className="text-sm"
-                        onChange={(e) => {
-                          const f = e.target.files?.[0] ?? null;
-                          setAuthAvatarFile(f);
-                          setAuthAvatarPreview(f ? URL.createObjectURL(f) : null);
-                        }}
-                      />
-                    </div>
-                  </div>
-                  <Button
-                    className="w-full"
-                    disabled={loading || !authUsername || !authPassword || !authFirstName}
-                    onClick={async () => {
-                      setLoading(true);
-                      setError(null);
-                      try {
-                        const u = await signUpUser();
-                        setAuthUsername(''); setAuthPassword(''); setAuthFirstName(''); setAuthLastName('');
-                        setAuthAvatarFile(null); setAuthAvatarPreview(null);
-                        setAccountMode('none');
-                        toast({ title: 'Account created', description: `Welcome, ${u.first_name || u.username}!` });
-                        setScreen('join-create');
-                      } catch (e: any) {
-                        setError(e.message || 'Sign up failed');
-                      } finally { setLoading(false); }
-                    }}
-                  >{loading ? 'Please wait…' : 'Create Account'}</Button>
-                  {error && <div className="rounded-xl bg-destructive/10 px-3 py-2 text-sm text-destructive ring-1 ring-inset ring-destructive/20">{error}</div>}
-                  <div className="text-center text-sm text-muted-foreground pt-1">
-                    Already have an account?{' '}
-                    <button type="button" className="font-medium text-brand underline-offset-4 hover:underline" onClick={() => { setError(null); setStandaloneAuthMode('signin'); }}>
-                      Sign in
-                    </button>
-                  </div>
-                </>
-              )}
-            </div>
-          </CardContent>
-        </Card>
-      </div>
-    );
-  }
-
-  // Profile screen — manage name, avatar, view stats
+  // Profile screen — the signed-in account, inside the lobby shell
   if (screen === 'profile' && currentUser) {
     return (
-      <div className="min-h-screen bg-gradient-bg flex flex-col items-center justify-center px-4 py-10">
+      <AccountShell {...shellProps}>
         <LobbyHero
           onBack={() => setScreen('join-create')}
           eyebrow={`@${currentUser.username}`}
-          title="Profile"
+          title="Your profile"
         />
-        <Card className="mt-8 w-full max-w-md motion-safe:animate-rise" style={{ animationDelay: '210ms' }}>
-          <CardBand />
-          <CardHeader>
-            <SectionLabel>Account</SectionLabel>
-            <CardDescription className="mt-2">Manage your account details.</CardDescription>
-          </CardHeader>
-          <CardContent>
-            <div className="space-y-6">
-              {/* Avatar */}
-              <div className="flex flex-col items-center gap-3">
-                {profileAvatarPreview ? (
-                  <img src={profileAvatarPreview} alt="Preview" className="w-20 h-20 rounded-full object-cover ring-2 ring-brand/30" />
-                ) : (
-                  <PlayerAvatar player={{ name: currentUser.first_name || currentUser.username, avatar_url: currentUser.avatar_url }} size="xl" />
-                )}
-                <label className="inline-flex min-h-[40px] cursor-pointer items-center rounded-full border border-foreground/10 bg-foreground/[0.03] px-4 text-xs text-muted-foreground transition-colors hover:border-brand/40 hover:text-foreground focus-within:ring-2 focus-within:ring-brand">
-                  Change photo
-                  <input
-                    type="file"
-                    accept="image/*"
-                    className="sr-only"
-                    onChange={(e) => {
-                      const f = e.target.files?.[0] ?? null;
-                      setProfileAvatarFile(f);
-                      setProfileAvatarPreview(f ? URL.createObjectURL(f) : null);
-                    }}
-                  />
-                </label>
-              </div>
-
-              {/* Read-only username */}
-              <div>
-                <label className={`${META_LABEL_CLASS} block mb-2`}>Username</label>
-                <div className={`${INNER_ROW_CLASS} px-3 py-2.5 font-mono text-sm text-muted-foreground select-all`}>
-                  {currentUser.username}
-                </div>
-              </div>
-
-              {/* Editable name fields */}
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className={`${META_LABEL_CLASS} block mb-2`}>First name</label>
-                  <Input value={profileFirstName} onChange={(e) => setProfileFirstName(e.target.value)} placeholder="First name" />
-                </div>
-                <div>
-                  <label className={`${META_LABEL_CLASS} block mb-2`}>Last name</label>
-                  <Input value={profileLastName} onChange={(e) => setProfileLastName(e.target.value)} placeholder="Last name" />
-                </div>
-              </div>
-
-              {/* Stats */}
-              <div>
-                <SectionLabel className="mb-3">Record</SectionLabel>
-                <div className={`${INNER_ROW_CLASS} overflow-hidden`}>
-                  <div className="flex gap-3 p-4">
-                    <div className="flex-1 text-center">
-                      <div className="font-display text-2xl font-bold tracking-tight text-brand">{currentUser.wins ?? 0}</div>
-                      <div className={`${META_LABEL_CLASS} mt-1`}>Wins</div>
-                    </div>
-                    <div className="w-px bg-foreground/10" />
-                    <div className="flex-1 text-center">
-                      <div className="font-display text-2xl font-bold tracking-tight">{currentUser.losses ?? 0}</div>
-                      <div className={`${META_LABEL_CLASS} mt-1`}>Losses</div>
-                    </div>
-                    <div className="w-px bg-foreground/10" />
-                    <div className="flex-1 text-center">
-                      <div className="font-display text-2xl font-bold tracking-tight">
-                        {(currentUser.wins ?? 0) + (currentUser.losses ?? 0) > 0
-                          ? Math.round(((currentUser.wins ?? 0) / ((currentUser.wins ?? 0) + (currentUser.losses ?? 0))) * 100)
-                          : 0}%
-                      </div>
-                      <div className={`${META_LABEL_CLASS} mt-1`}>Win rate</div>
-                    </div>
-                  </div>
-                  <div className="h-px bg-foreground/10" />
-                  <div className="flex items-center justify-center gap-2 py-3 px-4">
-                    <div className="font-display text-2xl font-bold tracking-tight text-amber-500">{(currentUser.total_sips ?? 0).toLocaleString()}</div>
-                    <div className={META_LABEL_CLASS}>Total sips all time</div>
-                  </div>
-                </div>
-              </div>
-
-              {/* Save */}
-              <Button
-                className="w-full"
-                disabled={profileSaving}
-                onClick={async () => {
-                  setProfileSaving(true);
-                  try {
-                    await updateUserProfile({ firstName: profileFirstName, lastName: profileLastName, avatarFile: profileAvatarFile });
-                    setProfileAvatarFile(null);
-                    setProfileAvatarPreview(null);
-                    toast({ title: 'Profile updated' });
-                  } catch (e: any) {
-                    toast({ title: 'Save failed', description: e.message || 'Unable to save', variant: 'destructive' });
-                  } finally { setProfileSaving(false); }
-                }}
-              >{profileSaving ? 'Saving…' : 'Save Changes'}</Button>
-
-              {/* Sign out */}
-              <Button
-                variant="ghost"
-                className="w-full -mt-3 text-destructive hover:bg-destructive/10 hover:text-destructive"
-                onClick={() => {
-                  persistAuthUser(null);
-                  toast({ title: 'Signed out' });
-                  setScreen('join-create');
-                }}
-              >Sign Out</Button>
-            </div>
-          </CardContent>
-        </Card>
-      </div>
+        <ProfileStats onSignedOut={() => setScreen('join-create')} />
+      </AccountShell>
     );
   }
 
   // Step 2: Enter Name
   if (screen === 'select-existing-player' && recentPlayers) {
     return (
-      <div className="min-h-screen bg-gradient-bg flex flex-col items-center justify-center px-4 py-10">
+      <AccountShell {...shellProps}>
         <LobbyHero
           eyebrow={<>Game <span className="font-mono text-foreground">{gameCode}</span></>}
           title="Who are you?"
@@ -2999,264 +2712,128 @@ const Drunkopoly = () => {
             </div>
           </CardContent>
         </Card>
-      </div>
+      </AccountShell>
     );
   }
   if (screen === "enter-name") {
+    const signedInName = currentUser ? String(currentUser.first_name || currentUser.username || '').toUpperCase() : '';
+    const continueSignedIn = async () => {
+      const preferred = signedInName.replace(/[^A-Z ]+/g, '').slice(0, 15) || 'PLAYER';
+      setName(preferred);
+      if (mode === 'create') {
+        setScreen('confirm-settings');
+        return;
+      }
+      setError(null);
+      setLoading(true);
+      try {
+        await joinGameWithName(preferred);
+      } catch (e: any) {
+        console.warn('Join failed', e);
+        setError(e?.message || 'Unable to join');
+      } finally {
+        setLoading(false);
+      }
+    };
     return (
-      <div className="min-h-screen bg-gradient-bg flex flex-col items-center justify-center px-4 py-10">
-        <div className="w-full max-w-md">
-          <Button
-            variant="ghost"
-            className={`${BACK_PILL_CLASS} h-auto motion-safe:animate-rise`}
-            onClick={() => {
-              // If user is in sign-in/signup mode, treat Back as closing that mode.
-              if (accountMode === 'signin' || accountMode === 'signup') {
-                setAccountMode('none');
-                return;
-              }
-              // Otherwise go back to join/create screen and clear create mode.
-              setScreen('join-create');
-              setMode(null);
-            }}
-            aria-label="Back to games"
-          >
-            <ChevronLeft className="h-4 w-4" />
-            Back
-          </Button>
-          <p
-            className="mt-8 flex items-center gap-2 text-xs uppercase tracking-[0.2em] text-muted-foreground motion-safe:animate-rise"
-            style={{ animationDelay: '70ms' }}
-          >
-            <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-foreground/50" />
-            {mode === "create" ? 'New game · you host' : <>Joining <span className="font-mono text-foreground">{gameCode}</span></>}
-          </p>
-          <h1
-            className="mt-3 pb-2 font-display text-4xl font-bold leading-[0.95] tracking-tight text-foreground sm:text-5xl motion-safe:animate-rise"
-            style={{ animationDelay: '140ms' }}
-          >
-            {accountMode === 'signin' ? 'Sign in' : accountMode === 'signup' ? 'New account' : 'Who’s playing?'}
-          </h1>
-        </div>
+      <AccountShell {...shellProps}>
+        <LobbyHero
+          onBack={() => { setScreen('join-create'); setMode(null); }}
+          backLabel="Back"
+          eyebrow={mode === "create" ? 'New game · you host' : <>Joining <span className="font-mono text-foreground">{gameCode}</span></>}
+          title="Who’s playing?"
+        />
         <Card className="mt-8 w-full max-w-md motion-safe:animate-rise" style={{ animationDelay: '210ms' }}>
           <CardBand />
           <CardHeader>
-            <div className="flex items-start justify-between w-full">
-              <div>
-                <SectionLabel>
-                  {accountMode === 'signin' ? 'Sign In' : accountMode === 'signup' ? 'Create Account' : currentUser ? 'Confirm Your Name' : 'Enter Your Name'}
-                </SectionLabel>
-                <CardDescription className="mt-2">
-                  {accountMode === 'signin' ? 'Enter your username and password to sign in.' : accountMode === 'signup' ? 'Create an account to save your profile and stats.' : currentUser ? `Signed in as ${(currentUser.first_name || currentUser.username)} — press Back to change.` : (mode === "create" ? "Create a new game and become the host." : `Joining game: ${gameCode}`)}
-                </CardDescription>
-              </div>
-
-              {/* avatar intentionally only shown inline in the signed-in banner */}
-            </div>
+            <SectionLabel>{currentUser ? 'Confirm your seat' : 'Enter your name'}</SectionLabel>
+            <CardDescription className="mt-2">
+              {currentUser
+                ? (mode === "create" ? "You’ll host this game." : `You’re joining game ${gameCode}.`)
+                : (mode === "create" ? "Create a new game and become the host." : `Joining game: ${gameCode}`)}
+            </CardDescription>
           </CardHeader>
           <CardContent>
-            <form
-              className="space-y-4"
-              onSubmit={async (e) => {
-                e.preventDefault();
-                const cleaned = (name ?? '').trim();
-                if (!cleaned) return;
-                // Validate: only letters and spaces, 1-15 chars
-                if (!/^[A-Z ]{1,15}$/.test(cleaned)) {
-                  setError('Name must be letters and spaces only (max 15 characters)');
-                  return;
-                }
-                setError(null);
-                setLoading(true);
-                try {
+            {currentUser ? (
+              <div className="space-y-4">
+                <button
+                  type="button"
+                  onClick={() => setScreen('profile')}
+                  className="flex w-full items-center gap-3 rounded-xl border border-foreground/10 bg-foreground/[0.03] p-3 text-left shadow-[inset_0_1px_0_0_hsl(var(--foreground)/0.06)] transition-colors hover:border-brand/40"
+                >
+                  <PlayerAvatar player={currentUser} size="lg" />
+                  <div className="min-w-0 flex-1">
+                    <div className="truncate font-display font-semibold tracking-tight">
+                      {(currentUser.first_name || currentUser.username)}{currentUser.last_name ? ` ${currentUser.last_name}` : ''}
+                    </div>
+                    <div className="truncate font-mono text-xs text-muted-foreground">@{currentUser.username}</div>
+                  </div>
+                  <ChevronRight className="h-4 w-4 text-muted-foreground" />
+                </button>
+                <Button className="w-full py-4 text-base font-semibold" size="lg" type="button" disabled={loading} onClick={continueSignedIn}>
+                  {loading ? 'Please wait...' : `Continue as ${currentUser.first_name || currentUser.username}`}
+                </Button>
+                {error && <div className="rounded-xl bg-destructive/10 px-3 py-2 text-sm text-destructive ring-1 ring-inset ring-destructive/20">{error}</div>}
+                <button
+                  type="button"
+                  onClick={async () => { await signOutAccount(); toast({ title: 'Signed out' }); }}
+                  className="block w-full text-center text-sm text-muted-foreground underline-offset-4 hover:text-foreground hover:underline"
+                >
+                  Not you? Switch account
+                </button>
+              </div>
+            ) : (
+              <form
+                className="space-y-4"
+                onSubmit={async (e) => {
+                  e.preventDefault();
+                  const cleaned = (name ?? '').trim();
+                  if (!cleaned) return;
+                  if (!/^[A-Z ]{1,15}$/.test(cleaned)) {
+                    setError('Name must be letters and spaces only (max 15 characters)');
+                    return;
+                  }
+                  setError(null);
                   if (mode === "create") {
-                    // go to confirm settings step before creating the game
-                    setLoading(false);
                     setScreen("confirm-settings");
                     return;
-                  } else {
-                    // Join using helper
-                    await joinGameWithName(cleaned);
                   }
-                } catch (err: any) {
-                  console.error("Join/Create error:", err);
-                  setError(err.message || "Unexpected error");
-                } finally {
-                  setLoading(false);
-                }
-              }}
-            >
-              {!(accountMode === 'signin' || accountMode === 'signup' || currentUser) && (
+                  setLoading(true);
+                  try {
+                    await joinGameWithName(cleaned);
+                  } catch (err: any) {
+                    console.error("Join error:", err);
+                    setError(err.message || "Unexpected error");
+                  } finally {
+                    setLoading(false);
+                  }
+                }}
+              >
                 <Input
                   placeholder="Your name"
                   value={name}
                   onChange={(e) => {
-                    const raw = e.target.value ?? '';
-                    const upper = raw.toUpperCase();
-                    let filtered = upper.replace(/[^A-Z ]+/g, '');
-                    if (filtered.length > 10) filtered = filtered.slice(0, 10);
+                    const filtered = (e.target.value ?? '').toUpperCase().replace(/[^A-Z ]+/g, '').slice(0, 10);
                     setName(filtered);
                   }}
                   maxLength={10}
                   autoFocus
                 />
-              )}
-              {/* Signed-in banner: only show when not in signin/signup mode */}
-              {currentUser && accountMode === 'none' ? (
-                <div className="flex flex-col sm:flex-row items-start sm:items-center gap-3 p-3 rounded-xl border border-foreground/10 bg-foreground/[0.03] shadow-[inset_0_1px_0_0_hsl(var(--foreground)/0.06)]">
-                  <PlayerAvatar player={currentUser} size="md" />
-                  <div className="flex-1">
-                    <div className="font-display font-semibold tracking-tight">Signed in as {(currentUser.first_name || currentUser.username)}{currentUser.last_name ? ` ${currentUser.last_name}` : ''}</div>
-                    <div className="font-mono text-xs text-muted-foreground">{currentUser.username}</div>
-                  </div>
-                  {/* actions moved below: continue + sign out shown in the main action area */}
+                <Button className="w-full" type="submit" disabled={!/^[A-Z ]{1,10}$/.test((name || '').trim()) || loading}>
+                  {loading ? "Please wait..." : "Continue as guest"}
+                </Button>
+                {error && <div className="rounded-xl bg-destructive/10 px-3 py-2 text-sm text-destructive ring-1 ring-inset ring-destructive/20">{error}</div>}
+                <div className="rounded-xl border border-foreground/10 bg-foreground/[0.03] p-3 text-sm text-muted-foreground">
+                  Guests don’t keep stats, wins or a photo.{' '}
+                  <button type="button" onClick={() => setGuestMode(false)} className="font-medium text-foreground underline-offset-4 hover:underline">
+                    Sign in with your phone number
+                  </button>
                 </div>
-              ) : (
-                <div className="pt-2">
-                  <div className="flex flex-col sm:flex-row gap-3 mb-3">
-                    {!(accountMode === 'signin' || accountMode === 'signup') && (
-                      <>
-                        <Button
-                          className={`w-full sm:flex-1 justify-center py-2`}
-                          variant={'outline'}
-                          onClick={() => setAccountMode('signin')}
-                        >
-                          <Users className="mr-2 h-4 w-4" />
-                          Sign In
-                        </Button>
-
-                        <Button
-                          className={`w-full sm:flex-1 justify-center py-2`}
-                          variant={'outline'}
-                          onClick={() => setAccountMode('signup')}
-                        >
-                          <UserPlus className="mr-2 h-4 w-4" />
-                          Create Account
-                        </Button>
-                      </>
-                    )}
-                  </div>
-
-                  {accountMode === 'signin' && (
-                    <div className="space-y-2">
-                      <Input placeholder="Username" value={authUsername} onChange={(e) => setAuthUsername(e.target.value)} />
-                      <Input placeholder="Password" type="password" value={authPassword} onChange={(e) => setAuthPassword(e.target.value)} />
-                      <div className="flex gap-2">
-                        <Button onClick={async () => {
-                          setLoading(true);
-                          try {
-                            const u = await signInUser();
-                            setAccountMode('none');
-                            setAuthUsername('');
-                            setAuthPassword('');
-                            toast({ title: 'Signed in', description: `Welcome back ${u.first_name || u.username}` });
-                            const preferred = (u.first_name || u.username || '').toString().toUpperCase();
-                            setName(preferred);
-                            await joinGameWithName(preferred);
-                          } catch (e: any) {
-                            toast({ title: 'Sign in failed', description: e.message || 'Unable to sign in' });
-                          } finally { setLoading(false); }
-                        }} className="w-full">Sign In & Join</Button>
-                      </div>
-                      
-                    </div>
-                  )}
-
-                  {accountMode === 'signup' && (
-                    <div className="space-y-2">
-                      <Input placeholder="Username" value={authUsername} onChange={(e) => setAuthUsername(e.target.value)} />
-                      <Input placeholder="Password" type="password" value={authPassword} onChange={(e) => setAuthPassword(e.target.value)} />
-                      <Input placeholder="First name" value={authFirstName} onChange={(e) => setAuthFirstName(e.target.value)} />
-                      <Input placeholder="Last name" value={authLastName} onChange={(e) => setAuthLastName(e.target.value)} />
-                      <div>
-                        <label className={`${META_LABEL_CLASS} mb-2 block`}>Profile picture (optional)</label>
-                        <div className="flex items-center gap-3">
-                          {authAvatarPreview && (
-                            <img src={authAvatarPreview} alt="Preview" className="w-10 h-10 rounded-full object-cover shrink-0 ring-1 ring-foreground/10" />
-                          )}
-                          <Input
-                            type="file"
-                            accept="image/*"
-                            className="text-sm"
-                            onChange={(e) => {
-                              const f = e.target.files?.[0] ?? null;
-                              setAuthAvatarFile(f);
-                              if (f) {
-                                const prev = URL.createObjectURL(f);
-                                setAuthAvatarPreview(prev);
-                              } else {
-                                setAuthAvatarPreview(null);
-                              }
-                            }}
-                          />
-                        </div>
-                      </div>
-
-                      <div className="flex gap-2">
-                        <Button onClick={async () => {
-                          setLoading(true);
-                          try {
-                            const u = await signUpUser();
-                            setAccountMode('none');
-                            setAuthUsername('');
-                            setAuthPassword('');
-                            setAuthFirstName('');
-                            setAuthLastName('');
-                            setAuthAvatarFile(null);
-                            setAuthAvatarPreview(null);
-                            toast({ title: 'Account created', description: `Welcome ${u.first_name || u.username}` });
-                            const preferred = (u.first_name || u.username || '').toString().toUpperCase();
-                            setName(preferred);
-                            await joinGameWithName(preferred);
-                          } catch (e: any) {
-                            toast({ title: 'Create failed', description: e.message || 'Unable to create account' });
-                          } finally { setLoading(false); }
-                        }} className="w-full">Create & Join</Button>
-                      </div>
-                      
-                    </div>
-                  )}
-                </div>
-              )}
-              <div className="flex flex-col gap-2">
-                {accountMode === 'none' && (
-                  currentUser ? (
-                    <div className="flex flex-col sm:flex-row gap-2">
-                      <Button className="w-full sm:flex-1" type="button" onClick={async () => {
-                        const preferred = (currentUser.first_name || currentUser.username || '').toString().toUpperCase();
-                        setName(preferred);
-                        // If user is creating a new game, go to confirm settings instead of joining
-                        if (mode === 'create') {
-                          setScreen('confirm-settings');
-                          return;
-                        }
-                        setLoading(true);
-                        try {
-                          await joinGameWithName(preferred);
-                        } catch (e) { console.warn('Join failed', e); }
-                        setLoading(false);
-                      }}>
-                        {loading ? 'Please wait...' : `Continue as ${((currentUser.first_name || currentUser.username)||'You')}`}
-                      </Button>
-                      <Button variant="ghost" className="w-full sm:w-auto sm:flex-1" onClick={() => { persistAuthUser(null); toast({ title: 'Signed out' }); }}>
-                        Sign Out
-                      </Button>
-                    </div>
-                  ) : (
-                    <Button className="w-full" type="submit" disabled={!/^[A-Z ]{1,10}$/.test((name||'').trim()) || loading}>
-                      {loading ? "Please wait..." : "Continue"}
-                    </Button>
-                  )
-                )}
-                {error && accountMode === 'none' && <div className="rounded-xl bg-destructive/10 px-3 py-2 text-sm text-destructive ring-1 ring-inset ring-destructive/20">{error}</div>}
-                {accountMode === 'none' && !(currentUser) && name.length > 10 && (
-                  <div className="rounded-xl bg-destructive/10 px-3 py-2 text-sm text-destructive ring-1 ring-inset ring-destructive/20">Name must be 10 characters or less.</div>
-                )}
-              </div>
-            </form>
+              </form>
+            )}
           </CardContent>
         </Card>
-      </div>
+      </AccountShell>
     );
   }
 
@@ -3267,7 +2844,7 @@ const Drunkopoly = () => {
     const canCreate = isNonNegativeInteger(tempInitialBalance) && isNonNegativeInteger(tempPassGoAmount) && isNonNegativeInteger(tempFreeParkingBalance);
 
     return (
-      <div className="min-h-screen bg-gradient-bg flex flex-col items-center justify-center px-4 py-10">
+      <AccountShell {...shellProps}>
         <div className="w-full max-w-md">
           <Button variant="ghost" className={`${BACK_PILL_CLASS} h-auto motion-safe:animate-rise`} onClick={() => { setScreen('enter-name'); }} aria-label="Back to name">
             <ChevronLeft className="h-4 w-4" />
@@ -3462,7 +3039,7 @@ const Drunkopoly = () => {
             </form>
           </CardContent>
         </Card>
-      </div>
+      </AccountShell>
     );
   }
 
@@ -3478,7 +3055,31 @@ const Drunkopoly = () => {
   };
   return (
     <div className="min-h-screen bg-gradient-bg flex flex-col" style={sipsOverlayOpen ? { paddingBottom: `${110 + Math.min(sipBatches.length - 1, 2) * 10}px` } : undefined}>
-      <Toaster />
+      <Dialog open={accountDialogOpen} onOpenChange={setAccountDialogOpen}>
+        <DialogContent className="max-w-md flex flex-col" style={{ maxHeight: 'calc(100dvh - 48px)' }}>
+          <DialogHeader className="shrink-0">
+            <DialogTitle>{currentUser ? 'Your profile' : 'Sign in'}</DialogTitle>
+          </DialogHeader>
+          <div className="-mx-1 flex-1 overflow-y-auto px-1 pb-1">
+            {currentUser ? (
+              <ProfilePanel onSignedOut={() => setAccountDialogOpen(false)} />
+            ) : (
+              <div className="[&>div]:mt-0 [&>div]:border-0 [&>div]:bg-transparent [&>div]:shadow-none">
+                <AccountFlow
+                  compact
+                  onDone={({ kind, firstName }) => {
+                    setAccountDialogOpen(false);
+                    toast({
+                      title: kind === 'claimed' ? 'Account moved over' : `Signed in${firstName ? ` as ${firstName}` : ''}`,
+                      description: 'This seat is now linked to your account.',
+                    });
+                  }}
+                />
+              </div>
+            )}
+          </div>
+        </DialogContent>
+      </Dialog>
       <AlertDialog open={removedNoticeOpen} onOpenChange={(v) => { if (!v) handleLogoutOfGame(); setRemovedNoticeOpen(v); }}>
         <AlertDialogContent>
           <AlertDialogHeader>
@@ -3535,6 +3136,7 @@ const Drunkopoly = () => {
           <GameCodePopover
             code={game?.code ?? gameCode}
             onLogout={handleLogoutOfGame}
+            onOpenAccount={() => setAccountDialogOpen(true)}
             players={playersList}
             currentPlayer={player}
             game={game}
@@ -3802,12 +3404,12 @@ const Drunkopoly = () => {
                 try {
                   toast({ title: 'Insufficient funds', description: "You don't have enough money to complete this payment.", variant: 'destructive' });
                 } catch (e) {
-                  alert(msg);
+                  drunkAlert(msg);
                 }
                 setInsufficientFundsFlash(true);
                 window.setTimeout(() => setInsufficientFundsFlash(false), 900);
               } else {
-                try { toast({ title: 'Payment failed', description: msg }); } catch (e) { alert(msg); }
+                try { toast({ title: 'Payment failed', description: msg }); } catch (e) { drunkAlert(msg); }
               }
             }
           }}
@@ -3864,7 +3466,7 @@ const Drunkopoly = () => {
               if (gameData) setGame(gameData);
             } catch (err: any) {
               console.error('Assign sips error:', err);
-              alert(err.message || 'Failed to assign sips');
+              drunkAlert(err.message || 'Failed to assign sips');
             }
           }}
         />
@@ -3962,7 +3564,7 @@ const Drunkopoly = () => {
             } catch (err: any) {
               console.error('Assign sips error:', err);
               const msg = err?.message || 'Failed to assign sips';
-              try { toast({ title: 'Action failed', description: msg }); } catch (e) { alert(msg); }
+              try { toast({ title: 'Action failed', description: msg }); } catch (e) { drunkAlert(msg); }
             }
           }}
           onPaySubmit={async (payments, opts) => {
@@ -4018,11 +3620,11 @@ const Drunkopoly = () => {
               console.error('Pay submit error from JailLockOverlay:', err);
               const msg = err?.message || 'Failed to process payment';
               if (msg && msg.toLowerCase().includes('insufficient')) {
-                try { toast({ title: 'Insufficient funds', description: "You don't have enough money to complete this payment.", variant: 'destructive' }); } catch (e) { alert(msg); }
+                try { toast({ title: 'Insufficient funds', description: "You don't have enough money to complete this payment.", variant: 'destructive' }); } catch (e) { drunkAlert(msg); }
                 setInsufficientFundsFlash(true);
                 window.setTimeout(() => setInsufficientFundsFlash(false), 900);
               } else {
-                try { toast({ title: 'Payment failed', description: msg }); } catch (e) { alert(msg); }
+                try { toast({ title: 'Payment failed', description: msg }); } catch (e) { drunkAlert(msg); }
               }
             }
           }}
@@ -4110,11 +3712,11 @@ const Drunkopoly = () => {
               console.error('Pay submit error from TradeLockOverlay:', err);
               const msg = err?.message || 'Failed to process payment';
               if (msg && msg.toLowerCase().includes('insufficient')) {
-                try { toast({ title: 'Insufficient funds', description: "You don't have enough money to complete this payment.", variant: 'destructive' }); } catch (e) { alert(msg); }
+                try { toast({ title: 'Insufficient funds', description: "You don't have enough money to complete this payment.", variant: 'destructive' }); } catch (e) { drunkAlert(msg); }
                 setInsufficientFundsFlash(true);
                 window.setTimeout(() => setInsufficientFundsFlash(false), 900);
               } else {
-                try { toast({ title: 'Payment failed', description: msg }); } catch (e) { alert(msg); }
+                try { toast({ title: 'Payment failed', description: msg }); } catch (e) { drunkAlert(msg); }
               }
             }
           }}
@@ -4172,7 +3774,7 @@ const Drunkopoly = () => {
               if (sipEvData.data) setPendingSipEvents(sipEvData.data);
             } catch (err: any) {
               console.error('Complete sips error:', err);
-              alert(err.message || 'Failed to complete sips');
+              drunkAlert(err.message || 'Failed to complete sips');
             } finally {
               setCompletingSips(false);
             }
@@ -4252,11 +3854,11 @@ const Drunkopoly = () => {
               console.error('Pay submit error from SipsLockOverlay:', err);
               const msg = err?.message || 'Failed to process payment';
               if (msg && msg.toLowerCase().includes('insufficient')) {
-                try { toast({ title: 'Insufficient funds', description: "You don't have enough money to complete this payment.", variant: 'destructive' }); } catch (e) { alert(msg); }
+                try { toast({ title: 'Insufficient funds', description: "You don't have enough money to complete this payment.", variant: 'destructive' }); } catch (e) { drunkAlert(msg); }
                 setInsufficientFundsFlash(true);
                 window.setTimeout(() => setInsufficientFundsFlash(false), 900);
               } else {
-                try { toast({ title: 'Payment failed', description: msg }); } catch (e) { alert(msg); }
+                try { toast({ title: 'Payment failed', description: msg }); } catch (e) { drunkAlert(msg); }
               }
             }
           }}
@@ -4667,10 +4269,10 @@ function AnimatedNumber({ value, soundEnabled = true, maskIfGameHidden = false, 
   );
 }
 
-function GameCodePopover({ code, onLogout, players, currentPlayer, game, onRemovePlayer, soundEnabled, onToggleSound, showBalances = true, onToggleShowBalances, onToggleSipsEnabled, onToggleExpansion, onToggleGambling, showRulesInPopover,
+function GameCodePopover({ code, onLogout, onOpenAccount, players, currentPlayer, game, onRemovePlayer, soundEnabled, onToggleSound, showBalances = true, onToggleShowBalances, onToggleSipsEnabled, onToggleExpansion, onToggleGambling, showRulesInPopover,
   // centralized commissioner state/handlers from parent
   commPinOpen, setCommPinOpen, commToolsOpen, setCommToolsOpen, commPinValue, setCommPinValue, commUnlocked, openCommissionerTools, tryUnlockCommissionerTools, setCommUnlockedUntil, hasCommissionerAccess
-}: { code: string; onLogout?: () => void; players?: any[]; currentPlayer?: any; game?: any; onRemovePlayer?: (id: string) => Promise<void>; soundEnabled?: boolean; onToggleSound?: (enabled: boolean) => void; showBalances?: boolean; onToggleShowBalances?: (enabled: boolean) => void; onToggleSipsEnabled?: (enabled: boolean) => void; onToggleExpansion?: (enabled: boolean) => void; onToggleGambling?: (enabled: boolean) => void; showRulesInPopover?: boolean; commPinOpen: boolean; setCommPinOpen: (v:boolean)=>void; commToolsOpen: boolean; setCommToolsOpen: (v:boolean)=>void; commPinValue: string; setCommPinValue: (v:string)=>void; commUnlocked: boolean; openCommissionerTools: ()=>void; tryUnlockCommissionerTools: ()=>void; setCommUnlockedUntil: (n:number)=>void; hasCommissionerAccess: ()=>boolean }) {
+}: { code: string; onLogout?: () => void; onOpenAccount?: () => void; players?: any[]; currentPlayer?: any; game?: any; onRemovePlayer?: (id: string) => Promise<void>; soundEnabled?: boolean; onToggleSound?: (enabled: boolean) => void; showBalances?: boolean; onToggleShowBalances?: (enabled: boolean) => void; onToggleSipsEnabled?: (enabled: boolean) => void; onToggleExpansion?: (enabled: boolean) => void; onToggleGambling?: (enabled: boolean) => void; showRulesInPopover?: boolean; commPinOpen: boolean; setCommPinOpen: (v:boolean)=>void; commToolsOpen: boolean; setCommToolsOpen: (v:boolean)=>void; commPinValue: string; setCommPinValue: (v:string)=>void; commUnlocked: boolean; openCommissionerTools: ()=>void; tryUnlockCommissionerTools: ()=>void; setCommUnlockedUntil: (n:number)=>void; hasCommissionerAccess: ()=>boolean }) {
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [settingsOpenSection, setSettingsOpenSection] = useState<'game' | 'players' | null>(null);
   const [confirmOpen, setConfirmOpen] = useState(false);
@@ -4680,6 +4282,8 @@ function GameCodePopover({ code, onLogout, players, currentPlayer, game, onRemov
   const [commBalanceMode, setCommBalanceMode] = useState<'set' | 'delta'>('delta');
   const [commBalanceValue, setCommBalanceValue] = useState<string>('');
   const [commPendingSipsValue, setCommPendingSipsValue] = useState<string>('');
+  const [menuOpen, setMenuOpen] = useState(false);
+  const { profile: accountProfile } = useDrunkAccount();
   const navigate = useNavigate();
 
   const requestRemove = (id: string, name?: string) => {
@@ -4833,16 +4437,47 @@ function GameCodePopover({ code, onLogout, players, currentPlayer, game, onRemov
 
   return (
     <>
-    <Popover>
+    <Popover open={menuOpen} onOpenChange={setMenuOpen}>
       <PopoverTrigger asChild>
         <Button
           variant="outline"
-          className="h-10 font-mono px-3 text-sm font-bold uppercase tracking-widest text-foreground"
+          className="h-10 gap-2 pl-1.5 pr-3 font-mono text-sm font-bold uppercase tracking-widest text-foreground"
         >
+          {accountProfile ? (
+            <PlayerAvatar player={{ name: accountProfile.first_name || accountProfile.username, avatar_url: accountProfile.avatar_url }} size="sm" />
+          ) : null}
           {code}
         </Button>
       </PopoverTrigger>
-      <PopoverContent align="end" className="w-60 p-2">
+      <PopoverContent align="end" className="w-64 p-2">
+        {/* Account: profile for signed-in players, a sign-in prompt for guests */}
+        <button
+          type="button"
+          onClick={() => { setMenuOpen(false); onOpenAccount?.(); }}
+          className="mb-1 flex w-full items-center gap-3 rounded-xl border border-foreground/10 bg-foreground/[0.03] p-2 text-left transition-colors hover:border-brand/40"
+        >
+          {accountProfile ? (
+            <>
+              <PlayerAvatar player={{ name: accountProfile.first_name || accountProfile.username, avatar_url: accountProfile.avatar_url }} size="lg" />
+              <div className="min-w-0 flex-1">
+                <div className="truncate font-display text-sm font-semibold tracking-tight text-foreground">
+                  {[accountProfile.first_name, accountProfile.last_name].filter(Boolean).join(' ') || accountProfile.username}
+                </div>
+                <div className="truncate font-mono text-xs text-muted-foreground">@{accountProfile.username}</div>
+                <div className="text-[11px] text-muted-foreground">View profile & stats</div>
+              </div>
+            </>
+          ) : (
+            <>
+              <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full border border-foreground/10 bg-foreground/[0.03] text-muted-foreground"><UserRound size={18} /></span>
+              <div className="min-w-0 flex-1">
+                <div className="text-sm font-medium text-foreground">Playing as guest</div>
+                <div className="text-[11px] text-muted-foreground">Sign in to save stats & photo</div>
+              </div>
+            </>
+          )}
+          <ChevronRight className="h-4 w-4 shrink-0 text-muted-foreground" />
+        </button>
         <div className="px-2 pt-1 pb-2 text-[11px] uppercase tracking-widest text-muted-foreground">
           Game <span className="font-mono text-foreground">{code}</span>
         </div>

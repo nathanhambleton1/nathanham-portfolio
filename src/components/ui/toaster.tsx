@@ -1,4 +1,4 @@
-import { useToast } from "@/hooks/use-toast"
+import { useToast, useHasCustomToaster } from "@/hooks/use-toast"
 import {
   Toast,
   ToastClose,
@@ -10,6 +10,9 @@ import {
 
 export function Toaster() {
   const { toasts } = useToast()
+  const hasCustomToaster = useHasCustomToaster()
+
+  if (hasCustomToaster) return null
 
   return (
     <ToastProvider>

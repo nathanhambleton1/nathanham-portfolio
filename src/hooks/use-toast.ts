@@ -188,4 +188,30 @@ function useToast() {
   }
 }
 
-export { useToast, toast }
+// Lets a section render its own themed toaster (e.g. Drunkopoly's
+// DrunkToaster) in place of the site-wide one. The global <Toaster /> renders
+// nothing while any custom toaster is mounted, so toasts never show twice.
+let customToasters = 0
+const customToasterListeners = new Set<() => void>()
+const emitCustomToasters = () => customToasterListeners.forEach((l) => l())
+
+function registerCustomToaster() {
+  customToasters++
+  emitCustomToasters()
+  return () => {
+    customToasters--
+    emitCustomToasters()
+  }
+}
+
+function useHasCustomToaster() {
+  return React.useSyncExternalStore(
+    (cb) => {
+      customToasterListeners.add(cb)
+      return () => customToasterListeners.delete(cb)
+    },
+    () => customToasters > 0,
+  )
+}
+
+export { useToast, toast, registerCustomToaster, useHasCustomToaster }

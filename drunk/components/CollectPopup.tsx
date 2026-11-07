@@ -10,6 +10,7 @@ import {
   DialogFooter,
 } from './ui/dialog';
 import { Button } from './ui/button';
+import { drunkAlert } from '../lib/drunkNotify';
 import { Input } from './ui/input';
 
 export default function CollectPopup({
@@ -63,7 +64,7 @@ export default function CollectPopup({
     if (!currentPlayer) return;
     if (mode === 'bank') {
       const rounded = roundToFive(Number(rawAmount) || 0);
-      if (rounded <= 0) return alert('Enter a valid amount');
+      if (rounded <= 0) return drunkAlert('Enter an amount greater than $0.', 'Invalid amount');
       setRawAmount(String(rounded));
       onCollect({ type: 'bank', amount: rounded });
     } else if (mode === 'pass_go') {

@@ -4,6 +4,7 @@ import { useNavigate } from "react-router-dom";
 import { toast } from "../components/ui/use-toast";
 import { ArrowLeft, ArrowUp, ChevronLeft, Pencil } from "lucide-react";
 import PlayerAvatar from "../components/PlayerAvatar";
+import { PLAYER_SELECT, withLiveAvatars } from "../lib/playerAvatars";
 
 const supabaseUrl = "https://kcyrvubzhsphpxfsewii.supabase.co";
 const supabaseAnonKey =
@@ -163,9 +164,9 @@ export default function Messages() {
         if (gErr) throw gErr;
         const g = (gRows || [])[0];
         if (!g) throw new Error("Game not found.");
-        const { data: pRows, error: pErr } = await supabase.from("players").select("*").eq("game_id", g.id);
+        const { data: pRows, error: pErr } = await supabase.from("players").select(PLAYER_SELECT).eq("game_id", g.id);
         if (pErr) throw pErr;
-        const allPlayers = pRows || [];
+        const allPlayers = withLiveAvatars(pRows);
         const mine = allPlayers.find((p: any) => (p.name || "").toUpperCase() === savedName);
         if (!mine) throw new Error("Player not found in this game.");
         if (!mounted) return;
