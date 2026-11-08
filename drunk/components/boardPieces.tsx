@@ -4,6 +4,9 @@ import { streetColor, type PropertyColor } from "./BoardArt";
 
 /* Shared board-styled stat pieces for the Hall of Fame and player pages. */
 
+/** How many sips make one beer, for every sips → beers conversion in the stats. */
+export const SIPS_PER_BEER = 16;
+
 /** Where a player's page lives; names are matched case-insensitively. */
 export const playerPath = (name: string) => `/drunk/drunkopoly/player/?name=${encodeURIComponent(name.trim().toLowerCase())}`;
 

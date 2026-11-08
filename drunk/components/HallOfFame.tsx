@@ -4,7 +4,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import { cn } from "@/lib/utils";
 import { streetColor, type PropertyColor } from "./BoardArt";
 import PlayerAvatar from "./PlayerAvatar";
-import { ART, CountUp, DeedRow, Frame, NightChart, RecordRow, Rise, StatSpace, ago, daysSince, fmt, longDate, money, playerPath, plural, shortDate } from "./boardPieces";
+import { ART, CountUp, SIPS_PER_BEER, DeedRow, Frame, NightChart, RecordRow, Rise, StatSpace, ago, daysSince, fmt, longDate, money, playerPath, plural, shortDate } from "./boardPieces";
 
 /*
  * All-time Drunkopoly stats for the lobby, dressed as pieces of the board:
@@ -82,8 +82,8 @@ const TitleDeed = ({ s }: { s: AllTimeStats }) => (
         />
       </div>
       <p className="px-4 text-[13px] leading-snug text-muted-foreground">
-        That's about <span className="text-foreground">{fmt(s.sips / 14)} beers</span>, or one every{" "}
-        <span className="text-foreground">{s.sips > 0 ? Math.max(1, Math.round((s.hours * 60) / (s.sips / 14))) : 0} minutes</span> of play.
+        That's about <span className="text-foreground">{fmt(s.sips / SIPS_PER_BEER)} beers</span>, or one every{" "}
+        <span className="text-foreground">{s.sips > 0 ? Math.max(1, Math.round((s.hours * 60) / (s.sips / SIPS_PER_BEER))) : 0} minutes</span> of play.
       </p>
       <div className="mx-4 my-4 flex flex-col gap-2 border-t border-foreground/15 pt-4">
         <DeedRow label="Games played"><CountUp value={s.games} /></DeedRow>

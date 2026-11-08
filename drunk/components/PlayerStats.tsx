@@ -21,6 +21,7 @@ import {
   playerPath,
   plural,
   shortDate,
+  SIPS_PER_BEER,
 } from "./boardPieces";
 
 /*
@@ -338,7 +339,7 @@ const TheTab = ({ s }: { s: PlayerStatsData }) => {
           </div>
           <div className="mt-2 font-board text-[11px] font-semibold uppercase tracking-[0.28em] text-muted-foreground">Sips taken</div>
           <p className="mt-2 text-[13px] leading-snug text-muted-foreground">
-            About <span className="text-foreground">{fmt(s.sips_taken / 14)} beers</span>
+            About <span className="text-foreground">{fmt(s.sips_taken / SIPS_PER_BEER)} beers</span>
             {s.games > 0 && (
               <>
                 , or <span className="text-foreground">{Math.round(s.sips_taken / s.games)} sips</span> a game
