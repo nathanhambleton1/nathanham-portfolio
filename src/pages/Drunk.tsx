@@ -44,14 +44,27 @@ const Drunk = () => {
     };
   }, []);
 
+  // Tab title + icon: Drunkopoly gets its own (matching the static share pages
+  // written by scripts/drunkopoly-share.cjs); the other games use the hub's.
   useEffect(() => {
-    document.title = "Drinking Games";
-    // Change favicon
     const favicon = document.querySelector("link[rel='icon']");
-    if (favicon) {
-      favicon.setAttribute("href", "/drunk_logo.png");
+    document.title = inDrunkopoly ? "Drunkopoly" : "Drinking Games";
+    favicon?.setAttribute("href", inDrunkopoly ? "/drunkopoly/favicon.png" : "/drunk_logo.png");
+    let touch: HTMLLinkElement | null = null;
+    if (inDrunkopoly) {
+      touch = document.createElement("link");
+      touch.rel = "apple-touch-icon";
+      touch.href = "/drunkopoly/apple-touch-icon.png";
+      document.head.appendChild(touch);
     }
-    
+    return () => {
+      document.title = DEFAULT_TITLE;
+      favicon?.setAttribute("href", "/logo.png");
+      touch?.remove();
+    };
+  }, [inDrunkopoly]);
+
+  useEffect(() => {
     // Set Media Session metadata for iOS media player
     try {
       if ('mediaSession' in navigator) {
@@ -66,13 +79,6 @@ const Drunk = () => {
     } catch (err) {
       console.warn('Media Session API failed:', err);
     }
-    
-    return () => {
-      document.title = DEFAULT_TITLE;
-      if (favicon) {
-        favicon.setAttribute("href", "/logo.png");
-      }
-    };
   }, []);
 
   return (
@@ -83,6 +89,7 @@ const Drunk = () => {
         <Route path="drunkopoly" element={<Drunkopoly />} />
         <Route path="drunkopoly/rules" element={<Rules />} />
         <Route path="drunkopoly/messages" element={<Messages />} />
+        <Route path="drunkopoly/player" element={<PlayerProfile />} />
         <Route path="drunkopoly/player/:name" element={<PlayerProfile />} />
         <Route path="blackjack" element={<Blackjack />} />
         {/* Beer Olympics removed */}

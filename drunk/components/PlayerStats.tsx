@@ -1,4 +1,5 @@
 import { useEffect, useState, type ReactNode } from "react";
+import { createPortal } from "react-dom";
 import { Link } from "react-router-dom";
 import { cn } from "@/lib/utils";
 import { STREET_GROUPS, streetColor, type PropertyColor } from "./BoardArt";
@@ -185,6 +186,66 @@ const RankChip = ({ label, rank, of }: { label: string; rank: number; of: number
   </div>
 );
 
+// Profile photo that opens full screen when tapped. Players without a photo
+// (initials only) just render the plain avatar.
+const EnlargeableAvatar = ({ name, url }: { name: string; url: string | null }) => {
+  const [open, setOpen] = useState(false);
+
+  useEffect(() => {
+    if (!open) return;
+    const onKey = (e: KeyboardEvent) => e.key === "Escape" && setOpen(false);
+    const prevOverflow = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    window.addEventListener("keydown", onKey);
+    return () => {
+      window.removeEventListener("keydown", onKey);
+      document.body.style.overflow = prevOverflow;
+    };
+  }, [open]);
+
+  if (!url) return <PlayerAvatar player={{ name, avatar_url: url }} size="xl" />;
+
+  return (
+    <>
+      <button
+        type="button"
+        onClick={() => setOpen(true)}
+        aria-label={`View ${name}'s photo`}
+        className="block rounded-full transition-transform duration-200 ease-out hover:scale-105 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-foreground"
+      >
+        <PlayerAvatar player={{ name, avatar_url: url }} size="xl" />
+      </button>
+      {open &&
+        createPortal(
+          <div
+            role="dialog"
+            aria-modal="true"
+            aria-label={`${name}'s photo`}
+            onClick={() => setOpen(false)}
+            className="fixed inset-0 z-[100000] flex cursor-zoom-out flex-col items-center justify-center gap-4 bg-black/90 p-4 backdrop-blur-sm animate-in fade-in duration-200"
+          >
+            <button
+              type="button"
+              onClick={() => setOpen(false)}
+              aria-label="Close"
+              className="absolute right-4 top-4 flex h-10 w-10 items-center justify-center rounded-full bg-white/10 text-2xl leading-none text-white hover:bg-white/20"
+            >
+              ×
+            </button>
+            <img
+              src={url}
+              alt={name}
+              draggable={false}
+              className="aspect-square w-[min(92vw,80vh)] rounded-[6px] object-cover shadow-2xl animate-in zoom-in-95 duration-200"
+            />
+            <div className="font-board text-2xl font-semibold uppercase tracking-[0.04em] text-white">{name}</div>
+          </div>,
+          document.body,
+        )}
+    </>
+  );
+};
+
 const PlayerDeed = ({ s, isYou }: { s: PlayerStatsData; isYou?: boolean }) => {
   const color = playerColor(s.name);
   const fullName = s.account ? [s.account.first_name, s.account.last_name].filter(Boolean).join(" ") : "";
@@ -204,7 +265,7 @@ const PlayerDeed = ({ s, isYou }: { s: PlayerStatsData; isYou?: boolean }) => {
         </div>
         <div className="relative z-10 -mt-11 flex flex-col items-center px-4 text-center">
           <div className="rounded-full bg-background p-1.5 shadow-[0_10px_30px_-10px_rgb(0_0_0/0.8)]">
-            <PlayerAvatar player={{ name: s.name, avatar_url: s.avatar_url }} size="xl" />
+            <EnlargeableAvatar name={s.name} url={s.avatar_url} />
           </div>
           <h1 className="mt-3 w-full break-words font-board text-4xl font-semibold uppercase leading-none tracking-[0.04em] sm:text-5xl">
             {s.name}

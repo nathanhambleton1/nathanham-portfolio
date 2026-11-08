@@ -928,17 +928,21 @@ const Drunkopoly = () => {
           .eq('id', game.id);
       }
 
-      // If a note was included on player-to-player payments, also log it into chat history.
-      // This makes payment notes visible in the Messages page later.
-      if (opts?.description) {
-        const note = String(opts.description || '').trim();
-        if (note) {
-          const actorName = actor?.name || 'Unknown';
-          const playerTransfers = (meData || []).filter((me: any) => !!me?.to_player_id && (me?.amount || 0) > 0);
+      // Log every player-to-player transfer into the pair's chat as a payment card
+      // (Messages renders these like Apple Pay in iMessage). Payment cards never
+      // raise a notification or count as unread on their own; only an attached
+      // note pings the recipient, via has_new_messenger above.
+      {
+        const note = String(opts?.description || '').trim();
+        const actorName = actor?.name || 'Unknown';
+        const playerTransfers = (meData || []).filter((me: any) => !!me?.to_player_id && (me?.amount || 0) > 0);
+        if (playerTransfers.length > 0) {
           for (const tr of playerTransfers) {
             try {
               const toId = String(tr.to_player_id);
-              const ids = [String(actor_player_id), toId].sort();
+              const fromId = String(tr.from_player_id || actor_player_id);
+              if (toId === fromId) continue;
+              const ids = [fromId, toId].sort();
 
               // Find an existing direct chat (both members).
               let chatId: string | null = null;
@@ -970,14 +974,14 @@ const Drunkopoly = () => {
               if (!chatId) {
                 const { data: chatCreated, error: cErr } = await supabase
                   .from('drunkopoly_chats')
-                  .insert([{ game_id: game.id, title: null, created_by_player_id: actor_player_id }])
+                  .insert([{ game_id: game.id, title: null, created_by_player_id: fromId }])
                   .select()
                   .limit(1)
                   .single();
                 if (cErr) throw cErr;
                 chatId = chatCreated.id;
                 await supabase.from('drunkopoly_chat_members').insert([
-                  { chat_id: chatId, player_id: actor_player_id, last_read_at: new Date().toISOString() },
+                  { chat_id: chatId, player_id: fromId, last_read_at: new Date().toISOString() },
                   { chat_id: chatId, player_id: toId, last_read_at: null },
                 ]);
               }
@@ -985,10 +989,17 @@ const Drunkopoly = () => {
               await supabase.from('drunkopoly_chat_messages').insert([{
                 chat_id: chatId,
                 game_id: game.id,
-                sender_player_id: actor_player_id,
+                sender_player_id: fromId,
                 body: note,
                 kind: 'payment',
-                meta: { amount: tr.amount ?? null, from: actor_player_id, to: toId, actor_name: actorName },
+                meta: {
+                  amount: tr.amount ?? null,
+                  from: fromId,
+                  to: toId,
+                  actor_name: actorName,
+                  type: tr.type ?? opts?.type ?? null,
+                  note: note || null,
+                },
               }]);
             } catch (logErr) {
               console.warn('Failed to log payment note to chat history', logErr);
@@ -2272,7 +2283,10 @@ const Drunkopoly = () => {
             .select('id', { count: 'exact', head: true })
             .eq('chat_id', r.chat_id)
             .gt('created_at', since)
-            .neq('sender_player_id', player.id);
+            .neq('sender_player_id', player.id)
+            // Payment cards are a ledger, not mail: they never count as unread
+            // on their own. A payment note still does (it pings via has_new_messenger).
+            .or('kind.is.null,kind.neq.payment,body.neq.""');
           if (cErr) throw cErr;
           total += (count || 0);
         }

@@ -5,7 +5,7 @@ import { streetColor, type PropertyColor } from "./BoardArt";
 /* Shared board-styled stat pieces for the Hall of Fame and player pages. */
 
 /** Where a player's page lives; names are matched case-insensitively. */
-export const playerPath = (name: string) => `/drunk/drunkopoly/player/${encodeURIComponent(name.trim().toLowerCase())}`;
+export const playerPath = (name: string) => `/drunk/drunkopoly/player/?name=${encodeURIComponent(name.trim().toLowerCase())}`;
 
 export const ART = {
   passGo: "/drunkopoly/pass_go.webp",

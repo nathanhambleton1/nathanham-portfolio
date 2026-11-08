@@ -236,8 +236,9 @@ export const updateProfileDetails = async (opts: { firstName: string; lastName: 
 // Avatars
 // ---------------------------------------------------------------------------
 
-/** Center-crop to a square and shrink to a small JPEG (phones upload huge photos). */
-const compressImage = (file: File, maxDim = 256, quality = 0.75): Promise<Blob> =>
+/** Center-crop to a square and shrink to a JPEG (phones upload huge photos). 1024px keeps
+ *  the full-screen photo viewer sharp while staying ~100–200 KB. */
+const compressImage = (file: File, maxDim = 1024, quality = 0.8): Promise<Blob> =>
   new Promise((resolve, reject) => {
     const img = new Image();
     const url = URL.createObjectURL(file);
@@ -250,6 +251,9 @@ const compressImage = (file: File, maxDim = 256, quality = 0.75): Promise<Blob> 
       canvas.height = out;
       const ctx = canvas.getContext("2d");
       if (!ctx) return reject(new Error("No canvas context"));
+      // Default smoothing is low quality and leaves big phone photos jagged/blurry.
+      ctx.imageSmoothingEnabled = true;
+      ctx.imageSmoothingQuality = "high";
       ctx.drawImage(img, (img.width - side) / 2, (img.height - side) / 2, side, side, 0, 0, out, out);
       canvas.toBlob((b) => (b ? resolve(b) : reject(new Error("Compression failed"))), "image/jpeg", quality);
     };

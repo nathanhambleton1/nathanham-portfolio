@@ -8,18 +8,14 @@ import { playerPath } from "../boardPieces";
 import { useDrunkAccount } from "../../lib/drunkAccount";
 
 /**
- * The signed-in profile page: an "Edit profile" bar (the account form folded
- * away inside it) at the top, then the player's full stats board.
+ * "Edit profile" bar with the account form folded away inside it. Shown on the
+ * profile page and at the top of your own public stats page. Pass `publicName`
+ * to add a "Public page" link (pointless when you're already on it).
  */
-const ProfileStats = ({ onSignedOut, children }: { onSignedOut?: () => void; children?: ReactNode }) => {
-  const { profile } = useDrunkAccount();
-  const { data, status } = usePlayerStats({ userId: profile?.id });
+export const ProfileEditBar = ({ onSignedOut, publicName, className }: { onSignedOut?: () => void; publicName?: string; className?: string }) => {
   const [editing, setEditing] = useState(false);
-
-  if (!profile) return null;
-
-  const editor = (
-    <div className="w-full overflow-hidden rounded-[6px] border-2 border-foreground/70 bg-background motion-safe:animate-rise">
+  return (
+    <div className={cn("w-full overflow-hidden rounded-[6px] border-2 border-foreground/70 bg-background motion-safe:animate-rise", className)}>
       <div className="flex items-stretch">
         <button
           type="button"
@@ -31,9 +27,9 @@ const ProfileStats = ({ onSignedOut, children }: { onSignedOut?: () => void; chi
           <span className="flex-1 font-board text-[13px] font-semibold uppercase tracking-[0.22em]">Edit profile</span>
           <ChevronDown className={cn("h-4 w-4 text-muted-foreground transition-transform duration-300", editing && "rotate-180")} />
         </button>
-        {data && data.games > 0 && (
+        {publicName && (
           <Link
-            to={playerPath(data.name)}
+            to={playerPath(publicName)}
             className="flex items-center gap-2 border-l border-foreground/25 px-4 text-[11px] uppercase tracking-[0.16em] text-muted-foreground transition-colors hover:bg-foreground/[0.04] hover:text-foreground"
             title="See what everyone else sees"
           >
@@ -48,6 +44,21 @@ const ProfileStats = ({ onSignedOut, children }: { onSignedOut?: () => void; chi
         </div>
       )}
     </div>
+  );
+};
+
+/**
+ * The signed-in profile page: an "Edit profile" bar (the account form folded
+ * away inside it) at the top, then the player's full stats board.
+ */
+const ProfileStats = ({ onSignedOut, children }: { onSignedOut?: () => void; children?: ReactNode }) => {
+  const { profile } = useDrunkAccount();
+  const { data, status } = usePlayerStats({ userId: profile?.id });
+
+  if (!profile) return null;
+
+  const editor = (
+    <ProfileEditBar onSignedOut={onSignedOut} publicName={data && data.games > 0 ? data.name : undefined} />
   );
 
   return (

@@ -4,6 +4,7 @@ import { useNavigate } from "react-router-dom";
 import { toast } from "../components/ui/use-toast";
 import { ArrowLeft, ArrowUp, ChevronLeft, Pencil } from "lucide-react";
 import PlayerAvatar from "../components/PlayerAvatar";
+import PaymentCard from "../components/PaymentCard";
 import { PLAYER_SELECT, withLiveAvatars } from "../lib/playerAvatars";
 
 const supabaseUrl = "https://kcyrvubzhsphpxfsewii.supabase.co";
@@ -48,6 +49,19 @@ function initials(name: string) {
     .join("")
     .slice(0, 2)
     .toUpperCase();
+}
+
+/** A payment card with no note: a ledger entry that never counts as unread. */
+function isBarePayment(m: MessageRow | null | undefined) {
+  return !!m && m.kind === "payment" && !String(m.body || "").trim();
+}
+
+function previewText(m: MessageRow, myId?: string) {
+  if (m.kind !== "payment") return m.body;
+  const amt = `$${Math.round(Number(m.meta?.amount) || 0).toLocaleString()}`;
+  const head = m.sender_player_id === myId ? `💸 You paid ${amt}` : `💸 Paid you ${amt}`;
+  const note = String(m.body || "").trim();
+  return note ? `${head} · ${note}` : head;
 }
 
 function relativeTime(iso: string) {
@@ -136,6 +150,7 @@ export default function Messages() {
   const [activeChatId, setActiveChatId] = useState<string | null>(null);
   const [messages, setMessages] = useState<MessageRow[]>([]);
   const [lastMessageByChat, setLastMessageByChat] = useState<Record<string, MessageRow>>({});
+  const [lastNotifyingByChat, setLastNotifyingByChat] = useState<Record<string, MessageRow>>({});
   const [chatsLoading, setChatsLoading] = useState<boolean>(true);
   const chatsInitializedRef = React.useRef(false);
 
@@ -227,6 +242,7 @@ export default function Messages() {
       // Fetch last message per chat for preview
       if (chatIds.length > 0) {
         const previews: Record<string, MessageRow> = {};
+        const notifying: Record<string, MessageRow> = {};
         await Promise.all(
           chatIds.map(async (cid) => {
             const { data } = await supabase
@@ -235,10 +251,23 @@ export default function Messages() {
               .eq("chat_id", cid)
               .order("created_at", { ascending: false })
               .limit(1);
-            if (data && data[0]) previews[cid] = data[0] as MessageRow;
+            const last = data?.[0] as MessageRow | undefined;
+            if (!last) return;
+            previews[cid] = last;
+            if (!isBarePayment(last)) { notifying[cid] = last; return; }
+            // Newest row is a bare payment card; unread state follows the newest real message.
+            const { data: real } = await supabase
+              .from("drunkopoly_chat_messages")
+              .select("*")
+              .eq("chat_id", cid)
+              .or('kind.is.null,kind.neq.payment,body.neq.""')
+              .order("created_at", { ascending: false })
+              .limit(1);
+            if (real && real[0]) notifying[cid] = real[0] as MessageRow;
           })
         );
         setLastMessageByChat(previews);
+        setLastNotifyingByChat(notifying);
       }
       setActiveChatId((prev) => {
         if (prev && chatIds.includes(prev)) return prev;
@@ -364,14 +393,14 @@ export default function Messages() {
     const out: Record<string, boolean> = {};
     for (const c of chats) {
       const m = members[c.id];
-      const lastMsg = lastMessageByChat[c.id];
+      const lastMsg = lastNotifyingByChat[c.id];
       if (!lastMsg) { out[c.id] = false; continue; }
       if (lastMsg.sender_player_id === me?.id) { out[c.id] = false; continue; }
       if (!m?.last_read_at) { out[c.id] = true; continue; }
       out[c.id] = new Date(lastMsg.created_at) > new Date(m.last_read_at);
     }
     return out;
-  }, [chats, members, lastMessageByChat, me?.id]);
+  }, [chats, members, lastNotifyingByChat, me?.id]);
 
   // Sort chats: most recent message first
   const sortedChats = useMemo(() => {
@@ -519,7 +548,7 @@ export default function Messages() {
           
             const label = player.name || "Player";
             const isUnread = chatId ? unreadByChat[chatId] : false;
-            const preview = lastMsg ? (lastMsg.kind === "payment" ? "💸 Payment note" : lastMsg.body) : "No messages yet";
+            const preview = lastMsg ? previewText(lastMsg, me?.id) : "No messages yet";
             const time = lastMsg ? relativeTime(lastMsg.created_at) : "";
 
             return (
@@ -627,22 +656,31 @@ export default function Messages() {
                             />
                           )}
                           {!mine && !isLastInGroup && <div className="w-6 shrink-0" />}
-                          <div
-                            className={[
-                              "max-w-[85%] min-w-0 inline-flex px-4 py-2.5 text-base leading-normal rounded-2xl",
-                              isPayment
-                                ? "flex-col items-start bg-amber-500/10 text-foreground ring-1 ring-inset ring-amber-500/25"
-                                : mine
-                                ? "items-center bg-primary text-primary-foreground shadow-[inset_0_1px_0_0_hsl(var(--primary-foreground)/0.12)]"
-                                : "items-center border border-foreground/10 bg-foreground/[0.04] text-foreground",
-                              mine && isLastInGroup ? "rounded-br-md" : "",
-                              !mine && isLastInGroup ? "rounded-bl-md" : "",
-                            ].join(" ")}
-                          >
+                          <div className={`flex min-w-0 max-w-[85%] flex-col gap-1 ${mine ? "items-end" : "items-start"}`}>
                             {isPayment && (
-                              <div className="text-[11px] uppercase tracking-widest text-muted-foreground mb-0.5">💸 Payment note</div>
+                              <PaymentCard
+                                amount={Number(m.meta?.amount) || 0}
+                                mine={mine}
+                                type={m.meta?.type}
+                                counterpartName={
+                                  players.find((p: any) => String(p.id) === String(m.meta?.to))?.name || activeChatLabel
+                                }
+                              />
                             )}
-                            <span className="whitespace-pre-wrap break-words">{m.body}</span>
+                            {(!isPayment || String(m.body || "").trim()) && (
+                              <div
+                                className={[
+                                  "min-w-0 inline-flex items-center px-4 py-2.5 text-base leading-normal rounded-2xl",
+                                  mine
+                                    ? "bg-primary text-primary-foreground shadow-[inset_0_1px_0_0_hsl(var(--primary-foreground)/0.12)]"
+                                    : "border border-foreground/10 bg-foreground/[0.04] text-foreground",
+                                  mine && isLastInGroup ? "rounded-br-md" : "",
+                                  !mine && isLastInGroup ? "rounded-bl-md" : "",
+                                ].join(" ")}
+                              >
+                                <span className="whitespace-pre-wrap break-words">{m.body}</span>
+                              </div>
+                            )}
                           </div>
                         </div>
                       </div>
