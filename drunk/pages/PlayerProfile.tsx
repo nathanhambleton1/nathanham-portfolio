@@ -1,5 +1,5 @@
 import { useEffect } from "react";
-import { Link, useNavigate, useParams, useSearchParams } from "react-router-dom";
+import { Link, useLocation, useNavigate, useParams, useSearchParams } from "react-router-dom";
 import { ChevronLeft } from "lucide-react";
 import AccountShell from "../components/account/AccountShell";
 import { ProfileEditBar } from "../components/account/ProfileStats";
@@ -17,10 +17,20 @@ const PlayerProfile = () => {
   // Query form is canonical: it maps to a static page with Drunkopoly share meta.
   const name = search.get("name") ?? (params.name ? decodeURIComponent(params.name) : "");
   const navigate = useNavigate();
+  const location = useLocation();
+  // "default" = this page was the first one loaded (shared link, new tab, reload
+  // in some browsers). history.length can't tell that apart from pages on other
+  // sites, so going back there could leave the app; head to the lobby instead.
+  const canGoBack = location.key !== "default";
   const { profile } = useDrunkAccount();
   const { data, status } = usePlayerStats({ name });
 
-  useEffect(() => window.scrollTo(0, 0), [name]);
+  // Braces matter: newer browsers return a Promise from scrollTo, and an effect
+  // that returns a non-function crashes React when the page unmounts (the
+  // black screen after tapping Back).
+  useEffect(() => {
+    window.scrollTo(0, 0);
+  }, [name]);
 
   const isYou = !!(profile && data?.account && data.account.id === profile.id);
   const openProfile = () => navigate("/drunk/drunkopoly", { state: { screen: "profile" } });
@@ -34,7 +44,7 @@ const PlayerProfile = () => {
       <div className="flex w-full max-w-md flex-1 flex-col">
         <button
           type="button"
-          onClick={() => (window.history.length > 1 ? navigate(-1) : navigate("/drunk/drunkopoly"))}
+          onClick={() => (canGoBack ? navigate(-1) : navigate("/drunk/drunkopoly"))}
           className={`${PILL} self-start motion-safe:animate-rise`}
         >
           <ChevronLeft className="h-4 w-4" />

@@ -48,7 +48,9 @@ import {
   AlertDialogCancel,
 } from "../components/ui/alert-dialog";
 import { drunkSupabase as supabase } from "../lib/drunkSupabase";
-import { useDrunkAccount, patchProfile, signOutAccount } from "../lib/drunkAccount";
+import { useDrunkAccount, patchProfile, signOutAccount, isAdminProfile } from "../lib/drunkAccount";
+import { useTrackPage, trackPlayer } from "../lib/drunkAnalytics";
+import SiteTraffic from "../components/SiteTraffic";
 import AccountShell, { HeroLogo } from "../components/account/AccountShell";
 import AccountFlow from "../components/account/AccountFlow";
 import ProfilePanel from "../components/account/ProfilePanel";
@@ -284,6 +286,13 @@ const Drunkopoly = () => {
   // Account (phone number + password, Supabase Auth). See lib/drunkAccount.ts.
   const account = useDrunkAccount();
   const currentUser = account.profile;
+
+  // Analytics: lobby screens vs. sitting in a game, and the name they play as.
+  const inGame = screen === 'home' && !!game && !!player;
+  useTrackPage(restoring ? null : inGame ? 'game' : 'lobby');
+  useEffect(() => {
+    if (inGame && player?.name) trackPlayer(String(player.name), game?.code);
+  }, [inGame, player?.name, game?.code]);
   // Guests skip the account gate for this browser session only.
   const [guestMode, setGuestModeState] = useState<boolean>(() => {
     try { return sessionStorage.getItem('drunkopoly:guest') === '1'; } catch { return false; }
@@ -2082,6 +2091,20 @@ const Drunkopoly = () => {
     })();
   }, [screen, player?.id, player?.user_id, player?.avatar_url, currentUser?.id, currentUser?.avatar_url]);
 
+  // Screens with nothing to show (e.g. the board with no game loaded, or the
+  // profile after signing out) fall back to the lobby. Without this the render
+  // falls through to the board with no game: a blank black page, typically after
+  // tapping Back from a player's stats page.
+  const strandedScreen = !restoring && (
+    (screen === 'home' && (!game || !player)) ||
+    (screen === 'profile' && account.ready && !currentUser) ||
+    (screen === 'select-existing-player' && !recentPlayers) ||
+    screen === 'auth'
+  );
+  useEffect(() => {
+    if (strandedScreen) setScreen('join-create');
+  }, [strandedScreen]);
+
   // Fetch players when game changes
   useEffect(() => {
     if (screen === "home" && game) {
@@ -2681,6 +2704,7 @@ const Drunkopoly = () => {
           </CardContent>
         </Card>
         <HallOfFame supabase={supabase} className="mt-14 max-w-md" />
+        {isAdminProfile(currentUser) && <SiteTraffic supabase={supabase} className="mt-6 max-w-md" />}
       </AccountShell>
     );
   }
@@ -3053,6 +3077,15 @@ const Drunkopoly = () => {
             </form>
           </CardContent>
         </Card>
+      </AccountShell>
+    );
+  }
+
+  if (!game || !player) {
+    // Momentary: the stranded-screen effect above sends this to the lobby.
+    return (
+      <AccountShell {...shellProps}>
+        <Clock className="h-6 w-6 animate-spin text-muted-foreground" aria-label="Loading" />
       </AccountShell>
     );
   }
@@ -4536,7 +4569,7 @@ function GameCodePopover({ code, onLogout, onOpenAccount, players, currentPlayer
         <div className="flex flex-col items-center justify-center py-6">
           <div className="bg-white p-3 rounded-2xl shadow-[0_24px_60px_-20px_rgb(0_0_0/0.75)] ring-1 ring-foreground/10">
             <QRCodeSVG 
-              value={`${window.location.origin}${window.location.pathname}?invite=${encodeURIComponent(code)}`} 
+              value={`${window.location.origin}${window.location.pathname}?invite=${encodeURIComponent(code)}&src=qr`}
               size={256}
               level="H"
               includeMargin={true}
@@ -4641,21 +4674,24 @@ function GameCodePopover({ code, onLogout, onOpenAccount, players, currentPlayer
                     </>
                   )}
 
-                  <div className="pt-2">
-                    <Button
-                      type="button"
-                      variant="secondary"
-                      className="w-full justify-center"
-                      onClick={() => {
-                        const fallback = (currentPlayer?.id ? String(currentPlayer.id) : (players && players.length ? String(players[0]?.id) : '')) || '';
-                        setCommSelectedPlayerId((prev) => (prev ? prev : fallback));
-                        openCommissionerTools();
-                      }}
-                      title="Commissioner-only tools (audited)"
-                    >
-                      Advanced (Commissioner)
-                    </Button>
-                  </div>
+                  {/* Only the site owner sees this; the PIN is still required */}
+                  {isAdminProfile(accountProfile) && (
+                    <div className="pt-2">
+                      <Button
+                        type="button"
+                        variant="secondary"
+                        className="w-full justify-center"
+                        onClick={() => {
+                          const fallback = (currentPlayer?.id ? String(currentPlayer.id) : (players && players.length ? String(players[0]?.id) : '')) || '';
+                          setCommSelectedPlayerId((prev) => (prev ? prev : fallback));
+                          openCommissionerTools();
+                        }}
+                        title="Commissioner-only tools (audited)"
+                      >
+                        Advanced (Commissioner)
+                      </Button>
+                    </div>
+                  )}
                 </div>
               </div>
             )}

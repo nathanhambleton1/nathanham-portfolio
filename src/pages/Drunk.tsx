@@ -13,12 +13,19 @@ import Rules from "../../drunk/pages/Rules";
 import PlayerProfile from "../../drunk/pages/PlayerProfile";
 import NotFound from "../../drunk/pages/NotFound";
 import DrunkToaster from "../../drunk/components/DrunkToaster";
+import DrunkErrorBoundary from "../../drunk/components/DrunkErrorBoundary";
+import { useTrackPage, type TrackedPage } from "../../drunk/lib/drunkAnalytics";
 import "../../drunk/index.css";
 
 
 const Drunk = () => {
   const { pathname } = useLocation();
   const inDrunkopoly = pathname.startsWith("/drunk/drunkopoly");
+
+  // Drunkopoly's sub-pages are tracked here; the lobby/game screen tracks
+  // itself (drunk/pages/Drunkopoly.tsx) since both live on one URL.
+  const subPage = pathname.match(/^\/drunk\/drunkopoly\/(rules|messages|player)\b/)?.[1] as TrackedPage | undefined;
+  useTrackPage(subPage ?? null);
 
   // The drinking games are monochrome: swap the site's cyan accent for plain
   // white across every /drunk page. Set on <html> (not a wrapper) so portalled
@@ -84,6 +91,7 @@ const Drunk = () => {
   return (
     <div className="min-h-screen">
       {inDrunkopoly && <DrunkToaster />}
+      <DrunkErrorBoundary resetKey={pathname}>
       <Routes>
         <Route index element={<Index />} />
         <Route path="drunkopoly" element={<Drunkopoly />} />
@@ -100,6 +108,7 @@ const Drunk = () => {
         <Route path="beer-ball" element={<PartnerTournament />} />
         <Route path="*" element={<NotFound />} />
       </Routes>
+      </DrunkErrorBoundary>
     </div>
   );
 };

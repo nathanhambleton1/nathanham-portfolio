@@ -27,6 +27,15 @@ export type DrunkProfile = {
   created_at?: string;
 };
 
+/**
+ * The site owner's account. Only this player sees the commissioner button and
+ * the Site Traffic panel. The UI check is cosmetic: the commissioner PIN still
+ * applies, and drunkopoly_site_stats() checks the same username on the server.
+ */
+export const ADMIN_USERNAME = "nathan_ham";
+export const isAdminProfile = (profile: Pick<DrunkProfile, "username"> | null | undefined) =>
+  profile?.username?.toLowerCase() === ADMIN_USERNAME;
+
 type AccountState = {
   /** False until the saved session (if any) has been checked. */
   ready: boolean;
